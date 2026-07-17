@@ -14,7 +14,7 @@ func verifyBundle(b *skill.Bundle, env *attest.Envelope, pol policy.Policy) *sgv
 	return sgverify.Verify(b, env, pol.Trust)
 }
 
-func printVerify(res *sgverify.Result, noColor bool) {
+func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) {
 	c := func(s string) string {
 		if noColor {
 			return ""
@@ -36,7 +36,8 @@ func printVerify(res *sgverify.Result, noColor bool) {
 	}
 	switch {
 	case !res.Present:
-		fmt.Println("attestation: absent")
+		fmt.Printf("attestation: absent (no %s)\n", sigPath)
+		fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %s --key <key>\n", skillPath)
 	case res.SignatureValid && res.Trusted:
 		fmt.Printf("attestation: present, signature %sVALID%s (trusted key)\n", c(green), c(reset))
 	case res.SignatureValid:

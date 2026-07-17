@@ -13,8 +13,29 @@ var Version = "0.1.0-dev"
 
 func main() {
 	root := &cobra.Command{
-		Use:           "skill-guard",
-		Short:         "Security, signing & provenance toolchain for Agent Skills (SKILL.md)",
+		Use:   "skill-guard <command> <path>",
+		Short: "Security, signing & provenance toolchain for Agent Skills (SKILL.md)",
+		Long: `skill-guard scans, signs, and verifies Agent Skills (SKILL.md bundles)
+against the OWASP Agentic Skills Top 10.
+
+A skill <path> is either:
+  • a bundle directory containing a SKILL.md (plus scripts/config), or
+  • a single SKILL.md file.
+
+COMMANDS:
+  scan     find injection/exfiltration/exec/secret/metadata risks
+  sign     Merkle-hash + DSSE-sign a bundle (writes SKILL.md.skillsig)
+  verify   check a signature, Merkle root, and trust
+  keygen   create an Ed25519 signing key
+  version  print version and built-in rule-pack versions
+
+Run 'skill-guard <command> --help' for input formats, flags, and examples.
+
+EXIT CODES: 0 ok · 1 scan verdict fail · 2 verification failed · 3 usage · 4 internal.`,
+		Example: `  skill-guard scan ./my-skill
+  skill-guard keygen --out publisher.key
+  skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
+  skill-guard verify ./my-skill --policy .skillguard.yaml`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
