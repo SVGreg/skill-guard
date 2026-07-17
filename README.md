@@ -28,6 +28,7 @@ into an agent loop (e.g. before a skill is handed to the model).
   - [`verify`](#verify)
 - [Input & output formats](#input--output-formats)
 - [Policy file (`.skillguard.yaml`)](#policy-file-skillguardyaml)
+- [Publisher identity & trust (`SG-PRV-005`)](#publisher-identity--trust-sg-prv-005)
 - [Exit codes](#exit-codes)
 - [What it detects](#what-it-detects)
 - [Use as a Go library](#use-as-a-go-library)
@@ -324,6 +325,113 @@ trust:
       identity: oidc:you@example.com
   revoked: []
 ```
+
+---
+
+## Publisher identity & trust (`SG-PRV-005`)
+
+When `verify` reports:
+
+```
+attestation: present, signature UNVERIFIED (no trust roster — identity unverified)
+  SG-PRV-005  medium  Publisher identity unverified
+```
+
+it means the signature is present but **cannot be checked**, because the
+verifier has no public key to check it against.
+
+### There is no global identity authority — trust is local
+
+skill-guard uses a **local, decentralized trust model**. It does **not** contact
+any public key server, identity provider, or registry, and the `--identity` value
+you pass to `sign` (e.g. `oidc:you@example.com`) is a **self-asserted label**
+recorded in the attestation — it is *not* independently verified against OIDC,
+Sigstore, or anything else. Anyone can sign a skill claiming any identity.
+
+Trust is established by the **verifier** deciding to trust a specific public key
+and binding it to an identity **in their own `.skillguard.yaml`**. The identity
+shown after a successful `verify` is the one *the verifier wrote next to the key
+in their roster* — not the publisher's self-claim. So "verified" means *"this was
+signed by a key I have chosen to trust,"* nothing more (and, deliberately, not
+"safe" — a valid signature only proves integrity + authorship, never safety).
+
+### So: is adding the key to `trust.keys` enough?
+
+**Yes.** Adding the publisher's key to the `trust` section of the policy the
+verifier runs with is exactly — and the only — way to make the signature verify
+and the identity resolve. `SG-PRV-005` disappears and `verify` reports
+`signature VALID (trusted key)`. There is no additional registration step.
+
+The catch is *whose* roster: **you (the publisher) cannot make your own skill
+"verified" for someone else.** The consumer adds your key to *their* policy. Your
+job is to make that easy and safe.
+
+### Publisher workflow
+
+```sh
+# 1. Create a signing key ONCE and reuse it (a stable key = a stable identity).
+skill-guard keygen --out publisher.key
+#   keyid: sg-8f7164b591be
+#   public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=
+
+# 2. Sign each release with it.
+skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
+```
+
+Then **publish your public identity** so consumers can trust it — the `keyid`,
+the `public_key`, and the `identity` — through a channel they already trust
+(your project's README, website over HTTPS, release notes, a signed git tag, an
+internal wiki). Keep `publisher.key` secret and stable; if you rotate it,
+consumers must update their roster (and you should add the old `keyid` to
+`revoked`).
+
+### Consumer workflow
+
+Add the publisher's key to the trust roster in the policy you verify with:
+
+```yaml
+# .skillguard.yaml
+trust:
+  keys:
+    - keyid: sg-8f7164b591be                                   # from the publisher
+      algorithm: ed25519
+      public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=  # from the publisher
+      identity: oidc:you@example.com   # the identity YOU choose to bind to this key
+  revoked: []
+```
+
+```sh
+skill-guard verify ./my-skill --policy .skillguard.yaml
+# attestation: present, signature VALID (trusted key)
+# merkle root: MATCH
+# publisher: oidc:you@example.com
+```
+
+Verify the `public_key` you paste actually came from the publisher (compare it
+out-of-band with what they published) — the roster *is* the trust decision.
+
+### What `verify` reports, by roster state
+
+| Situation | Report | Finding |
+|-----------|--------|---------|
+| No trust roster (no `--policy`, or empty `trust.keys`) | `signature UNVERIFIED` | `SG-PRV-005` medium |
+| Publisher's key **in** roster, signature valid | `signature VALID (trusted key)` | none |
+| Roster has keys, but **not** this publisher's | `signature INVALID` | `SG-PRV-002` critical |
+| Key in roster but listed under `revoked` | valid but untrusted | `SG-PRV-004` high |
+| Content changed after signing | `merkle root: MISMATCH` | `SG-PRV-003` critical |
+
+> Practical takeaway for publishers: it isn't enough that *a* roster exists on
+> the consumer side — **your specific key** must be in it. If a consumer trusts
+> other publishers but not you, your skill reports the more severe `SG-PRV-002`,
+> not `SG-PRV-005`.
+
+### Roadmap
+
+Keyless / transparency-log identity (Sigstore-style: a Fulcio certificate bound
+to a real OIDC identity, recorded in a Rekor log) is planned as an alternative
+`Signer`/verification backend, which *would* let identity be checked against an
+external authority rather than a hand-managed roster. Until then, the roster is
+the trust anchor. See [`docs/skill-guard-design.md`](docs/skill-guard-design.md).
 
 ---
 
