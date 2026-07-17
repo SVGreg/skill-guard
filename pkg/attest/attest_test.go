@@ -2,6 +2,9 @@ package attest
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,6 +72,49 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	}
 	if len(env.Signatures) != 1 || env.Signatures[0].KeyID != "test-key" {
 		t.Fatalf("unexpected signatures: %+v", env.Signatures)
+	}
+}
+
+func TestPubPath(t *testing.T) {
+	cases := map[string]string{
+		"publisher.key":    "publisher.pub",
+		"/tmp/a/b.key":     "/tmp/a/b.pub",
+		"mykey":            "mykey.pub",
+		"weird.key.backup": "weird.key.backup.pub",
+	}
+	for in, want := range cases {
+		if got := PubPath(in); got != want {
+			t.Errorf("PubPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSavePubIsPublicOnly(t *testing.T) {
+	signer, err := GenerateKey("pub-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "k.pub")
+	if err := SavePub(signer, path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(string(data), "private_key") {
+		t.Fatalf(".pub must not contain private material: %s", data)
+	}
+	var pf struct {
+		KeyID     string `json:"keyid"`
+		Algorithm string `json:"algorithm"`
+		PublicKey string `json:"public_key"`
+	}
+	if err := json.Unmarshal(data, &pf); err != nil {
+		t.Fatal(err)
+	}
+	if pf.KeyID != "pub-test" || pf.Algorithm != "ed25519" || pf.PublicKey != signer.PublicKeyBase64() {
+		t.Fatalf("unexpected .pub contents: %+v", pf)
 	}
 }
 

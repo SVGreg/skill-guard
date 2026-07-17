@@ -272,22 +272,27 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 }
 
 func keygenCmd() *cobra.Command {
-	var out, keyID string
+	var out, keyID, pubOut string
+	var noPub bool
 	cmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate a local Ed25519 signing key",
-		Long: `Generate an Ed25519 key pair for signing skills. The private key is written
-to --out (mode 0600) and printed alongside its keyid and base64 public key.
+		Long: `Generate an Ed25519 key pair for signing skills. Two files are written:
 
-Keep the key file secret. Share the public_key line so verifiers can add it to
-their policy trust roster (trust.keys). Use the key with 'skill-guard sign'.
+  <name>.key   the PRIVATE key (mode 0600) — keep secret, never share/commit.
+  <name>.pub   the PUBLIC key (mode 0644) — safe to share, commit, or publish.
 
-NOTE: the key file is currently stored unencrypted; protect it with filesystem
+The .key is self-contained (signing needs only it); the .pub is a convenience
+you hand to consumers so they can add you to their policy trust roster
+(trust.keys). Use the .key with 'skill-guard sign'.
+
+NOTE: the .key is currently stored unencrypted; protect it with filesystem
 permissions. At-rest encryption is planned.
 
 EXIT CODES: 0 success · 4 internal error.`,
-		Example: `  skill-guard keygen --out publisher.key
-  skill-guard keygen --out publisher.key --keyid team-release-2026`,
+		Example: `  skill-guard keygen --out publisher.key            # writes publisher.key + publisher.pub
+  skill-guard keygen --out publisher.key --keyid team-release-2026
+  skill-guard keygen --out publisher.key --no-pub   # private key only`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			signer, err := attest.GenerateKey(keyID)
@@ -300,15 +305,26 @@ EXIT CODES: 0 success · 4 internal error.`,
 			if err := attest.SaveKey(signer, out); err != nil {
 				return fail(4, "cannot write key to %q: %v", out, err)
 			}
-			fmt.Printf("wrote %s (mode 0600)\n  keyid: %s\n  public_key: %s\n",
+			fmt.Printf("wrote %s (mode 0600, private — keep secret)\n  keyid: %s\n  public_key: %s\n",
 				out, signer.KeyID(), signer.PublicKeyBase64())
-			fmt.Println("  add this key to your policy trust roster to verify signatures made with it.")
+			if !noPub {
+				if pubOut == "" {
+					pubOut = attest.PubPath(out)
+				}
+				if err := attest.SavePub(signer, pubOut); err != nil {
+					return fail(4, "cannot write public key to %q: %v", pubOut, err)
+				}
+				fmt.Printf("wrote %s (mode 0644, public — safe to share)\n", pubOut)
+			}
+			fmt.Println("  share the public key so verifiers can add it to their policy trust roster.")
 			return nil
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&out, "out", "", "output key file path (default skill-guard.key)")
+	f.StringVar(&out, "out", "", "output private key file path (default skill-guard.key)")
 	f.StringVar(&keyID, "keyid", "", "key identifier recorded in signatures (default derived from public key)")
+	f.StringVar(&pubOut, "pub", "", "output public key file path (default <name>.pub)")
+	f.BoolVar(&noPub, "no-pub", false, "do not write the .pub public-key file")
 	return cmd
 }
 

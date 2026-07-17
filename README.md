@@ -154,24 +154,45 @@ skill-guard scan ./my-skill --rulepack ./extra-rules.yaml   # add rules (repeata
 
 ### `keygen`
 
-Generate an Ed25519 signing key pair.
+Generate an Ed25519 signing key pair. Two files are written:
+
+- `<name>.key` — the **private** key (mode `0600`); keep secret, never share or commit.
+- `<name>.pub` — the **public** key (mode `0644`); safe to share, commit, or publish.
 
 ```sh
 skill-guard keygen --out publisher.key
 ```
 
 ```
-wrote publisher.key (mode 0600)
+wrote publisher.key (mode 0600, private — keep secret)
   keyid: sg-8f7164b591be
   public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=
-  add this key to your policy trust roster to verify signatures made with it.
+wrote publisher.pub (mode 0644, public — safe to share)
+  share the public key so verifiers can add it to their policy trust roster.
 ```
 
-Keep the `.key` file secret. Share the `public_key` line so verifiers can add
-it to their [trust roster](#policy-file-skillguardyaml).
+The `.key` is self-contained — `sign` needs only it. The `.pub` is a
+convenience for distribution; its `keyid`/`algorithm`/`public_key` fields drop
+straight into a [trust roster](#publisher-identity--trust-sg-prv-005):
 
-> The key file is currently stored **unencrypted** (mode `0600`); protect it
-> with filesystem permissions. At-rest encryption is planned.
+```json
+{
+  "keyid": "sg-8f7164b591be",
+  "algorithm": "ed25519",
+  "public_key": "xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM="
+}
+```
+
+| Flag | Description |
+|------|-------------|
+| `--out` | private key file path (default `skill-guard.key`) |
+| `--pub` | public key file path (default `<name>.pub`) |
+| `--no-pub` | do not write the `.pub` file |
+| `--keyid` | key identifier recorded in signatures (default derived from public key) |
+
+> The `.key` is currently stored **unencrypted** (mode `0600`); protect it with
+> filesystem permissions. At-rest encryption is planned — a cleartext `.pub`
+> means you'll still be able to share the public half without decrypting the secret.
 
 ### `sign`
 
@@ -370,20 +391,19 @@ job is to make that easy and safe.
 
 ```sh
 # 1. Create a signing key ONCE and reuse it (a stable key = a stable identity).
+#    Writes publisher.key (private, secret) and publisher.pub (public, shareable).
 skill-guard keygen --out publisher.key
-#   keyid: sg-8f7164b591be
-#   public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=
 
-# 2. Sign each release with it.
+# 2. Sign each release with the private key.
 skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
 ```
 
-Then **publish your public identity** so consumers can trust it — the `keyid`,
-the `public_key`, and the `identity` — through a channel they already trust
-(your project's README, website over HTTPS, release notes, a signed git tag, an
-internal wiki). Keep `publisher.key` secret and stable; if you rotate it,
-consumers must update their roster (and you should add the old `keyid` to
-`revoked`).
+Then **publish `publisher.pub`** so consumers can trust it — commit it to your
+repo, attach it to releases, or serve it over HTTPS; a signed git tag is even
+better. It carries the `keyid`, `algorithm`, and `public_key` a consumer needs,
+and it's safe to share because it holds no private material. Keep
+`publisher.key` secret and stable; if you rotate it, consumers must update their
+roster (and you should add the old `keyid` to `revoked`).
 
 ### Consumer workflow
 

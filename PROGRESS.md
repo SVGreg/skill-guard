@@ -60,7 +60,9 @@ SGMT-1 Merkle + DSSE Ed25519 signing/verification, policy/trust, and TP/FP fixtu
 - LLM (T3) + dynamic + YARA engines (M5)
 - C-ABI / Python / Node / Rust bindings + daemon (M4)
 - Rule-pack signing + external-pack trust enforcement (hardening)
-- Keyfile encryption at rest (currently 0600 plaintext + warning) — decide age vs secretbox (M2 open q)
+- Keyfile encryption at rest (private `.key` currently 0600 plaintext + warning) — decide age vs
+  secretbox (M2 open q). keygen now also emits a public-only `<name>.pub` (0644, shareable); the
+  `.key` stays self-contained so encryption work only needs to wrap the private file.
 - git-URL / tar / zip bundle sources (parser currently: directory or single SKILL.md)
 
 ## Design decisions locked for the code

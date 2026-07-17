@@ -10,16 +10,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
-// keyFile is the on-disk key format. NOTE: stored unencrypted at mode 0600 for
-// first drop; encryption-at-rest (age vs secretbox) is a tracked M2 decision
-// (PROGRESS.md). Do not commit keys.
+// keyFile is the on-disk private key format (the self-contained ".key"). It
+// carries both halves, so signing needs only this one file. NOTE: stored
+// unencrypted at mode 0600 for first drop; encryption-at-rest (age vs secretbox)
+// is a tracked M2 decision (PROGRESS.md). Do not commit keys.
 type keyFile struct {
 	KeyID      string `json:"keyid"`
 	Algorithm  string `json:"algorithm"`
 	PrivateKey string `json:"private_key"` // base64 std of the 32-byte seed
 	PublicKey  string `json:"public_key"`  // base64 std
+}
+
+// pubFile is the public-only ".pub" companion — safe to share, commit, or drop
+// into a policy trust roster. It is purely additive: the public key is always
+// derivable from the ".key", so ".pub" is a convenience, never required for
+// signing or verification.
+type pubFile struct {
+	KeyID     string `json:"keyid"`
+	Algorithm string `json:"algorithm"`
+	PublicKey string `json:"public_key"` // base64 std
 }
 
 // LocalSigner is an Ed25519 signer backed by an in-memory private key.
@@ -72,6 +84,29 @@ func SaveKey(s *LocalSigner, path string) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+// PubPath derives the ".pub" companion path for a ".key" path: "publisher.key"
+// -> "publisher.pub"; a path without a ".key" suffix simply gets ".pub".
+func PubPath(keyPath string) string {
+	if strings.HasSuffix(keyPath, ".key") {
+		return strings.TrimSuffix(keyPath, ".key") + ".pub"
+	}
+	return keyPath + ".pub"
+}
+
+// SavePub writes the signer's public half to path at mode 0644.
+func SavePub(s *LocalSigner, path string) error {
+	pf := pubFile{
+		KeyID:     s.keyID,
+		Algorithm: "ed25519",
+		PublicKey: base64.StdEncoding.EncodeToString(s.pub),
+	}
+	data, err := json.MarshalIndent(pf, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // LoadKey reads a signer from a key file.
