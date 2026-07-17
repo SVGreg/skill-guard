@@ -20,6 +20,14 @@ rules:
     suppress:
       - '(?i)ignore\s+(case|whitespace|white-space|errors?|warnings?|blank lines?|comments?|files?)'
       - '\.gitignore'
+      # Defensive framing: a skill telling the agent NOT to follow instructions
+      # that are embedded in / arrive from external, untrusted content is anti-
+      # injection guidance, not an injection. (Attacks target "previous"/"your"
+      # instructions, not "embedded"/"external" ones.)
+      - '(?i)\b(embedded|external|untrusted|third[- ]party|fetched|injected)\b[^\n]{0,20}\binstruction'
+      - '(?i)\binstruction[- ]?(s|like)?\b[^\n]{0,30}\b(from|in)\s+(the\s+)?(email|web|external|untrusted|fetched|content|page|file|third)'
+      - '(?i)instruction[- ]?like'                 # "instruction-like text" is defensive
+      - '(?i)\bnot\s+(an?\s+)?instructions?\b'      # "treat as data, not instructions"
     rationale: Instructions telling the agent to disregard or supersede prior/operator/safety instructions (OWASP AST01/AST05).
     fix: Remove text that instructs the agent to ignore, override, or replace its own instructions or safety rules.
 
@@ -54,12 +62,19 @@ rules:
     targets: [body, scripts, configs]
     match:
       any:
-        - regex: '(?i)(>>?|tee|write_text|writeFile|open\([^)]*[''"]a?w[''"])\s*[^\n]{0,40}(~?/?\.?(claude|codex|gemini|cursor)/|SOUL\.md|MEMORY\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md)'
+        # Redirect narrowed to append `>>` plus explicit write sinks. The old
+        # single `>` also matched arrow functions (`=> c.includes`) and Markdown
+        # blockquotes (`> note`), which are not file writes.
+        - regex: '(?i)(>>|tee\s|write_text|writeFile|Set-Content|Out-File|open\([^)]*[''"]a?w[''"])\s*[^\n]{0,40}(~?/?\.?(claude|codex|gemini|cursor)/|SOUL\.md|MEMORY\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md)'
           confidence: 0.9
         - regex: '(?i)(add|append|update|write)\b[^.\n]{0,40}\b(your |the )?(MEMORY\.md|CLAUDE\.md|AGENTS\.md|memory)\b[^.\n]{0,30}\b(permanent|persist|every session|remember)'
           confidence: 0.8
     suppress:
       - '(?i)/path/to/'
+      # Writes into an explicit temp dir are test fixtures, not reprogramming
+      # the user's real agent config.
+      - '(?i)path\.join\(\s*(tmp|tmpdir|os\.tmpdir|mkdtemp|fixture)'
+      - '(?i)\b(tempfile\.|mkdtemp|os\.tmpdir\(\)|tmp_path)\b'
     rationale: Writing to agent identity/config files lets a skill silently reprogram the agent across sessions (AST01).
     fix: Do not write to agent identity or config files; keep skill state inside the skill's own directory.
 
