@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
@@ -38,13 +40,21 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 	if len(all) == 0 {
 		fmt.Fprintf(w, "  %sno findings%s\n", col(cGray), col(cReset))
 	}
+	used := map[string]bool{}
 	for _, f := range all {
 		sevC := severityColor(f.Severity, col)
-		fmt.Fprintf(w, "  %s:%d  %s%s%s  %s%s%s  %s\n",
+		var astTag string
+		if ids := strings.Join(f.AST, ", "); ids != "" {
+			astTag = fmt.Sprintf("  %s%s%s", col(cGray), ids, col(cReset))
+		}
+		fmt.Fprintf(w, "  %s:%d  %s%s%s  %s%s%s  %s%s\n",
 			f.File, f.StartLine,
 			col(cBold), f.RuleID, col(cReset),
 			sevC, f.Severity.String(), col(cReset),
-			f.Title)
+			f.Title, astTag)
+		for _, id := range f.AST {
+			used[id] = true
+		}
 		if opt.Verbose {
 			if f.Excerpt != "" {
 				fmt.Fprintf(w, "      match: %q  (confidence %.2f)\n", f.Excerpt, f.Confidence)
@@ -55,10 +65,42 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 			if f.Fix != "" {
 				fmt.Fprintf(w, "      fix:   %s\n", f.Fix)
 			}
+			for _, id := range f.AST {
+				if ref, ok := model.ASTInfo(id); ok {
+					fmt.Fprintf(w, "      owasp: %s %s — %s\n", ref.ID, ref.Title, ref.URL)
+				}
+			}
 		}
 	}
 	if len(rep.Waived) > 0 {
 		fmt.Fprintf(w, "  %s%d waived%s\n", col(cGray), len(rep.Waived), col(cReset))
+	}
+	astLegend(w, used, col)
+}
+
+// astLegend prints the OWASP Agentic Skills Top 10 references cited above, once,
+// with each risk's title and canonical page.
+func astLegend(w io.Writer, used map[string]bool, col func(string) string) {
+	if len(used) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(used))
+	width := 0
+	for id := range used {
+		ids = append(ids, id)
+		if ref, ok := model.ASTInfo(id); ok && len(ref.Title) > width {
+			width = len(ref.Title)
+		}
+	}
+	sort.Strings(ids)
+	fmt.Fprintf(w, "\n%sOWASP Agentic Skills Top 10 references:%s\n", col(cBold), col(cReset))
+	for _, id := range ids {
+		ref, ok := model.ASTInfo(id)
+		if !ok {
+			fmt.Fprintf(w, "  %s  (unknown risk id)\n", id)
+			continue
+		}
+		fmt.Fprintf(w, "  %s  %-*s  %s%s%s\n", ref.ID, width, ref.Title, col(cGray), ref.URL, col(cReset))
 	}
 }
 
@@ -83,11 +125,42 @@ func countsLine(c model.Counts) string {
 		c.Critical, c.High, c.Medium, c.Low, c.Info)
 }
 
-// JSON writes the full report as JSON.
+// JSON writes the full report as JSON. Alongside the existing per-finding "ast"
+// ids, it emits an "ast_references" map resolving each cited AST id to its OWASP
+// title and page, so consumers do not need to hard-code the taxonomy.
 func JSON(w io.Writer, rep *scan.Report, opt Options) error {
+	// Anonymous embedding promotes the Report's fields inline, so the top-level
+	// shape (findings, verdict, …) is unchanged and ast_references is a sibling.
+	out := struct {
+		*scan.Report
+		ASTReferences map[string]model.ASTRef `json:"ast_references,omitempty"`
+	}{Report: rep, ASTReferences: astRefs(rep)}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(rep)
+	return enc.Encode(out)
+}
+
+// astRefs collects the OWASP references for every AST id cited by a finding.
+func astRefs(rep *scan.Report) map[string]model.ASTRef {
+	refs := map[string]model.ASTRef{}
+	add := func(fs []model.Finding) {
+		for _, f := range fs {
+			for _, id := range f.AST {
+				if _, seen := refs[id]; seen {
+					continue
+				}
+				if ref, ok := model.ASTInfo(id); ok {
+					refs[id] = ref
+				}
+			}
+		}
+	}
+	add(rep.Findings)
+	add(rep.Waived)
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
 }
 
 // SkillCard writes the skill-card with an emission envelope (design §9).
