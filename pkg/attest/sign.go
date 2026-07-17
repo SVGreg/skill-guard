@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 // PayloadType is the DSSE payloadType for skill-guard attestations.

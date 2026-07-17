@@ -1,4 +1,4 @@
-module github.com/skillguard/skill-guard
+module github.com/SVGreg/skill-guard
 
 go 1.26.2
 

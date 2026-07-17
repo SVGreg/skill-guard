@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 	"github.com/spf13/cobra"
 )
 

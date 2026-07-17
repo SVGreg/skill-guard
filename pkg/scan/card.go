@@ -1,8 +1,8 @@
 package scan
 
 import (
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 // Card is the machine-readable verdict (design §9). The card body is the

@@ -6,10 +6,10 @@ package scan
 import (
 	"sort"
 
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/policy"
-	"github.com/skillguard/skill-guard/pkg/rules"
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/policy"
+	"github.com/SVGreg/skill-guard/pkg/rules"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 // Report is the result of scanning a bundle.

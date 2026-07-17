@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skillguard/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/model"
 	"gopkg.in/yaml.v3"
 )
 

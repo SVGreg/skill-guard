@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/scan"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/scan"
 )
 
 // ANSI colors (disabled when NoColor).

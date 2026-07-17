@@ -4,7 +4,7 @@
 `skill-guard scan | sign | verify` CLI + library over a real bundle, with a static rule engine,
 SGMT-1 Merkle + DSSE Ed25519 signing/verification, policy/trust, and TP/FP fixtures.
 
-**Module:** `github.com/skillguard/skill-guard` (rename later if a real org/remote is chosen).
+**Module:** `github.com/SVGreg/skill-guard` (rename later if a real org/remote is chosen).
 **Toolchain:** Go 1.26.2. Deps: `gopkg.in/yaml.v3`, `github.com/spf13/cobra`. Everything else stdlib.
 
 ## Durability protocol

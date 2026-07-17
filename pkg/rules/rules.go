@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/skillguard/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/model"
 )
 
 // EmitThreshold is the minimum confidence (after context modifiers) for a

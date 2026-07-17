@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skillguard/skill-guard/pkg/attest"
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/policy"
-	"github.com/skillguard/skill-guard/pkg/report"
-	"github.com/skillguard/skill-guard/pkg/rules"
-	"github.com/skillguard/skill-guard/pkg/scan"
+	"github.com/SVGreg/skill-guard/pkg/attest"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/policy"
+	"github.com/SVGreg/skill-guard/pkg/report"
+	"github.com/SVGreg/skill-guard/pkg/rules"
+	"github.com/SVGreg/skill-guard/pkg/scan"
 	"github.com/spf13/cobra"
 )
 

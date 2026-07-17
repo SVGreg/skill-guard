@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skillguard/skill-guard/pkg/attest"
-	"github.com/skillguard/skill-guard/pkg/policy"
-	"github.com/skillguard/skill-guard/pkg/skill"
-	sgverify "github.com/skillguard/skill-guard/pkg/verify"
+	"github.com/SVGreg/skill-guard/pkg/attest"
+	"github.com/SVGreg/skill-guard/pkg/policy"
+	"github.com/SVGreg/skill-guard/pkg/skill"
+	sgverify "github.com/SVGreg/skill-guard/pkg/verify"
 )
 
 func verifyBundle(b *skill.Bundle, env *attest.Envelope, pol policy.Policy) *sgverify.Result {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 func fixtureBundle(t *testing.T) *skill.Bundle {

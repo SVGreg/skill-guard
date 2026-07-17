@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 // Domain-separation prefixes (RFC 6962-style, design §7.1).

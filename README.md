@@ -45,7 +45,7 @@ Requires **Go 1.26+**.
 go build -o skill-guard ./cmd/skill-guard
 
 # or install into $GOBIN
-go install github.com/skillguard/skill-guard/cmd/skill-guard@latest
+go install github.com/SVGreg/skill-guard/cmd/skill-guard@latest
 ```
 
 Check it works:
@@ -351,11 +351,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/skillguard/skill-guard/pkg/model"
-	"github.com/skillguard/skill-guard/pkg/policy"
-	"github.com/skillguard/skill-guard/pkg/rules"
-	"github.com/skillguard/skill-guard/pkg/scan"
-	"github.com/skillguard/skill-guard/pkg/skill"
+	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/policy"
+	"github.com/SVGreg/skill-guard/pkg/rules"
+	"github.com/SVGreg/skill-guard/pkg/scan"
+	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 func main() {
@@ -414,7 +414,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26" }
-      - run: go install github.com/skillguard/skill-guard/cmd/skill-guard@latest
+      - run: go install github.com/SVGreg/skill-guard/cmd/skill-guard@latest
       - run: skill-guard scan ./my-skill --format json --out skill-guard.json
       # exit 1 here fails the job when the verdict is "fail"
 ```
