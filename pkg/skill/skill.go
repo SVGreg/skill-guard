@@ -52,19 +52,21 @@ type Manifest struct {
 	Extra         map[string]any `json:"extra,omitempty"`        // unknown keys (SG-MTA-002)
 	Raw           []byte         `json:"-"`                      // raw front-matter bytes
 	Present       bool           `json:"-"`                      // false if no front-matter found
+	LineOffset    int            `json:"-"`                      // file line of Raw's first line, minus 1
 }
 
 // Bundle is the normalized, inert representation of a skill.
 type Bundle struct {
-	Root       string        `json:"root"`
-	Manifest   Manifest      `json:"manifest"`
-	Body       string        `json:"-"` // markdown body after front-matter
-	SkillMDRaw []byte        `json:"-"` // raw SKILL.md bytes
-	Files      []File        `json:"files"`
-	Scripts    []Script      `json:"-"`
-	Configs    []File        `json:"-"`
-	Refs       []ExternalRef `json:"refs,omitempty"`
-	SingleFile bool          `json:"single_file"` // stdin / single SKILL.md mode
+	Root           string        `json:"root"`
+	Manifest       Manifest      `json:"manifest"`
+	Body           string        `json:"-"` // markdown body after front-matter
+	BodyLineOffset int           `json:"-"` // file line of Body's first line, minus 1
+	SkillMDRaw     []byte        `json:"-"` // raw SKILL.md bytes
+	Files          []File        `json:"files"`
+	Scripts        []Script      `json:"-"`
+	Configs        []File        `json:"-"`
+	Refs           []ExternalRef `json:"refs,omitempty"`
+	SingleFile     bool          `json:"single_file"` // stdin / single SKILL.md mode
 }
 
 var (
@@ -185,18 +187,24 @@ func parseSkillMD(b *Bundle, content []byte) {
 	m := frontMatterRe.FindSubmatchIndex(content)
 	if m == nil {
 		b.Body = string(content)
+		b.BodyLineOffset = 0
 		b.Manifest = Manifest{Present: false}
 		return
 	}
 	fmBytes := content[m[2]:m[3]]
 	b.Body = string(content[m[1]:])
+	// Line offsets so findings can be reported at true file line numbers:
+	// the front-matter content starts after the opening "---\n", and the body
+	// starts after the closing "---\n".
+	b.BodyLineOffset = bytes.Count(content[:m[1]], []byte("\n"))
 
 	var raw map[string]any
 	// yaml.v3 is memory-safe (no code execution on unmarshal, unlike PyYAML).
 	// A parse error leaves Extra empty; SG-MTA rules still see Raw bytes.
 	_ = yaml.Unmarshal(fmBytes, &raw)
 
-	man := Manifest{Raw: fmBytes, Present: true, Extra: map[string]any{}}
+	man := Manifest{Raw: fmBytes, Present: true, Extra: map[string]any{},
+		LineOffset: bytes.Count(content[:m[2]], []byte("\n"))}
 	for k, v := range raw {
 		switch strings.ToLower(k) {
 		case "name":

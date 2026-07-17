@@ -47,3 +47,25 @@ func TestMaliciousFails(t *testing.T) {
 		}
 	}
 }
+
+// TestSkillMDLineNumbersAreFileAbsolute guards against the front-matter/body
+// blobs being reported at blob-local line numbers instead of true file lines.
+// In testdata/malicious/SKILL.md the description injection is on file line 3 and
+// the body's system-prompt exfiltration is on file line 12.
+func TestSkillMDLineNumbersAreFileAbsolute(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	line := func(rule string) int {
+		for _, f := range rep.Findings {
+			if f.RuleID == rule && f.File == "SKILL.md" {
+				return f.StartLine
+			}
+		}
+		return -1
+	}
+	if got := line("SG-INJ-001"); got != 3 {
+		t.Errorf("SG-INJ-001 (front-matter description) reported at line %d, want file line 3", got)
+	}
+	if got := line("SG-INJ-006"); got != 12 {
+		t.Errorf("SG-INJ-006 (body) reported at line %d, want file line 12", got)
+	}
+}

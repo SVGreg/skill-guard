@@ -40,19 +40,23 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 	var findings []model.Finding
 
 	// Assemble target texts: manifest front-matter, body, each script, each config.
+	// lineOffset maps a target-local line number back to the true file line: the
+	// manifest and body are sub-spans of SKILL.md, so their local line 1 is not
+	// file line 1 (see skill.parseSkillMD).
 	type tgt struct {
 		name, lang, file, text string
+		lineOffset             int
 	}
 	var targets []tgt
 	if b.Manifest.Present {
-		targets = append(targets, tgt{"manifest", "", "SKILL.md", string(b.Manifest.Raw)})
+		targets = append(targets, tgt{"manifest", "", "SKILL.md", string(b.Manifest.Raw), b.Manifest.LineOffset})
 	}
-	targets = append(targets, tgt{"body", "", "SKILL.md", b.Body})
+	targets = append(targets, tgt{"body", "", "SKILL.md", b.Body, b.BodyLineOffset})
 	for _, sc := range b.Scripts {
-		targets = append(targets, tgt{"scripts", sc.Language, sc.Path, string(sc.Content)})
+		targets = append(targets, tgt{"scripts", sc.Language, sc.Path, string(sc.Content), 0})
 	}
 	for _, cf := range b.Configs {
-		targets = append(targets, tgt{"configs", "", cf.Path, string(cf.Content)})
+		targets = append(targets, tgt{"configs", "", cf.Path, string(cf.Content), 0})
 	}
 
 	for _, r := range s.rules {
@@ -62,6 +66,10 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 			}
 			for _, f := range r.Evaluate(t.name, t.text) {
 				f.File = t.file
+				f.StartLine += t.lineOffset
+				if f.EndLine > 0 {
+					f.EndLine += t.lineOffset
+				}
 				findings = append(findings, f)
 			}
 		}
