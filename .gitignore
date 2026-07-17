@@ -1,0 +1,18 @@
+# Binaries
+/skill-guard
+/dist/
+*.exe
+*.test
+*.out
+
+# Signatures & keys produced during local runs
+*.skillsig
+*.key
+/keys/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+/vendor/

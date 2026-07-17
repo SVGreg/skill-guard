@@ -1,0 +1,44 @@
+apiVersion: skillguard.dev/rulepack.v1
+name: core-metadata
+version: 1.0.0
+description: Manifest integrity and over-privilege (rule-verification.md §4).
+rules:
+  - id: SG-MTA-001
+    title: Unsafe YAML/deserialization tag
+    ast: [AST04]
+    severity: critical
+    engine: static
+    layer: content
+    confidence: 0.95
+    targets: [manifest, configs, scripts]
+    match:
+      any:
+        - regex: '!!python/(object|apply|name|module)'
+          confidence: 0.95
+        - regex: '!ruby/object|!!java'
+          confidence: 0.9
+        - regex: '(?i)\byaml\.load\s*\('
+          confidence: 0.7
+        - regex: '(?i)\b(pickle|marshal)\.loads?\s*\('
+          confidence: 0.8
+    suppress:
+      - '(?i)safe_?load|SafeLoader'
+    rationale: Unsafe YAML tags and pickle/marshal deserialization allow arbitrary code execution on load (AST04).
+    fix: Use safe loaders (yaml.safe_load); never deserialize untrusted pickle/marshal data.
+
+  - id: SG-MTA-003
+    title: Over-broad allowed-tools
+    ast: [AST03]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [manifest]
+    match:
+      any:
+        - regex: '(?i)Bash\(\s*\*\s*\)'
+          confidence: 0.85
+        - regex: '(?im)^\s*allowed-tools:\s*\[?\s*[''"]?(\*|all)\b'
+          confidence: 0.8
+    rationale: Wildcard tool grants disable least-privilege boundaries (AST03).
+    fix: Declare a scoped allowlist, e.g. Bash(git:*), Read — never Bash(*) or "*".

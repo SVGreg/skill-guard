@@ -1,0 +1,106 @@
+apiVersion: skillguard.dev/rulepack.v1
+name: core-injection
+version: 1.0.0
+description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
+rules:
+  - id: SG-INJ-001
+    title: Imperative instruction override
+    ast: [AST01, AST05]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest, scripts]
+    match:
+      any:
+        - regex: '(?i)\b(ignore|disregard|forget|skip|overlook|pay no attention to|do not follow|don''?t follow|override|bypass|discard|set aside|leave out)\s+(all\s+|any\s+|the\s+|everything\s+|previous\s+|prior\s+|above\s+|earlier\s+|preceding\s+)?(?:\w+\s+){0,3}(instructions?|prompts?|rules?|guidelines?|directions?|context|messages?|(?:written|said|stated|mentioned|listed)\s+(?:before|above|earlier|previously|preceding)|everything (?:above|before)|what (?:was|is) (?:written|said|stated) (?:before|above|earlier))\b'
+          confidence: 0.85
+        - regex: '(?i)\b(?:from now on|you are now)\b[^.\n]{0,40}\b(unrestricted|unfiltered|different (?:assistant|persona|mode)|new (?:role|task|instructions?))\b'
+          confidence: 0.6
+    suppress:
+      - '(?i)ignore\s+(case|whitespace|white-space|errors?|warnings?|blank lines?|comments?|files?)'
+      - '\.gitignore'
+    rationale: Instructions telling the agent to disregard or supersede prior/operator/safety instructions (OWASP AST01/AST05).
+    fix: Remove text that instructs the agent to ignore, override, or replace its own instructions or safety rules.
+
+  - id: SG-INJ-002
+    title: Hidden or obfuscated instructions
+    ast: [AST04, AST01]
+    severity: critical
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [body, manifest, scripts, configs]
+    match:
+      any:
+        - unicode_category: [Cf]
+          confidence: 0.7
+        - bidi_control: true
+          confidence: 0.85
+        - tag_block: true
+          confidence: 0.9
+        - regex: '(?is)<!--[^>]*?(system|instructions?|ignore|exfiltrat|POST|send|transmit)[^>]*?-->'
+          confidence: 0.7
+    rationale: Non-printing characters, bidi controls, Unicode-tag ASCII smuggling, or instruction-bearing comments are invisible to human review but parsed by the agent (AST04/AST01).
+    fix: Remove non-printing/format characters and any hidden instructions; keep content in plain, visible text.
+
+  - id: SG-INJ-004
+    title: Write to agent identity/config file
+    ast: [AST01]
+    severity: critical
+    engine: static
+    layer: content
+    confidence: 0.9
+    targets: [body, scripts, configs]
+    match:
+      any:
+        - regex: '(?i)(>>?|tee|write_text|writeFile|open\([^)]*[''"]a?w[''"])\s*[^\n]{0,40}(~?/?\.?(claude|codex|gemini|cursor)/|SOUL\.md|MEMORY\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md)'
+          confidence: 0.9
+        - regex: '(?i)(add|append|update|write)\b[^.\n]{0,40}\b(your |the )?(MEMORY\.md|CLAUDE\.md|AGENTS\.md|memory)\b[^.\n]{0,30}\b(permanent|persist|every session|remember)'
+          confidence: 0.8
+    suppress:
+      - '(?i)/path/to/'
+    rationale: Writing to agent identity/config files lets a skill silently reprogram the agent across sessions (AST01).
+    fix: Do not write to agent identity or config files; keep skill state inside the skill's own directory.
+
+  - id: SG-ANTI-001
+    title: Anti-refusal / jailbreak framing
+    ast: [AST01, AST05]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest]
+    match:
+      any:
+        - regex: '(?i)\b(never|do not|don''?t|you (?:cannot|must not|will not))\s+(?:ever\s+)?(refuse|decline|say no)\b'
+          confidence: 0.85
+        - regex: '(?i)\balways\s+(comply|obey|answer|respond|agree)\b'
+          confidence: 0.7
+        - regex: '(?i)\byou\s+have\s+no\s+(restrictions?|limitations?|filters?|rules?|guidelines?|boundaries|limits)\b'
+          confidence: 0.9
+        - regex: '(?i)\b(ignore|disregard|bypass|override)\s+(your\s+)?(content\s+)?(policy|policies|guidelines?|safety|restrictions?|filters?)\b'
+          confidence: 0.9
+        - regex: '(?i)\bnot\s+bound\s+by\s+(any\s+)?(rules?|policy|policies|guidelines?|restrictions?|openai|anthropic)\b'
+          confidence: 0.9
+        - regex: '(?i)\bdo\s+anything\s+now\b'
+          confidence: 0.8
+    rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy is a jailbreak preamble (AST01/AST05).
+    fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
+
+  - id: SG-INJ-006
+    title: System-prompt / tool-schema exfiltration
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest]
+    match:
+      any:
+        - regex: '(?i)\b(print|reveal|show|repeat|output|display|spell out)\b[^.\n]{0,30}\byour\s+(system\s+)?(prompt|instructions?|rules?|guidelines?)\b'
+          confidence: 0.85
+        - regex: '(?i)\b(repeat|output|print)\b[^.\n]{0,30}\beverything\s+(above|before this|in your context)\b'
+          confidence: 0.8
+    rationale: Attempts to extract the system prompt or tool schema, directly or indirectly (AST01).
+    fix: Remove instructions that ask the agent to reveal its system prompt, rules, or tool definitions.

@@ -1,0 +1,84 @@
+apiVersion: skillguard.dev/rulepack.v1
+name: core-network
+version: 1.0.0
+description: Data exfiltration, egress, SSRF (rule-verification.md §3).
+rules:
+  - id: SG-NET-002
+    title: Pipe-to-shell execution
+    ast: [AST01]
+    severity: critical
+    engine: static
+    layer: code
+    confidence: 0.95
+    targets: [body, scripts, configs]
+    match:
+      any:
+        - regex: '(?i)\b(curl|wget|fetch)\b[^\n|]{0,200}\|\s*(sudo\s+)?(ba|z|k|d)?sh\b'
+          confidence: 0.95
+        - regex: '(?i)\b(curl|wget|fetch)\b[^\n|]{0,200}\|\s*(python[23]?|perl|node|ruby)\b'
+          confidence: 0.9
+        - regex: '(?i)\b(bash|sh)\s+-c\s+["'']?\$\((curl|wget)'
+          confidence: 0.9
+        - regex: '(?i)\b(iwr|invoke-webrequest)\b[^\n|]{0,200}\|\s*iex\b'
+          confidence: 0.95
+    rationale: Downloading and piping content directly into an interpreter executes unreviewed remote code (AST01).
+    fix: Never pipe network downloads into a shell/interpreter. Fetch, verify a checksum, review, then run.
+
+  - id: SG-NET-001
+    title: Egress to suspicious host
+    ast: [AST01, AST05]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.8
+    targets: [body, scripts, configs, refs]
+    match:
+      any:
+        - url_host: [pastebin.com, hastebin.com, ghostbin.com, dpaste.com, ix.io, 0x0.st, termbin.com]
+          confidence: 0.8
+        - url_host: [webhook.site, requestbin.com, pipedream.net, hookb.in]
+          confidence: 0.85
+        - url_host: [bit.ly, tinyurl.com, is.gd, t.co]
+          confidence: 0.6
+        - url_host: [ngrok.io, trycloudflare.com]
+          confidence: 0.6
+    rationale: Pastebin/webhook/shortener/tunnel hosts are common exfiltration and staging endpoints (AST01/AST05).
+    fix: Send data only to documented, allowlisted endpoints you control.
+
+  - id: SG-NET-006
+    title: Listener / reverse-shell idiom
+    ast: [AST06]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.7
+    targets: [scripts, configs, body]
+    match:
+      any:
+        - regex: '(?i)bash\s+-i\s+>&?\s*/dev/tcp/'
+          confidence: 0.95
+        - regex: '(?i)\bnc\b[^\n]{0,40}\s-[a-z]*e\b'
+          confidence: 0.9
+        - regex: '(?i)\.bind\(\(?\s*[''"]?(0\.0\.0\.0|::)\b'
+          confidence: 0.7
+    rationale: Reverse shells and bind-all listeners expose the host to remote control (AST06).
+    fix: Bind only to localhost with authentication; remove reverse-shell code.
+
+  - id: SG-SSRF-001
+    title: Cloud metadata / SSRF endpoint access
+    ast: [AST05]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [scripts, configs, body]
+    match:
+      any:
+        - substring: "169.254.169.254"
+          confidence: 0.9
+        - substring: "metadata.google.internal"
+          confidence: 0.9
+        - substring: "100.100.100.200"
+          confidence: 0.8
+    rationale: Instance-metadata endpoints return temporary IAM credentials — a high-value SSRF/credential-theft target (AST05).
+    fix: Remove metadata-endpoint access unless strictly required; never expose returned credentials.

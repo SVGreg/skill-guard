@@ -1,0 +1,107 @@
+apiVersion: skillguard.dev/rulepack.v1
+name: core-exec
+version: 1.0.0
+description: Dangerous commands, code execution, privilege escalation, persistence (rule-verification.md §3).
+rules:
+  - id: SG-EXE-001
+    title: Dynamic eval / exec
+    ast: [AST01, AST04]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.7
+    targets: [scripts, configs]
+    match:
+      any:
+        - regex: '(?i)\bsubprocess\.\w+\([^)]*shell\s*=\s*True'
+          confidence: 0.7
+        - regex: '(?i)\b(os\.system|os\.popen)\s*\('
+          confidence: 0.7
+        - regex: '(?:^|[^.\w])eval\s*\('
+          confidence: 0.6
+        - regex: '(?i)\bgetattr\s*\(\s*(os|builtins|__builtins__)\s*,'
+          confidence: 0.85
+        - regex: '(?i)\bchild_process\.(exec|execSync)\s*\('
+          confidence: 0.7
+    suppress:
+      - '(?i)ast\.literal_eval'
+    rationale: Dynamic execution sinks enable arbitrary code execution, especially when fed untrusted input (AST01/AST04).
+    fix: Avoid eval/exec/shell=True. Use explicit argument lists and validate all inputs.
+
+  - id: SG-EXE-002
+    title: Destructive filesystem operation
+    ast: [AST04]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.6
+    targets: [scripts, configs, body]
+    match:
+      any:
+        - regex: '(?i)\brm\s+-[a-z]*r[a-z]*f?\b[^\n]{0,20}(/|~|\$\w+|\*)'
+          confidence: 0.9
+        - regex: '(?i)\bshutil\.rmtree\s*\(\s*[^)]*(/|~|\$|home|expanduser)'
+          confidence: 0.7
+        - regex: '(?i)\bchmod\s+-R\s+777\b'
+          confidence: 0.7
+        - regex: '(?i)\b(mkfs|dd\s+of=/dev/)'
+          confidence: 0.85
+    suppress:
+      - '(?i)rm\s+-rf\s+\.?/?(dist|build|node_modules|tmp|target|\.cache)\b'
+    rationale: Destructive filesystem operations on broad or dynamic targets can wipe user data (AST04).
+    fix: Scope deletions to the skill's own workspace; never target /, $HOME, or wildcards.
+
+  - id: SG-EXE-003
+    title: Privilege escalation
+    ast: [AST03]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.7
+    targets: [scripts, configs]
+    match:
+      any:
+        - regex: '(?i)>>?\s*[^\n]{0,20}(authorized_keys|/etc/sudoers)'
+          confidence: 0.9
+        - regex: '(?i)\bchmod\s+u\+s\b|\bsetcap\b'
+          confidence: 0.85
+        - regex: '(?im)^\s*sudo\s+\w'
+          confidence: 0.6
+    rationale: Adding SSH keys, editing sudoers, or setuid grants privilege escalation/persistence (AST03).
+    fix: Avoid privilege escalation; if elevation is required, document the justification and scope.
+
+  - id: SG-EXE-004
+    title: Persistence mechanism
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.6
+    targets: [scripts, configs]
+    match:
+      any:
+        - regex: '(?i)\bcrontab\b|@reboot|/etc/cron'
+          confidence: 0.75
+        - regex: '(?i)>>?\s*[^\n]{0,20}(\.bashrc|\.zshrc|\.profile|\.bash_profile)'
+          confidence: 0.75
+        - regex: '(?i)(launchctl\s+load|systemctl\s+enable|/Library/LaunchAgents)'
+          confidence: 0.7
+    rationale: Cron/rc/launchd/systemd persistence keeps attacker code running across sessions (AST01).
+    fix: Remove persistence mechanisms; skills should not install autostart hooks.
+
+  - id: SG-ROGUE-001
+    title: Skill self-modification
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.8
+    targets: [scripts, configs]
+    match:
+      any:
+        - regex: '(?i)\bopen\(\s*[''"]SKILL\.md[''"]\s*,\s*[''"]a?w[''"]'
+          confidence: 0.85
+        - regex: '(?i)(writeFile|write_text)\([^)]*SKILL\.md'
+          confidence: 0.85
+    rationale: A skill rewriting its own SKILL.md/scripts at runtime can disable checks or install a backdoor (AST01).
+    fix: Treat skill files as read-only at runtime; do not self-modify.
