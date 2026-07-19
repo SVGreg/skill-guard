@@ -5,7 +5,7 @@ description: Prompt injection, jailbreak, and instruction-layer attacks (rule-ve
 rules:
   - id: SG-INJ-001
     title: Imperative instruction override
-    ast: [AST01, AST05]
+    ast: [AST01]
     severity: high
     engine: static
     layer: content
@@ -28,7 +28,7 @@ rules:
       - '(?i)\binstruction[- ]?(s|like)?\b[^\n]{0,30}\b(from|in)\s+(the\s+)?(email|web|external|untrusted|fetched|content|page|file|third)'
       - '(?i)instruction[- ]?like'                 # "instruction-like text" is defensive
       - '(?i)\bnot\s+(an?\s+)?instructions?\b'      # "treat as data, not instructions"
-    rationale: Instructions telling the agent to disregard or supersede prior/operator/safety instructions (OWASP AST01/AST05).
+    rationale: Instructions telling the agent to disregard or supersede prior/operator/safety instructions (OWASP AST01).
     fix: Remove text that instructs the agent to ignore, override, or replace its own instructions or safety rules.
 
   - id: SG-INJ-002
@@ -54,7 +54,7 @@ rules:
 
   - id: SG-INJ-004
     title: Write to agent identity/config file
-    ast: [AST01]
+    ast: [AST01, AST03]
     severity: critical
     engine: static
     layer: content
@@ -75,12 +75,12 @@ rules:
       # the user's real agent config.
       - '(?i)path\.join\(\s*(tmp|tmpdir|os\.tmpdir|mkdtemp|fixture)'
       - '(?i)\b(tempfile\.|mkdtemp|os\.tmpdir\(\)|tmp_path)\b'
-    rationale: Writing to agent identity/config files lets a skill silently reprogram the agent across sessions (AST01).
+    rationale: Writing to agent identity/config files lets a skill silently reprogram the agent across sessions (AST01/AST03).
     fix: Do not write to agent identity or config files; keep skill state inside the skill's own directory.
 
   - id: SG-ANTI-001
     title: Anti-refusal / jailbreak framing
-    ast: [AST01, AST05]
+    ast: [AST01]
     severity: high
     engine: static
     layer: content
@@ -100,7 +100,7 @@ rules:
           confidence: 0.9
         - regex: '(?i)\bdo\s+anything\s+now\b'
           confidence: 0.8
-    rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy is a jailbreak preamble (AST01/AST05).
+    rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy is a jailbreak preamble (AST01).
     fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
 
   - id: SG-INJ-006

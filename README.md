@@ -104,18 +104,17 @@ verdict: fail   risk score: 100/100 (L3)   [crit 4, high 11, med 0, low 0, info 
   setup.sh:3   SG-NET-002  critical  Pipe-to-shell execution                    AST01
   setup.sh:6   SG-SEC-001  critical  Sensitive-path read                        AST03
   setup.sh:11  SG-NET-002  critical  Pipe-to-shell execution                    AST01
-  SKILL.md:3   SG-INJ-001  high      Imperative instruction override            AST01, AST05
+  SKILL.md:3   SG-INJ-001  high      Imperative instruction override            AST01
   SKILL.md:5   SG-MTA-003  high      Over-broad allowed-tools                   AST03
-  SKILL.md:10  SG-INJ-001  high      Imperative instruction override            AST01, AST05
+  SKILL.md:10  SG-INJ-001  high      Imperative instruction override            AST01
   SKILL.md:12  SG-INJ-006  high      System-prompt / tool-schema exfiltration   AST01
   setup.sh:11  SG-EXE-004  high      Persistence mechanism                      AST01
-  setup.sh:12  SG-EXE-003  high      Privilege escalation                       AST03
-  setup.sh:15  SG-SSRF-001 high      Cloud metadata / SSRF endpoint access      AST05
+  setup.sh:12  SG-EXE-003  high      Privilege escalation                       AST01
+  setup.sh:15  SG-SSRF-001 high      Cloud metadata / SSRF endpoint access      AST03, AST01
 
 OWASP Agentic Skills Top 10 references:
-  AST01  Malicious Skills                 https://owasp.org/www-project-agentic-skills-top-10/ast01.html
-  AST03  Over-Privileged Skills           https://owasp.org/www-project-agentic-skills-top-10/ast03.html
-  AST05  Untrusted External Instructions  https://owasp.org/www-project-agentic-skills-top-10/ast05.html
+  AST01  Malicious Skills        https://owasp.org/www-project-agentic-skills-top-10/ast01.html
+  AST03  Over-Privileged Skills  https://owasp.org/www-project-agentic-skills-top-10/ast03.html
 ```
 
 Each finding is mapped to the corresponding **OWASP Agentic Skills Top 10** risk
@@ -484,7 +483,9 @@ Findings carry a **severity**, **confidence** (with context modifiers that
 down-weight code examples and documentation to reduce false positives), a
 **rationale**, and a suggested **fix**. See
 [`docs/rule-verification.md`](docs/rule-verification.md) for the detection
-approach behind each rule, and add your own with `--rulepack`.
+approach behind each rule, and
+[`docs/owasp-ast-taxonomy.md`](docs/owasp-ast-taxonomy.md) for how each rule maps
+to the OWASP Agentic Skills Top 10 (and why). Add your own with `--rulepack`.
 
 ---
 

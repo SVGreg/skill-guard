@@ -5,7 +5,7 @@ description: Dangerous commands, code execution, privilege escalation, persisten
 rules:
   - id: SG-EXE-001
     title: Dynamic eval / exec
-    ast: [AST01, AST04]
+    ast: [AST01]
     severity: high
     engine: static
     layer: code
@@ -25,12 +25,12 @@ rules:
           confidence: 0.7
     suppress:
       - '(?i)ast\.literal_eval'
-    rationale: Dynamic execution sinks enable arbitrary code execution, especially when fed untrusted input (AST01/AST04).
+    rationale: Dynamic execution sinks enable arbitrary code execution, especially when fed untrusted input (AST01).
     fix: Avoid eval/exec/shell=True. Use explicit argument lists and validate all inputs.
 
   - id: SG-EXE-002
     title: Destructive filesystem operation
-    ast: [AST04]
+    ast: [AST01]
     severity: high
     engine: static
     layer: code
@@ -48,12 +48,12 @@ rules:
           confidence: 0.85
     suppress:
       - '(?i)rm\s+-rf\s+\.?/?(dist|build|node_modules|tmp|target|\.cache)\b'
-    rationale: Destructive filesystem operations on broad or dynamic targets can wipe user data (AST04).
+    rationale: Destructive filesystem operations on broad or dynamic targets can wipe user data (AST01).
     fix: Scope deletions to the skill's own workspace; never target /, $HOME, or wildcards.
 
   - id: SG-EXE-003
     title: Privilege escalation
-    ast: [AST03]
+    ast: [AST01]
     severity: high
     engine: static
     layer: code
@@ -67,7 +67,7 @@ rules:
           confidence: 0.85
         - regex: '(?im)^\s*sudo\s+\w'
           confidence: 0.6
-    rationale: Adding SSH keys, editing sudoers, or setuid grants privilege escalation/persistence (AST03).
+    rationale: Adding SSH keys, editing sudoers, or setuid grants privilege escalation/persistence (AST01).
     fix: Avoid privilege escalation; if elevation is required, document the justification and scope.
 
   - id: SG-EXE-004

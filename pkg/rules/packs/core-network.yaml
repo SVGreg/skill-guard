@@ -26,7 +26,7 @@ rules:
 
   - id: SG-NET-001
     title: Egress to suspicious host
-    ast: [AST01, AST05]
+    ast: [AST01]
     severity: high
     engine: static
     layer: code
@@ -42,12 +42,12 @@ rules:
           confidence: 0.6
         - url_host: [ngrok.io, trycloudflare.com]
           confidence: 0.6
-    rationale: Pastebin/webhook/shortener/tunnel hosts are common exfiltration and staging endpoints (AST01/AST05).
+    rationale: Pastebin/webhook/shortener/tunnel hosts are common exfiltration and staging endpoints (AST01).
     fix: Send data only to documented, allowlisted endpoints you control.
 
   - id: SG-NET-006
     title: Listener / reverse-shell idiom
-    ast: [AST06]
+    ast: [AST01, AST06]
     severity: high
     engine: static
     layer: code
@@ -61,12 +61,12 @@ rules:
           confidence: 0.9
         - regex: '(?i)\.bind\(\(?\s*[''"]?(0\.0\.0\.0|::)\b'
           confidence: 0.7
-    rationale: Reverse shells and bind-all listeners expose the host to remote control (AST06).
+    rationale: Reverse shells and bind-all listeners expose the host to remote control (AST01/AST06).
     fix: Bind only to localhost with authentication; remove reverse-shell code.
 
   - id: SG-SSRF-001
     title: Cloud metadata / SSRF endpoint access
-    ast: [AST05]
+    ast: [AST03, AST01]
     severity: high
     engine: static
     layer: code
@@ -80,5 +80,5 @@ rules:
           confidence: 0.9
         - substring: "100.100.100.200"
           confidence: 0.8
-    rationale: Instance-metadata endpoints return temporary IAM credentials — a high-value SSRF/credential-theft target (AST05).
+    rationale: Instance-metadata endpoints return temporary IAM credentials — a high-value SSRF/credential-theft target (AST03/AST01).
     fix: Remove metadata-endpoint access unless strictly required; never expose returned credentials.
