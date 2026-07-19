@@ -39,6 +39,20 @@ into an agent loop (e.g. before a skill is handed to the model).
 
 ## Install
 
+### Prebuilt binary (no Go required)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/SVGreg/skill-guard/main/install.sh | sh
+```
+
+The script detects your OS/architecture (macOS/Linux, amd64/arm64), verifies the release
+checksum, and installs to `/usr/local/bin` (override with `INSTALL_DIR`; pin a release with
+`VERSION=v0.1.0`). On Windows, download the `.zip` from the
+[releases page](https://github.com/SVGreg/skill-guard/releases) and put `skill-guard.exe`
+on your `PATH`.
+
+### From source
+
 Requires **Go 1.26+**.
 
 ```sh

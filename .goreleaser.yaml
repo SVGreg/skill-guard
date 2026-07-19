@@ -1,0 +1,58 @@
+# GoReleaser config — builds release binaries when a v* tag is created.
+# Docs: https://goreleaser.com
+version: 2
+
+project_name: skill-guard
+
+builds:
+  - id: skill-guard
+    main: ./cmd/skill-guard
+    binary: skill-guard
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+# release-please owns the GitHub Release and its changelog; GoReleaser only
+# attaches the binary artifacts to it.
+release:
+  mode: keep-existing
+
+changelog:
+  disable: true
+
+# To publish a Homebrew formula, create a SVGreg/homebrew-tap repo, add a
+# repo-scoped PAT as the HOMEBREW_TAP_TOKEN secret, then uncomment:
+#
+# brews:
+#   - repository:
+#       owner: SVGreg
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+#     homepage: https://github.com/SVGreg/skill-guard
+#     description: "Scan, sign, and verify Agent Skills (SKILL.md bundles)"
+#     test: |
+#       system "#{bin}/skill-guard version"
