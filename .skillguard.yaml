@@ -1,4 +1,4 @@
-apiVersion: skillguard.dev/policy.v1
+apiVersion: skillguard.net/policy.v1
 
 # Trust roster: public keys whose signatures are trusted on `verify`
 trust:

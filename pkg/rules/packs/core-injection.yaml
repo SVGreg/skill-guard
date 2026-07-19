@@ -1,4 +1,4 @@
-apiVersion: skillguard.dev/rulepack.v1
+apiVersion: skillguard.net/rulepack.v1
 name: core-injection
 version: 1.0.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).

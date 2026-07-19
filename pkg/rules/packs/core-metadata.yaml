@@ -1,4 +1,4 @@
-apiVersion: skillguard.dev/rulepack.v1
+apiVersion: skillguard.net/rulepack.v1
 name: core-metadata
 version: 1.0.0
 description: Manifest integrity and over-privilege (rule-verification.md §4).

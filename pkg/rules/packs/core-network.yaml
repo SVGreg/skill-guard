@@ -1,4 +1,4 @@
-apiVersion: skillguard.dev/rulepack.v1
+apiVersion: skillguard.net/rulepack.v1
 name: core-network
 version: 1.0.0
 description: Data exfiltration, egress, SSRF (rule-verification.md §3).

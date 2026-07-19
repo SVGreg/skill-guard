@@ -61,7 +61,7 @@ type Key struct {
 // Default returns the built-in policy used when no file is present.
 func Default() Policy {
 	return Policy{
-		APIVersion:  "skillguard.dev/policy.v1",
+		APIVersion:  "skillguard.net/policy.v1",
 		FailOn:      "high",
 		WarnOn:      "medium",
 		Attestation: AttestationRule{Required: false, WarnIfMissing: true},

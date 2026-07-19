@@ -427,7 +427,7 @@ The signed payload is a JSON **statement** (no signature material inside):
 
 ```json
 {
-  "_type": "skillguard.dev/attestation/v1",
+  "_type": "skillguard.net/attestation/v1",
   "subject": {
     "name": "pdf-extractor",
     "merkle_root": "sha256:9f2b…",
@@ -512,7 +512,7 @@ OWASP's USF places `content_hash: "sha256:…"` and `signature: "ed25519:…"` *
 ### 8.1 Format (`rulepack.v1`)
 
 ```yaml
-apiVersion: skillguard.dev/rulepack.v1
+apiVersion: skillguard.net/rulepack.v1
 name: core-injection
 version: 1.4.0
 description: Prompt-injection and instruction-layer attacks.
@@ -562,7 +562,7 @@ Two layers, resolving the determinism/timestamp conflict:
 
 ```json
 {
-  "_type": "skillguard.dev/skill-card/v1",
+  "_type": "skillguard.net/skill-card/v1",
   "card": {
     "name": "pdf-extractor",
     "description": "Extracts tables from PDFs.",
@@ -637,7 +637,7 @@ Serialized verdict values are lowercase strings: **`pass` | `warn` | `fail`** (G
 ### 10.4 Policy file (`.skillguard.yaml`) — one file, includes trust
 
 ```yaml
-apiVersion: skillguard.dev/policy.v1
+apiVersion: skillguard.net/policy.v1
 fail_on: high
 warn_on: medium
 attestation: { required: false, warn_if_missing: true }

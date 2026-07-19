@@ -1,4 +1,4 @@
-apiVersion: skillguard.dev/rulepack.v1
+apiVersion: skillguard.net/rulepack.v1
 name: core-exec
 version: 1.0.0
 description: Dangerous commands, code execution, privilege escalation, persistence (rule-verification.md §3).

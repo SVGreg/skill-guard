@@ -315,7 +315,7 @@ A policy sets gating thresholds, waivers, allowlists, and the **trust roster**.
 Pass it with `--policy`. Without one, the default gates fail on `high`+ findings.
 
 ```yaml
-apiVersion: skillguard.dev/policy.v1
+apiVersion: skillguard.net/policy.v1
 
 # Gating thresholds
 fail_on: high        # critical | high | medium | low

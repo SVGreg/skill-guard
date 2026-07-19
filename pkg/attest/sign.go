@@ -88,7 +88,7 @@ func BuildStatement(b *skill.Bundle, scan *ScanSummary, signer Signer, identity 
 	manifestSum := sha256.Sum256(NormalizeSkillMD(b.SkillMDRaw))
 	now := time.Now().UTC()
 	return &Statement{
-		Type: "skillguard.dev/attestation/v1",
+		Type: "skillguard.net/attestation/v1",
 		Subject: Subject{
 			Name:           b.Manifest.Name,
 			MerkleRoot:     MerkleRoot(leaves),

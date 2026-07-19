@@ -56,7 +56,7 @@ func buildCard(b *skill.Bundle, rep *Report) *Card {
 	}
 
 	return &Card{
-		Type:        "skillguard.dev/skill-card/v1",
+		Type:        "skillguard.net/skill-card/v1",
 		Name:        b.Manifest.Name,
 		Description: b.Manifest.Description,
 		Verdict:     rep.Verdict,
