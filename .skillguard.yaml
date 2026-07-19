@@ -1,0 +1,9 @@
+apiVersion: skillguard.dev/policy.v1
+
+# Trust roster: public keys whose signatures are trusted on `verify`
+trust:
+  keys:
+    - keyid: sg-4e342c47160e
+      algorithm: ed25519
+      public_key: Ma3DtMHino+NPGAyskMJS+8Vzo+ePVSlZ6RSNc7FPYM=   # from keygen
+  revoked: []
