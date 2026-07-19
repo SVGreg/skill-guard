@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/SVGreg/skill-guard/compare/v0.1.0...v0.1.1) (2026-07-19)
+
+
+### Features
+
+* add SKILL.md.skillsig for attestation payload and signatures ([1f9bd9f](https://github.com/SVGreg/skill-guard/commit/1f9bd9fc9e368c678560db2c357d6c008fa1c651))
+
 ## 0.1.0 (2026-07-19)
 
 
