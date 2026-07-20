@@ -19,6 +19,14 @@ All GitHub interaction uses `gh`. If `gh` is unauthenticated, export the keychai
 per-command: `GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fill | sed -n 's/^password=//p') gh ...`
 Never print the token.
 
+**Branch protection**: `main` is covered by the `protect-main` ruleset (direct pushes,
+force pushes, and deletion are blocked; PRs need 1 approval). Only the repo owner
+(admin role) bypasses it — that's who this skill assumes is running it, since step 3
+pushes to `main` directly and step 4 merges the release PR without a review. If `git push
+origin main` is rejected with a ruleset/protected-branch error, the invoking user is not
+an admin bypass actor: push a feature branch and open a PR instead, and get an approval
+before merging — don't try to work around the ruleset.
+
 ## 1. Preflight (all must pass before pushing anything)
 
 Run from the repo root:
