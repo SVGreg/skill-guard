@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/hooks/skillguard_hook.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

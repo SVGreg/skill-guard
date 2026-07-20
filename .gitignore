@@ -9,6 +9,13 @@
 *.skillsig
 *.key
 /keys/
+# ...but do commit attestations for this repo's own shipped skills
+!.claude/skills/**/*.skillsig
+
+# Hook runtime artifacts (config is intentionally committable for shared enforcement)
+skillguard-hook.log
+__pycache__/
+*.pyc
 
 # OS
 .DS_Store

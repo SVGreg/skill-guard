@@ -1,0 +1,18 @@
+{
+  "mode": "block-invalid",
+  "skill_guard_bin": "skill-guard",
+  "policy": ".skillguard.yaml",
+  "skill_dirs": [
+    "${CLAUDE_PROJECT_DIR}/.claude/skills",
+    "${HOME}/.claude/skills"
+  ],
+  "builtin_allowlist": [
+    "artifact-design", "dataviz", "code-review", "run", "verify"
+  ],
+  "unresolved_action": "warn",
+  "on_error": "allow",
+  "verify_timeout_seconds": 20,
+  "log_file": "${CLAUDE_PROJECT_DIR}/.claude/skillguard-hook.log",
+  "system_messages": true,
+  "trigger_tools": ["Skill"]
+}
