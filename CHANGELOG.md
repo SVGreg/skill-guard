@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/SVGreg/skill-guard/compare/v0.1.1...v0.1.2) (2026-07-20)
+
+
+### Features
+
+* **hooks:** add skill-guard PreToolUse hook for Claude Code ([9490186](https://github.com/SVGreg/skill-guard/commit/94901860a073ccf5398132361f25524d01de17d5))
+
 ## [0.1.1](https://github.com/SVGreg/skill-guard/compare/v0.1.0...v0.1.1) (2026-07-19)
 
 
