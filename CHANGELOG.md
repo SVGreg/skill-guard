@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/SVGreg/skill-guard/compare/v0.1.2...v0.1.3) (2026-07-22)
+
+
+### Bug Fixes
+
+* **rules:** widen SG-NET-006 to cover more reverse-shell families ([#4](https://github.com/SVGreg/skill-guard/issues/4)) ([70802ce](https://github.com/SVGreg/skill-guard/commit/70802ce9b672e0a3bb2790fc89981a71900e1ae7))
+
 ## [0.1.2](https://github.com/SVGreg/skill-guard/compare/v0.1.1...v0.1.2) (2026-07-20)
 
 
