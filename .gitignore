@@ -26,3 +26,6 @@ Thumbs.db
 
 # Evaluation artifacts
 /evaluation/
+
+# Maintenance-loop runtime state (per-machine; not shared)
+/.claude/maintenance/
