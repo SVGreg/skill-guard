@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/SVGreg/skill-guard/compare/v0.1.3...v0.1.4) (2026-07-22)
+
+
+### Features
+
+* add maintenance skills and update .gitignore for runtime state ([9a5be1f](https://github.com/SVGreg/skill-guard/commit/9a5be1f9a3a555b8e2a059dbc4c83d9f42c64152))
+
 ## [0.1.3](https://github.com/SVGreg/skill-guard/compare/v0.1.2...v0.1.3) (2026-07-22)
 
 
