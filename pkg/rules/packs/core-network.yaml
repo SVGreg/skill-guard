@@ -57,8 +57,31 @@ rules:
       any:
         - regex: '(?i)bash\s+-i\s+>&?\s*/dev/tcp/'
           confidence: 0.95
+        # reverse shell via any shell's -i redirected to /dev/tcp|udp (not just bash)
+        - regex: '(?i)\b(sh|ash|dash|ksh|zsh)\s+-i\b[^\n]{0,40}/dev/(tcp|udp)/'
+          confidence: 0.95
+        # exec-based /dev/tcp reverse shell: `exec 5<>/dev/tcp/host/port`
+        - regex: '(?i)\bexec\s+\d*<>\s*/dev/(tcp|udp)/'
+          confidence: 0.9
         - regex: '(?i)\bnc\b[^\n]{0,40}\s-[a-z]*e\b'
           confidence: 0.9
+        # ncat/netcat command-execution flags
+        - regex: '(?i)\b(ncat|netcat)\b[^\n]{0,40}(-e\b|--exec|--sh-exec)'
+          confidence: 0.9
+        # socat command-execution endpoints
+        - regex: '(?i)\bsocat\b[^\n]{0,80}(EXEC|SYSTEM):'
+          confidence: 0.9
+        # mkfifo backpipe one-liner reverse shell
+        - regex: '(?i)\bmkfifo\b[^\n]{0,120}\b(nc|ncat|netcat)\b'
+          confidence: 0.85
+        # interpreter reverse shell: socket fileno duped onto stdio, then a shell
+        - regex: '(?i)os\.dup2\([^\n]{0,30}\.fileno\(\)'
+          confidence: 0.85
+        - regex: '(?i)\bpty\.spawn\(\s*[^\n)]{0,25}(sh|bash|/bin)'
+          confidence: 0.75
+        # powershell reverse shell
+        - regex: '(?i)New-Object\s+(System\.)?Net\.Sockets\.TCPClient'
+          confidence: 0.8
         - regex: '(?i)\.bind\(\(?\s*[''"]?(0\.0\.0\.0|::)\b'
           confidence: 0.7
     rationale: Reverse shells and bind-all listeners expose the host to remote control (AST01/AST06).
