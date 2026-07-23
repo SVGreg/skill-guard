@@ -65,7 +65,9 @@ shells and backdoors embedded in skill code; social-engineering instructions in
 markdown; typosquatting; ClickFix / fake "setup required" prompts; persistence
 via agent identity files (`SOUL.md`, `MEMORY.md`, `AGENTS.md`); memory poisoning;
 identity cloning/exfiltration; WebSocket C2; shadow features; `curl` to unknown
-endpoints; pipe-to-shell of remote payloads; destructive operations authored in
+endpoints; pipe-to-shell of remote payloads; zero-click exfiltration through a
+rendered markdown/HTML image or link whose URL interpolates conversation or
+secret data (EchoLeak, CVE-2025-32711); destructive operations authored in
 the skill.
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
@@ -372,6 +374,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-NET-001` | Egress to suspicious host | AST01, AST05 | **AST01** | −AST05 (P2: exfil/C2, not instruction fetch) |
 | `SG-NET-002` | Pipe-to-shell execution | AST01 | **AST01** | unchanged (`curl … \| bash` of remote code) |
 | `SG-NET-006` | Listener / reverse-shell idiom | AST06 | **AST01, AST06** | +AST01 primary (P7: backdoor is malicious content; AST06 kept for the network-exposure dimension) |
+| `SG-NET-007` | Rendered-image/link data exfiltration | AST01 | **AST01** | unchanged (P2: exfil authored into the skill's own prose; the URL carries the data, so it is not an AST05 instruction fetch) |
 | `SG-SSRF-001` | Cloud metadata / SSRF endpoint access | AST05 | **AST03, AST01** | AST05→AST03,AST01 (P5: reaching a cloud-credential endpoint beyond scope; not an external-instruction fetch) |
 | `SG-SEC-001` | Sensitive-path read | AST03 | **AST03** | unchanged (P5: `~/.ssh`, `~/.aws`, `.env` — the AST03 evidence list) |
 | `SG-SEC-002` | Embedded secret | AST03, AST08 | **AST08** | −AST03 (P6: an embedded secret is the AST08 credential-scan check, not access-over-privilege) |
