@@ -82,7 +82,9 @@ const maxFileSize = 16 << 20 // 16 MiB per-file cap (DoS guard)
 // LoadBundle loads a bundle from a directory or a single SKILL.md file.
 // git-URL / tar / zip sources are deferred (see PROGRESS.md).
 func LoadBundle(src string) (*Bundle, error) {
-	info, err := os.Stat(src)
+	// Lstat, not Stat: Stat resolves the link, so the ModeSymlink check below
+	// could never fire and single-file mode silently followed symlinks (§7.1).
+	info, err := os.Lstat(src)
 	if err != nil {
 		return nil, fmt.Errorf("load bundle: %w", err)
 	}
@@ -90,6 +92,11 @@ func LoadBundle(src string) (*Bundle, error) {
 		return nil, fmt.Errorf("load bundle: %s is a symlink (rejected)", src)
 	}
 	if !info.IsDir() {
+		// The directory walk caps every file it reads; single-file mode must
+		// apply the same DoS guard rather than reading an arbitrary blob.
+		if info.Size() > maxFileSize {
+			return nil, fmt.Errorf("file %s exceeds size cap", src)
+		}
 		return loadSingleFile(src)
 	}
 	return loadDir(src)
