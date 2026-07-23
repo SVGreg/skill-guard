@@ -24,6 +24,47 @@ rules:
     rationale: Downloading and piping content directly into an interpreter executes unreviewed remote code (AST01).
     fix: Never pipe network downloads into a shell/interpreter. Fetch, verify a checksum, review, then run.
 
+  - id: SG-NET-007
+    title: Rendered-image/link data exfiltration
+    ast: [AST01]
+    severity: critical
+    engine: static
+    layer: content
+    confidence: 0.75
+    targets: [body, manifest, scripts, configs, refs]
+    match:
+      any:
+        # markdown image whose absolute URL interpolates a value into the query/fragment
+        - regex: '(?i)!\[[^\]\n]{0,100}\]\(\s*https?://[^\s)]{0,200}[?&#][^\s)]{0,100}(\{\{|\$\{|%7[bB]|<[a-z][a-z0-9_ -]{1,40}>|\$[a-z][a-z0-9_]{2,})'
+          confidence: 0.9
+        # html <img src>/<a href> with the same interpolation shape
+        - regex: '(?i)<(img|a)\s[^>\n]{0,200}(src|href)\s*=\s*["'']?https?://[^"''>\s]{0,200}[?&#][^"''>\s]{0,100}(\{\{|\$\{|%7[bB]|\$[a-z][a-z0-9_]{2,})'
+          confidence: 0.9
+        # plain markdown link (non-image) carrying interpolated query data
+        - regex: '(?im)(^|[^!])\[[^\]\n]{0,100}\]\(\s*https?://[^\s)]{0,200}[?&#][^\s)]{0,100}(\{\{|\$\{|%7[bB])'
+          confidence: 0.8
+        # uppercase data-bearing placeholder in an image/link query — case-sensitive on purpose
+        - regex: '!?\[[^\]\n]{0,100}\]\(\s*https?://[^\s)]{0,200}[?&][A-Za-z0-9_]{1,20}=[^\s)&]{0,60}(DATA|SECRET|TOKEN|API_?KEY|CONVERSATION|CONTEXT|HISTORY|CONTENTS?|SUMMARY|CREDENTIALS?|PROMPT)'
+          confidence: 0.85
+        # instruction framing: render an image/link that carries captured context.
+        # The `(^|[^-\n])` guard keeps CLI flags (`--api-key`, `--input-image`) from
+        # standing in for the prose noun — usage examples are not exfil instructions.
+        - regex: '(?im)\b(embed|render|include|insert|append|display)\b[^\n]{0,60}\b(image|img|markdown link|hyperlink)\b[^\n]{0,100}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|previous message|system prompt|user data)\b'
+          confidence: 0.75
+        # encode-the-context-into-a-URL framing
+        - regex: '(?im)\b(base64|url ?encod\w+|percent ?encod\w+)\b[^\n]{0,80}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|system prompt|user data)\b[^\n]{0,100}\b(image|img|url|query string|src=)\b'
+          confidence: 0.75
+    suppress:
+      - '(?i)\b(img\.shields\.io|badge\.fury\.io|shields\.io)\b'
+    rationale: >-
+      A markdown or HTML image/link whose URL interpolates conversation, context, or secret values is
+      fetched automatically by the rendering client, exfiltrating that data to the URL's host with no
+      user click (zero-click). Unlike SG-NET-001 this needs no known-bad host — any attacker domain
+      works. Real-world instance: EchoLeak (CVE-2025-32711) in M365 Copilot (AST01).
+    fix: >-
+      Never build image or link URLs from conversation content, tool output, or secrets. Use static
+      URLs, or relative paths inside the bundle, and strip interpolation from any rendered markup.
+
   - id: SG-NET-001
     title: Egress to suspicious host
     ast: [AST01]

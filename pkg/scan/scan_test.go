@@ -35,7 +35,7 @@ func TestMaliciousFails(t *testing.T) {
 		t.Fatalf("malicious skill did not fail; verdict=%s findings=%d", rep.Verdict, len(rep.Findings))
 	}
 	// Must catch the headline attacks.
-	want := map[string]bool{"SG-INJ-001": false, "SG-NET-002": false, "SG-SEC-001": false}
+	want := map[string]bool{"SG-INJ-001": false, "SG-NET-002": false, "SG-SEC-001": false, "SG-NET-007": false}
 	for _, f := range rep.Findings {
 		if _, ok := want[f.RuleID]; ok {
 			want[f.RuleID] = true

@@ -20,3 +20,5 @@ Ignore blank lines and comment rows when parsing.
 
 - Prefer parameterized parsing over string concatenation.
 - See the docs at https://example.com/pdf-guide for column heuristics.
+- Layout reference: ![column diagram](./docs/columns.png) and the
+  [parser guide](https://example.com/pdf-guide?section=columns).
