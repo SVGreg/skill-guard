@@ -45,7 +45,7 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 | SG-INJ-003 | AST01 | Conditional/time-bomb instruction (behaves differently under a hidden trigger). | P1 | planned | design §5 injection |
 | SG-INJ-005 | AST01 | Role-confusion: text forged to look like a system/operator turn. | P1 | planned | design §5 |
 | SG-TRIG-001 | AST04 | Over-broad activation trigger designed to fire on unrelated tasks. | P2 | planned | design §5 trigger |
-| SG-NET-007 | AST01 | Data-exfil via a rendered markdown/HTML image or link whose URL embeds captured/secret/context data to an attacker host the client auto-fetches (zero-click). Complements SG-NET-001, which only fires on a fixed bad-host allowlist — this technique uses any attacker domain. | P0 | planned | Research (OWASP): EchoLeak CVE-2025-32711 (M365 Copilot); embracethered markdown-image exfil |
+| SG-NET-007 | AST01 | Data-exfil via a rendered markdown/HTML image or link whose URL embeds captured/secret/context data to an attacker host the client auto-fetches (zero-click). Complements SG-NET-001, which only fires on a fixed bad-host allowlist — this technique uses any attacker domain. | P0 | implemented | Research (OWASP): EchoLeak CVE-2025-32711 (M365 Copilot); embracethered markdown-image exfil. Shipped in `core-network.yaml` — see PR #9, issue #6, `rule-verification.md §3`. |
 
 ## SG-LLM-* (opt-in semantic engine — M5, engine not yet built)
 
