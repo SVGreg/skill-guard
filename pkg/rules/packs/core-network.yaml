@@ -46,11 +46,13 @@ rules:
         # uppercase data-bearing placeholder in an image/link query — case-sensitive on purpose
         - regex: '!?\[[^\]\n]{0,100}\]\(\s*https?://[^\s)]{0,200}[?&][A-Za-z0-9_]{1,20}=[^\s)&]{0,60}(DATA|SECRET|TOKEN|API_?KEY|CONVERSATION|CONTEXT|HISTORY|CONTENTS?|SUMMARY|CREDENTIALS?|PROMPT)'
           confidence: 0.85
-        # instruction framing: render an image/link that carries captured context
-        - regex: '(?i)\b(embed|render|include|insert|append|display|output)\b[^\n]{0,60}\b(image|img|markdown link|hyperlink)\b[^\n]{0,100}\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|previous message|system prompt|user data)\b'
+        # instruction framing: render an image/link that carries captured context.
+        # The `(^|[^-\n])` guard keeps CLI flags (`--api-key`, `--input-image`) from
+        # standing in for the prose noun — usage examples are not exfil instructions.
+        - regex: '(?im)\b(embed|render|include|insert|append|display)\b[^\n]{0,60}\b(image|img|markdown link|hyperlink)\b[^\n]{0,100}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|previous message|system prompt|user data)\b'
           confidence: 0.75
         # encode-the-context-into-a-URL framing
-        - regex: '(?i)\b(base64|url ?encod\w+|percent ?encod\w+)\b[^\n]{0,80}\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|system prompt|user data)\b[^\n]{0,100}\b(image|img|url|query string|src=)\b'
+        - regex: '(?im)\b(base64|url ?encod\w+|percent ?encod\w+)\b[^\n]{0,80}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|system prompt|user data)\b[^\n]{0,100}\b(image|img|url|query string|src=)\b'
           confidence: 0.75
     suppress:
       - '(?i)\b(img\.shields\.io|badge\.fury\.io|shields\.io)\b'

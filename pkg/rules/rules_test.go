@@ -149,6 +149,9 @@ func TestRenderExfilCovered(t *testing.T) {
 		{"[the docs](https://example.com/guide?section=install)", false},
 		{"Include an image of the output in your report.", false},
 		{"Render the chart as a PNG and save it to ./out/chart.png", false},
+		// real corpus FP: a CLI usage example whose flags incidentally supply the
+		// verb/image/data nouns (clawhub/nano-banana-pro SKILL.md).
+		{`generate_image.py --prompt "x" --filename "output-name.png" --input-image "in.png" [--api-key KEY]`, false},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("body", c.text)) > 0

