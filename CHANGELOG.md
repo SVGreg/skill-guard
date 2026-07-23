@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.5](https://github.com/SVGreg/skill-guard/compare/v0.1.4...v0.1.5) (2026-07-23)
+
+
+### Features
+
+* **evaluation:** add scripts for fetching and scanning ClawHub skills ([#10](https://github.com/SVGreg/skill-guard/issues/10)) ([6f921df](https://github.com/SVGreg/skill-guard/commit/6f921df095e65e0d46b090b03b748e7f8b2d8b27))
+* **rules:** SG-NET-007 — rendered-image/link data exfiltration ([#9](https://github.com/SVGreg/skill-guard/issues/9)) ([0cec31b](https://github.com/SVGreg/skill-guard/commit/0cec31b1342eea5f39efabded15e84bb3bac13a7))
+
+
+### Bug Fixes
+
+* **skill:** apply symlink and size-cap guards to single-file mode ([#12](https://github.com/SVGreg/skill-guard/issues/12)) ([a0b0081](https://github.com/SVGreg/skill-guard/commit/a0b0081574048bebc94ce7b6528813bc518966d5))
+
 ## [0.1.4](https://github.com/SVGreg/skill-guard/compare/v0.1.3...v0.1.4) (2026-07-22)
 
 
