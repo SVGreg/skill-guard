@@ -28,6 +28,7 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 | SG-DEP-004 | AST02 | Typosquat-shaped package name (near-miss of a popular package). | P2 | planned | design §5 |
 | SG-DEP-005 | AST02 | Post-install / lifecycle hook that runs arbitrary code. | P1 | planned | design §5 |
 | SG-DEP-006 | AST02 | Fetches a binary/blob and marks it executable. | P1 | planned | design §5 |
+| SG-DEP-007 | AST02/AST01 | **Remote-package auto-execution via a runner** — `npx -y <pkg>`, `uvx <pkg>`, `pipx run <pkg>`, `bunx <pkg>`, `pnpm dlx`/`yarn dlx`. Unlike SG-DEP-002 (install *bootstrap*), these download **and execute** an unpinned remote package in a single command, with no lockfile and no separate review step, running with the agent's permissions. Verified undetected on `main` (scans clean / 0 findings). Real example (Snyk): `npx -y openclaw-yahoo-stock-news stock AAPL`. | P0 | planned | Research (Snyk): "From SKILL.md to Shell Access…" — post-install/auto-run package execution. Issue #29. Complements SG-DEP-002. |
 | SG-TAINT-001 | AST01 | Data-flow: untrusted input reaches a shell/exec sink. | P1 | planned | design §5 taint family; deferred to M3 |
 | SG-TAINT-002 | AST01 | Data-flow: secret/env reaches a network sink (exfil path). | P1 | planned | design §5 |
 | SG-TAINT-003 | AST01 | Data-flow: fetched content reaches a file-write sink. | P2 | planned | design §5 |
