@@ -403,6 +403,32 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** content-trust disabled 0.7; `:latest` 0.4.
 - **Fixtures:** TP: `docker pull evil:latest --disable-content-trust`. FP: `image@sha256:…`.
 
+### SG-DEP-007 — Remote-package auto-execution via a package runner  (AST02/AST01, medium) — **implemented** (`core-supply`)
+- **Signals:** the fetch-**and-execute** runner idioms — `npx -y` / `bunx -y` (explicit
+  auto-confirm), `pnpm dlx` / `yarn dlx` (the download-and-run subcommand), `uvx <tool>`, and
+  `pipx run <pkg>`. Each pulls an unpinned remote package and runs it in one command, with no
+  lockfile and no separate install-then-review — RCE the moment the agent follows a "to get
+  started, run …" step. Distinct from an install *bootstrap* (that only stages a dependency).
+- **FP carve-outs (issue #29):** a **pinned** exact version (`@\d+\.\d+`, e.g. `npx foo@1.2.3`,
+  `uvx ruff@0.5.0`) is auditable → suppressed; a **local path** (`npx ./tool`, `pipx run ./x.py`,
+  `file:`) is not a remote fetch → suppressed; a **bare local dev tool** (`npx tsc`, `npx eslint`
+  with no `-y`) is not matched at all (only the auto-confirm/`dlx`/`uvx`/`run` forms fire). `uvx`/
+  `pipx run` require a ≥4-char package token so prose like "use uvx to run tools" stays clean.
+- **Severity is `medium` (warn, not fail) on purpose:** the runner idiom is the *normal* way
+  legitimate tools are invoked (`uvx markitdown`, `npx -y @scope/cli`), and static analysis cannot
+  separate a trusted package from a malicious one — both are unpinned remote fetch-and-execute. The
+  rule surfaces the capability for review without hard-failing every skill that documents a tool.
+  Real-corpus check (240 skills, built-in packs, no policy): 26 findings across 7 skills, all
+  genuine runner invocations (`uvx markitdown` docs, `npx -y @steipete/oracle`, the `npx skills`
+  CLI, an `npx -y supergateway` MCP launcher) — no spurious prose matches. At `medium` these land as
+  `warn`, not `fail`.
+- **Confidence:** `-y`/`--yes` and `dlx` 0.9; `uvx`/`pipx run` 0.85. In a fenced body block the
+  documentary penalty nets −0.25, so these still emit (0.6–0.65 ≥ 0.5).
+- **Fixtures:** `TestRemotePackageRunnerCovered` in `pkg/rules/rules_test.go` (7 TP forms + 7 FP
+  carve-outs); `testdata/malicious/SKILL.md` (`npx -y openclaw-yahoo-stock-news`, `uvx …`) asserted
+  in `pkg/scan/scan_test.go`; `testdata/benign/SKILL.md` keeps `npx tsc --noEmit` clean. Source:
+  Snyk, *From SKILL.md to Shell Access in Three Lines of Markdown*.
+
 ### SG-REF-001 — External reference inventory  (AST05, info) — always emitted
 - **Signals:** enumerate every external URL/remote ref in body + scripts + configs; classify (doc, dependency, fetch-target). Feeds the card `external_refs[]`; never a gate by itself.
 - **FP carve-outs:** n/a (informational).

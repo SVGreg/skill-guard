@@ -1,0 +1,50 @@
+apiVersion: skillguard.net/rulepack.v1
+name: core-supply
+version: 1.0.0
+description: Supply chain — unpinned/remote dependencies pulled and executed at use time (rule-verification.md §4, AST02).
+rules:
+  - id: SG-DEP-007
+    title: Remote-package auto-execution via a package runner
+    ast: [AST02, AST01]
+    # medium (warn, not fail): the runner idiom is the *normal* way legitimate
+    # tools are invoked (`uvx markitdown`, `npx -y @scope/cli`), and static
+    # analysis cannot tell a trusted package from a malicious one — both are
+    # unpinned remote fetch-and-execute. This surfaces the capability for review
+    # without hard-failing every skill that documents a tool. Real corpus check:
+    # 26 hits over 7/240 skills, all genuine runner invocations (see rule-verification.md §4).
+    severity: medium
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [body, scripts, configs]
+    match:
+      any:
+        # npx/bunx with an explicit auto-confirm flag: fetches AND runs, no prompt.
+        - regex: '(?i)\b(npx|bunx)\b[^\n]{0,40}(-y\b|--yes\b)'
+          confidence: 0.9
+        # pnpm dlx / yarn dlx: the "download-and-execute" subcommand — always remote.
+        - regex: '(?i)\b(pnpm|yarn)\s+dlx\s+[@a-z0-9][\w.-]{2,}'
+          confidence: 0.9
+        # uv's throwaway tool runner: uvx <tool> fetches from PyPI and runs immediately.
+        - regex: '(?i)\buvx\s+[@a-z0-9][\w.-]{3,}'
+          confidence: 0.85
+        # pipx run <pkg>: one-shot fetch-and-run of a Python package.
+        - regex: '(?i)\bpipx\s+run\s+[@a-z0-9][\w.-]{3,}'
+          confidence: 0.85
+    suppress:
+      # A pinned exact version (npx foo@1.2.3, uvx ruff@0.5.0) is auditable — out of scope.
+      - '(?i)@\d+\.\d+'
+      # A local path / file: spec is not a remote fetch.
+      - '(?i)\b(npx|bunx|uvx|dlx|run)\s+(\.{1,2}/|/|file:)'
+    rationale: >-
+      Package runners like `npx -y`, `bunx -y`, `pnpm dlx`/`yarn dlx`, `uvx`, and `pipx run`
+      download AND execute a remote package in a single command — no lockfile, no pin, no
+      separate install-then-review step — running with the agent's permissions. A "to get
+      started, run …" step in a SKILL.md turns this into unreviewed remote code execution the
+      moment the agent follows it. Distinct from an install bootstrap (SG-DEP-002), which only
+      stages a dependency; these forms are a fetch-and-execute sink (AST02 supply chain / AST01
+      execution).
+    fix: >-
+      Pin an exact version and install-then-review before running (e.g. `npm install pkg@1.2.3`,
+      then invoke the local binary), or vendor the tool into the bundle. Avoid `-y`/`dlx`/`uvx`/
+      `run` one-shot remote execution of unpinned packages.
