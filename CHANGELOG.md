@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/SVGreg/skill-guard/compare/v0.1.6...v0.1.7) (2026-07-24)
+
+
+### Bug Fixes
+
+* **rules:** per-line dedup keeps the highest-confidence match ([#25](https://github.com/SVGreg/skill-guard/issues/25)) ([1695f62](https://github.com/SVGreg/skill-guard/commit/1695f62889c92ed42ca972a18953490a879b8e44))
+
 ## [0.1.6](https://github.com/SVGreg/skill-guard/compare/v0.1.5...v0.1.6) (2026-07-24)
 
 
