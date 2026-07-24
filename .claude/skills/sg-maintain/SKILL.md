@@ -12,7 +12,7 @@ activity** and opens **at most one PR**, then records what it did. Wire it up wi
 /loop 6h /sg-maintain
 ```
 
-The interval is tunable. Because `main` is branch-protected (see `release` skill), everything
+The interval is tunable. Because `main` is branch-protected (see `sg-release` skill), everything
 this loop produces lands as a **pull request the owner reviews and merges** — the loop never
 merges or pushes to `main` itself.
 
@@ -31,7 +31,7 @@ enforces them.
    work than fits one focused PR, file the remainder to `docs/planned-rules.md` or a GitHub issue.
 4. **PRs only.** Always branch, commit with conventional-commit messages, push the branch, open a
    PR labeled `automated` + `maintenance`, and note bot authorship in the body. Never merge.
-5. **Preflight before every PR** (same as the `release` skill preflight): `gofmt -l .` empty,
+5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.
 6. **Idempotency.** Before creating a branch/PR/issue/comment, check whether an equivalent one
