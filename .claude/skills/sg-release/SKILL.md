@@ -1,5 +1,5 @@
 ---
-name: release
+name: sg-release
 description: Cut a skill-guard release — run preflight checks, determine the next version from conventional commits, push, then merge the release-please PR and verify the published binaries. Use when asked to release, cut/publish a version, or ship a release.
 ---
 
@@ -40,7 +40,7 @@ Run from the repo root:
 6. Exit-code smoke test (the release contract):
    `go run ./cmd/skill-guard scan testdata/malicious` exits **1**;
    `go run ./cmd/skill-guard scan testdata/benign` exits **0**.
-7. Dogfood: `go run ./cmd/skill-guard scan .claude/skills/release` must pass —
+7. Dogfood: `go run ./cmd/skill-guard scan .claude/skills/sg-release` must pass —
    skill-guard's own skills must survive skill-guard.
 
 If any step fails, stop and fix before proceeding — the release workflow re-runs tests and
