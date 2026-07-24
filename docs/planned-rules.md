@@ -19,7 +19,7 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 
 | ID | AST | Threat | Priority | Status | Source / notes |
 |----|-----|--------|----------|--------|----------------|
-| SG-REF-001 | AST05 | Skill body instructs the agent to fetch and follow instructions from an external URL/file (untrusted external instructions). | P0 | planned | design §5, owasp-ast-taxonomy AST05 row (marked "planned") |
+| SG-REF-001 | AST05 | Skill body instructs the agent to fetch and follow instructions from an external URL/file (untrusted external instructions). | P0 | implemented | **Shipped as `SG-REF-003`** (Runtime instruction fetch) in `core-injection.yaml` — this row's threat is the "external brain" attack, which `rule-verification.md` and design §5.7 assign to the SG-REF-003 id (SG-REF-001 is reserved for the info-level reference inventory). See PR (this cycle), `rule-verification.md §SG-REF-003`. The remaining, still-unimplemented SG-REF-001 *inventory* feature is tracked in design §5.7. |
 | SG-REF-002 | AST05 | Skill references an external ruleset/config the agent is told to obey at runtime. | P1 | planned | rule-verification §7 |
 | SG-REF-003 | AST05 | Skill embeds a remote include / `@import`-style directive pulling instructions at use time. | P1 | planned | rule-verification §7 |
 | SG-DEP-001 | AST02 | Declares an install step pulling an unpinned dependency (no version/hash). | P0 | planned | design §5 supply-chain; owasp-ast-taxonomy AST02 |

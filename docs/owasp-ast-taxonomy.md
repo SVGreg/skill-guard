@@ -375,6 +375,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-NET-002` | Pipe-to-shell execution | AST01 | **AST01** | unchanged (`curl … \| bash` of remote code) |
 | `SG-NET-006` | Listener / reverse-shell idiom | AST06 | **AST01, AST06** | +AST01 primary (P7: backdoor is malicious content; AST06 kept for the network-exposure dimension) |
 | `SG-NET-007` | Rendered-image/link data exfiltration | AST01 | **AST01** | unchanged (P2: exfil authored into the skill's own prose; the URL carries the data, so it is not an AST05 instruction fetch) |
+| `SG-REF-003` | Runtime instruction fetch (external brain) | AST05 | **AST05, AST01** | +AST01 — the fetched content is followed as instructions, so the injection dimension applies alongside the external-fetch dimension (AST05 primary) |
 | `SG-SSRF-001` | Cloud metadata / SSRF endpoint access | AST05 | **AST03, AST01** | AST05→AST03,AST01 (P5: reaching a cloud-credential endpoint beyond scope; not an external-instruction fetch) |
 | `SG-SEC-001` | Sensitive-path read | AST03 | **AST03** | unchanged (P5: `~/.ssh`, `~/.aws`, `.env` — the AST03 evidence list) |
 | `SG-SEC-002` | Embedded secret | AST03, AST08 | **AST08** | −AST03 (P6: an embedded secret is the AST08 credential-scan check, not access-over-privilege) |
@@ -392,7 +393,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST02 Supply Chain | Partial via `sign`/`verify` | provenance/attestation, not the static packs |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
 | AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest |
-| AST05 Untrusted External Instr. | Partial | only via external-reference rules (planned `SG-REF-*`); no in-skill text maps here |
+| AST05 Untrusted External Instr. | Partial | `SG-REF-003` (runtime instruction fetch / "external brain") implemented; the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
 | AST06 Weak Isolation | Weak/partial | only visible signals (bind-all listeners); the sandbox itself is a runtime property |
 | AST07 Update Drift | No (runtime/registry) | addressed by pinning + `verify` re-scan, not static content |
 | AST08 Poor Scanning | Partial | embedded-secret detection; skill-guard is itself an AST08 mitigation |
