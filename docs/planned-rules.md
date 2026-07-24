@@ -47,6 +47,17 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 | SG-TRIG-001 | AST04 | Over-broad activation trigger designed to fire on unrelated tasks. | P2 | planned | design §5 trigger |
 | SG-NET-007 | AST01 | Data-exfil via a rendered markdown/HTML image or link whose URL embeds captured/secret/context data to an attacker host the client auto-fetches (zero-click). Complements SG-NET-001, which only fires on a fixed bad-host allowlist — this technique uses any attacker domain. | P0 | implemented | Research (OWASP): EchoLeak CVE-2025-32711 (M365 Copilot); embracethered markdown-image exfil. Shipped in `core-network.yaml` — see PR #9, issue #6, `rule-verification.md §3`. |
 
+## Engine & hardening backlog (not detection rules)
+
+Items that change the **engine** rather than add a pattern — scan-target coverage, resource limits,
+parsing. They live here so `sg-code-review` and `sg-issue-implement` can pick them up, but they
+deliberately carry no `SG-` rule ID, because none of them is a rule.
+
+| Area | Item | Priority | Status | Source / notes |
+|------|------|----------|--------|----------------|
+| `pkg/skill` + `pkg/scan` | **Reference/asset files are never scanned.** `classify` files every non-`SKILL.md` markdown as `asset`; `scan.Scan` builds targets only from `manifest`/`body`/`Scripts`/`Configs`. A payload in `references/*.md` scans clean (verified on `main@7287e27`). Side effect: the `refs` entry in `targets:` on rules like `SG-NET-001` is inert — no `refs` target is ever assembled. Distinct from `SG-REF-001..003`, which detect *instructions to fetch external content* rather than scanning content already in the bundle. | P0 | planned | issue #13, triaged `must-have`; found by `sg-code-review` over `pkg/skill` |
+| `pkg/skill` | **No total-bytes cap across a bundle.** `maxFileSize` bounds each file; nothing bounds the sum, and `File.Content` is retained for every file. Cannot cause a wrong verdict — resource exhaustion only, mainly for batch/CI scanning. Ceiling is a policy decision (constant vs `.skillguard.yaml` knob). Best sequenced *after* the row above, which changes which files' content must stay resident. | P1 | planned | issue #14, triaged `useful` |
+
 ## SG-LLM-* (opt-in semantic engine — M5, engine not yet built)
 
 Notes accumulated by `sg-llm-polish` for when the T3 semantic engine ships (`docs/rule-verification.md §6`,
