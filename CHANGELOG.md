@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/SVGreg/skill-guard/compare/v0.1.7...v0.1.8) (2026-07-24)
+
+
+### Bug Fixes
+
+* **rules:** polish SG-SEC-001 — more credential files + exfil verbs ([#27](https://github.com/SVGreg/skill-guard/issues/27)) ([1125da4](https://github.com/SVGreg/skill-guard/commit/1125da45a47978f70772c973937414d8f7f8e428))
+
 ## [0.1.7](https://github.com/SVGreg/skill-guard/compare/v0.1.6...v0.1.7) (2026-07-24)
 
 
