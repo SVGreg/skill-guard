@@ -119,3 +119,39 @@ rules:
           confidence: 0.8
     rationale: Attempts to extract the system prompt or tool schema, directly or indirectly (AST01).
     fix: Remove instructions that ask the agent to reveal its system prompt, rules, or tool definitions.
+
+  - id: SG-REF-003
+    title: Runtime instruction fetch (external brain)
+    ast: [AST05, AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest, scripts]
+    match:
+      any:
+        # follow/obey <instruction-noun> at/from <external source>. The
+        # instruction-noun + external-source pairing is what separates this from
+        # ordinary "follow the steps below" prose.
+        - regex: '(?i)\b(follow|obey|apply|execute|comply with|adhere to|carry out)\b[^\n]{0,30}\b(instructions?|guidance|guidelines?|rules?|directives?|prompts?|commands?|steps?|playbook|workflow|directions?)\b[^\n]{0,20}\b(at|from|in|found at|located at|hosted at|available at)\b[^\n]{0,20}(https?://|www\.|\bthe (?:link|url|remote|external))'
+          confidence: 0.8
+        # fetch-verb <instruction-noun> from <external source>
+        - regex: '(?i)\b(fetch|download|retrieve|load|pull|read|get|obtain|import|curl|wget)\b[^\n]{0,30}\b(instructions?|guidance|guidelines?|rules?|directives?|prompts?|commands?|playbook|workflow|the latest (?:instructions?|prompt|rules?))\b[^\n]{0,25}\b(at|from|in|via)\b[^\n]{0,20}(https?://|www\.|\bthe (?:link|url|remote|external))'
+          confidence: 0.8
+        # imperative fetch <url> then follow/obey — the two-step form
+        - regex: '(?i)\b(fetch|download|retrieve|load|read|curl|wget|open|visit)\b[^\n]{0,15}(https?://|www\.)[^\s]{0,80}[^\n]{0,25}\b(and |then )+(follow|obey|apply|execute|do what|run|comply)'
+          confidence: 0.8
+        # "before answering/responding, fetch/read ... <url|instructions|prompt>"
+        - regex: '(?i)\bbefore\s+(answering|responding|proceeding|starting|you (?:answer|respond|begin))\b[^\n]{0,50}\b(fetch|download|read|load|retrieve|get|curl|wget|check)\b[^\n]{0,60}(https?://|\binstructions?\b|\bguidance\b|\bprompt\b)'
+          confidence: 0.75
+    suppress:
+      # Fetching *data* to process is not fetching *instructions* — the design's
+      # explicit carve-out (rule-verification §SG-REF-003).
+      - '(?i)\b(fetch|download|load|read|get|retrieve)\b[^\n]{0,20}\b(the )?(csv|json|dataset|data ?file|image|photo|profile|report|spreadsheet|records?|rows?|table)\b'
+    rationale: >-
+      A skill that tells the agent to fetch external content at runtime and follow it as instructions
+      turns any attacker-controlled URL into a live injection channel — the body stays clean while the
+      real directives arrive from outside review (the "external brain" attack, OWASP AST05).
+    fix: >-
+      Do not instruct the agent to fetch and obey external instructions. Keep all directives inside the
+      reviewed bundle; if external data is needed, fetch it as data to process, never as instructions.
