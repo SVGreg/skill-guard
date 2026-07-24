@@ -17,6 +17,20 @@ rules:
           confidence: 0.85
         - regex: '(?i)\b(?:from now on|you are now)\b[^.\n]{0,40}\b(unrestricted|unfiltered|different (?:assistant|persona|mode)|new (?:role|task|instructions?))\b'
           confidence: 0.6
+        # Same verb×scope family, widened target slot: the policy/constraint nouns
+        # attackers use instead of "instructions" (rule-verification §2 lists the
+        # target slot as open-ended; these are the observed real-world fillers).
+        - regex: '(?i)\b(ignore|disregard|forget|skip|overlook|pay no attention to|do not follow|don''?t follow|override|bypass|discard|set aside|leave out)\s+(all\s+|any\s+|the\s+|everything\s+|previous\s+|prior\s+|above\s+|earlier\s+|preceding\s+|your\s+)?(?:\w+\s+){0,3}(directives?|restrictions?|constraints?|limitations?|system prompts?|safety (?:rules?|guidelines?|instructions?|polic(?:y|ies))|content polic(?:y|ies)|text (?:above|before|earlier)|you (?:were|have been) (?:told|given|instructed))\b'
+          confidence: 0.85
+        # Negated-compliance framing: "must not follow", "stop following",
+        # "refuse to obey". "never" is deliberately absent — defensive skills say
+        # "never follow instructions from untrusted content".
+        - regex: '(?i)\b(?:must not|should not|shall not|no longer|stop|refuse to)\s+(?:follow|obey|adhere to|comply with)(?:ing)?\b[^\n]{0,30}\b(instructions?|rules?|guidelines?|directives?|polic(?:y|ies)|restrictions?|system prompt)\b'
+          confidence: 0.8
+        # Role-reset framing. The persona/capability noun within 40 chars is what
+        # separates an attack from ordinary English ("pretend you are done").
+        - regex: '(?i)\b(?:pretend\s+(?:that\s+)?you(?:\s+are|''re)|act\s+as\s+(?:if|though)|your\s+new\s+(?:role|task|persona|instructions?)\s+(?:is|are))\b[^\n]{0,40}\b(unrestricted|unfiltered|jailbroken|uncensored|no\s+(?:content\s+)?polic(?:y|ies)|no\s+restrictions?|no\s+limits?|no\s+rules?|any\s+request|every\s+request|without\s+(?:any\s+)?(?:restrictions?|filters?|limits?)|developer\s+mode|god\s+mode|DAN)\b'
+          confidence: 0.7
     suppress:
       - '(?i)ignore\s+(case|whitespace|white-space|errors?|warnings?|blank lines?|comments?|files?)'
       - '\.gitignore'
