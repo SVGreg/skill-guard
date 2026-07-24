@@ -114,7 +114,26 @@ rules:
           confidence: 0.9
         - regex: '(?i)\bdo\s+anything\s+now\b'
           confidence: 0.8
-    rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy is a jailbreak preamble (AST01).
+        # "unfiltered/uncensored/unrestricted responses|mode|assistant" — the object
+        # noun keeps benign permission phrasing ("unrestricted file access") clear.
+        - regex: '(?i)\b(unfiltered|uncensored|unrestricted|unlimited)\s+(responses?|answers?|replies|output|mode|assistant|version|ai|manner|way|fashion)\b'
+          confidence: 0.8
+        # "respond without any restrictions/filters/censorship" — object list gates
+        # out benign "without any dependencies/warnings".
+        - regex: '(?i)\b(without|free\s+(?:from|of))\s+(any\s+)?(restrictions?|filters?|censorship|safety\s+guidelines?|content\s+polic\w+)\b'
+          confidence: 0.8
+        # explicit "enable/activate jailbreak|god|DAN mode" — mode noun gates out
+        # legitimate "enable developer mode".
+        - regex: '(?i)\b(enable|activate|enter(?:ing)?|turn\s+on|switch\s+to)\s+(?:the\s+)?(jailbreak|god|dan)\s+mode\b'
+          confidence: 0.85
+        # instructing the agent to drop safety disclaimers / ethical framing.
+        - regex: '(?i)\b(without|omit|skip|no\s+need\s+for)\s+(?:any\s+)?(disclaimers?|moral\s+judge?ments?|ethical\s+(?:considerations?|judge?ments?|concerns?)|caveats?)\b'
+          confidence: 0.75
+    suppress:
+      # benign permission/build phrasings that share a keyword but not the intent
+      - '(?i)\bunrestricted\s+(file|network|disk|read|write|access|permissions?)\b'
+      - '(?i)\bwithout\s+(any\s+)?(dependencies|warnings?|errors?|changes?)\b'
+    rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy — or telling it to run "unfiltered"/"jailbreak" mode or drop disclaimers — is a jailbreak preamble (AST01).
     fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
 
   - id: SG-INJ-006
