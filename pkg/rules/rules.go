@@ -96,7 +96,13 @@ type match struct {
 func (r *Rule) Evaluate(target, text string) []model.Finding {
 	matches := r.eval(r.Match, text)
 	var out []model.Finding
-	seen := map[int]bool{} // dedup per line within this rule+target
+	// Dedup per line within this rule+target, keeping the highest-confidence
+	// match (rule-verification.md §1.2). idxByLine maps a line to its slot in
+	// out so a later, stronger signal on the same line replaces a weaker one
+	// that happened to be evaluated first — otherwise the reported confidence
+	// and excerpt would reflect whichever leaf is listed first in the match
+	// tree, not the strongest evidence.
+	idxByLine := map[int]int{}
 	for _, m := range matches {
 		conf := m.confidence
 		if !m.structural {
@@ -115,11 +121,7 @@ func (r *Rule) Evaluate(target, text string) []model.Finding {
 		if r.suppressed(lineText(text, m.start)) {
 			continue
 		}
-		if seen[m.line] {
-			continue
-		}
-		seen[m.line] = true
-		out = append(out, model.Finding{
+		f := model.Finding{
 			RuleID:     r.ID,
 			AST:        r.AST,
 			Severity:   r.Severity,
@@ -131,7 +133,15 @@ func (r *Rule) Evaluate(target, text string) []model.Finding {
 			Rationale:  r.Rationale,
 			Fix:        r.Fix,
 			Confidence: round2(conf),
-		})
+		}
+		if i, ok := idxByLine[m.line]; ok {
+			if f.Confidence > out[i].Confidence {
+				out[i] = f // stronger signal on the same line wins
+			}
+			continue
+		}
+		idxByLine[m.line] = len(out)
+		out = append(out, f)
 	}
 	return out
 }

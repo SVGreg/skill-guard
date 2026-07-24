@@ -228,3 +228,34 @@ func TestRuntimeInstructionFetchCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestPerLineDedupKeepsHighestConfidence guards the rule-verification.md §1.2
+// contract: when several leaves of one rule match on the same line, the emitted
+// finding must carry the *highest* confidence (and its excerpt), not whichever
+// leaf appears first in the match tree. SG-INJ-002 lists the zero-width `Cf`
+// leaf (0.7) before the Unicode-tag leaf (0.9); a line carrying both must report
+// the tag-block signal, not the weaker zero-width one.
+func TestPerLineDedupKeepsHighestConfidence(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-INJ-002" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-INJ-002 not found")
+	}
+	// zero-width space (U+200B, Cf, 0.7) + Unicode tag char (U+E0041, 0.9) on one line.
+	line := "hello​world\U000E0041tag"
+	fs := r.Evaluate("body", line)
+	if len(fs) != 1 {
+		t.Fatalf("expected 1 finding (one line), got %d", len(fs))
+	}
+	// 0.9 base + 0.15 body instruction modifier, clamped to 1.0.
+	if fs[0].Confidence < 1.0 {
+		t.Errorf("per-line dedup kept a weaker signal: confidence=%.2f, want 1.00 (the tag-block leaf)", fs[0].Confidence)
+	}
+}
