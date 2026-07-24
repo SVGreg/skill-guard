@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6](https://github.com/SVGreg/skill-guard/compare/v0.1.5...v0.1.6) (2026-07-24)
+
+
+### Features
+
+* **rules:** add SG-REF-003 — runtime instruction fetch (external brain) (AST05) ([#20](https://github.com/SVGreg/skill-guard/issues/20)) ([5b95072](https://github.com/SVGreg/skill-guard/commit/5b95072cf8ac828ab8a0e8a1536cbfbe83f34172))
+
+
+### Bug Fixes
+
+* **rules:** widen SG-INJ-001 to cover more instruction-override families ([#16](https://github.com/SVGreg/skill-guard/issues/16)) ([c432051](https://github.com/SVGreg/skill-guard/commit/c432051e47911d6a7d5f885673d600923506cafd))
+
 ## [0.1.5](https://github.com/SVGreg/skill-guard/compare/v0.1.4...v0.1.5) (2026-07-23)
 
 
