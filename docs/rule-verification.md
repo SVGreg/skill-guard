@@ -264,10 +264,25 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Fixtures:** TP: real-shaped `AKIA…` + secret. FP: `AKIAIOSFODNN7EXAMPLE`, `sk_test_…`, a `package-lock.json` integrity hash, a UUID constant.
 
 ### SG-SEC-003 — Environment harvesting  (AST03, high)
-- **Signals:** bulk env access — `printenv`, `env` (bare), iterate `os.environ`/`process.env`/`Object.entries(process.env)`, `Get-ChildItem Env:`; elevate when the collection flows to a network sink (taint).
-- **FP carve-outs:** reading a *specific* expected var (`os.environ['HOME']`, `process.env.PORT`) is normal → only **enumeration** or reading secret-named vars counts; single known-benign var → drop.
-- **Confidence:** enumerate+exfil 0.9; enumerate 0.6; single secret var read 0.5.
-- **Fixtures:** TP: `for k,v in os.environ.items(): post(v)`. FP: `port = process.env.PORT || 3000`.
+- **Signals:** dumping/serializing the **whole** environment — bulk `printenv` (bare / piped /
+  redirected / `$(printenv)`), bare `env` dumped or captured (`env >`, `$(env)`, `env |`), reading
+  `/proc/<pid>/environ`, iterating `os.environ` / `Object.entries(process.env)`, and **serialize-for-
+  transport** sinks `json.dumps`/`pickle.dumps(os.environ)` and `JSON.stringify(process.env)`.
+- **FP carve-outs (widened polish, corpus-driven):** the crucial distinction is *harvest/exfil* vs
+  *build-an-env-for-a-subprocess*. Deliberately **NOT** matched: `os.environ.copy()`,
+  `dict(os.environ)`, `{...process.env}`, `Object.keys(process.env)` — these copy/merge/enumerate an
+  env to pass to a child process and appear in legitimate skills (incl. Anthropic's own `docx` /
+  `skill-creator`). Also excluded: single-var reads (`process.env.API_KEY`, `os.environ['X']`,
+  `os.environ.get('X')`), setting a var for a command (`env VAR=val cmd`), and a single-var
+  `printenv PATH` (a previously-shipped FP this polish removes).
+- **Confidence:** printenv/env/os.environ/Object.entries 0.7; json/pickle/JSON.stringify serialize
+  0.75; `/proc/*/environ` 0.8. (In `scripts`/`configs`, no instruction bonus applies; an incidental
+  documentary keyword on the line still drops the hit below threshold — e.g. an `example.com` URL.)
+- **Fixtures:** `TestEnvHarvestCovered` in `pkg/rules/rules_test.go` — 10 TP forms (incl.
+  `$(printenv)`, `env > dump`, `/proc/self/environ`, `json.dumps(dict(os.environ))`,
+  `JSON.stringify(process.env)`) + 8 benign near-misses (the subprocess-env copy/merge idioms and
+  single-var reads). Corpus cross-check: the copy/merge widening was reverted after it flagged
+  benign `os.environ.copy()` across the eval set (289→FP-audit discipline).
 
 ### SG-SEC-004 / SG-SSRF-001 — Cloud metadata & SSRF  (AST03/AST01, high)  [SkillSpector SSRF1–3]
 - **Signals:** metadata endpoints `169.254.169.254`, `metadata.google.internal`, `100.100.100.200` (Alibaba), Azure IMDS `169.254.169.254/metadata`; requests to loopback/link-local/private ranges; **dynamic host** built from untrusted input.
