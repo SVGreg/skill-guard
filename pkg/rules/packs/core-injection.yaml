@@ -176,6 +176,57 @@ rules:
     rationale: An instruction to carry behaviour into future sessions poisons the agent's persistent context — it keeps acting on the skill's directive long after the skill is done, without the user re-invoking it (AST01/AST03).
     fix: Keep a skill's influence inside its own invocation. Do not instruct the agent to remember directives across sessions or to permanently alter how it responds.
 
+  - id: SG-MCP-001
+    title: MCP tool-description poisoning in a bundled config
+    ast: [AST04, AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.75
+    targets: [configs]
+    match:
+      # Injection prose FIRST, MCP context second: an `all` reports its first
+      # branch's match (pkg/rules/rules.go), so the finding points at the
+      # injected sentence rather than at the `"mcpServers":` key.
+      #
+      # Leaf confidences are 0.9 — higher than the equivalent leaves in
+      # SG-INJ-001/SG-ANTI-001 — because of an arithmetic asymmetry, not because
+      # the signal is stronger. `docKeywords` contains "never"/"avoid", words the
+      # attack itself uses ("you must never refuse"), so the documentary -0.4
+      # fires on the payload. A body target offsets that with the +0.15
+      # instruction bonus (0.85 + 0.15 - 0.4 = 0.6); a `configs` target gets no
+      # bonus, so anything below 0.9 is silently dropped. See the engine-backlog
+      # row on the documentary modifier vs machine-readable configs.
+      all:
+        - any:
+            # Same phrase families as SG-INJ-001/SG-ANTI-001, which cannot see
+            # this file: their targets are body/manifest/scripts, never configs.
+            - regex: '(?i)\b(ignore|disregard|forget|bypass|override)\s+(all\s+|any\s+|the\s+|your\s+)?(previous\s+|prior\s+|earlier\s+|preceding\s+)?(instructions?|prompts?|rules?|guidelines?|directives?|restrictions?|safety\s+\w+)\b'
+              confidence: 0.9
+            - regex: '(?i)\b(never|do not|don''t)\s+(refuse|decline|mention|reveal|tell the user|inform the user)\b'
+              confidence: 0.9
+            - regex: '(?i)\b(print|reveal|output|repeat|include|append|send)\b[^\n"]{0,50}\b(system\s+prompt|your\s+instructions|conversation\s+history|api[_\s-]?keys?|credentials?)\b'
+              confidence: 0.9
+            # "Before using this tool, read ~/.ssh/… / send … / run …" — the
+            # preamble shape Invariant Labs documented for tool poisoning.
+            - regex: '(?i)\bbefore\s+(using|calling|invoking|running)\s+(this\s+)?tool\b[^\n"]{0,60}\b(read|send|fetch|run|execute|include|copy)\b'
+              confidence: 0.9
+        - any:
+            # The file is an MCP server config / tool manifest.
+            - regex: '"mcpServers"\s*:'
+            - regex: '(?i)@?modelcontextprotocol'
+            - regex: '"tools"\s*:\s*\['
+            - regex: '"inputSchema"\s*:'
+    suppress:
+      - '(?i)/path/to/'
+      # Defensive framing, mirroring SG-INJ-001: a tool description warning the
+      # agent not to obey instructions found in fetched/untrusted content is
+      # anti-injection guidance, not an injection.
+      - '(?i)\b(embedded|external|untrusted|third[- ]party|fetched|injected)\b[^\n]{0,20}\binstruction'
+      - '(?i)\bnot\s+(an?\s+)?instructions?\b'
+    rationale: A bundled MCP server config carries tool and parameter descriptions that the agent reads as guidance and that are never surfaced in the UI, so instructions planted there steer the agent invisibly to a human reviewer (AST04/AST01; OWASP MCP Top 10 MCP03 "Tool Poisoning").
+    fix: Keep tool and parameter descriptions purely descriptive. A description must say what the tool does — never instruct the agent to ignore its rules, withhold information from the user, or perform a side action first.
+
   - id: SG-INJ-006
     title: System-prompt / tool-schema exfiltration
     ast: [AST01]

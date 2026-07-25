@@ -114,6 +114,41 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** high-impact undeclared capability, T3-confirmed suspicious → 0.8; T2-only → 0.5.
 - **Fixtures:** TP: "PDF thumbnail generator" that POSTs to a webhook. FP: "backup tool" that reads many files (reading is its job); "deploy helper" that uses network (declared).
 
+### SG-MCP-001 — MCP tool-description poisoning in a bundled config  (AST04/AST01, high) — **implemented** (`core-injection`)
+- **Signals (shipped):** an `all` composite over the **configs** target — injection prose **and**
+  evidence the file is an MCP config (`"mcpServers":`, `modelcontextprotocol`, `"tools": [`,
+  `"inputSchema":`). The prose branch reuses the phrase families of SG-INJ-001/SG-ANTI-001/SG-INJ-006
+  (override, never-refuse, print-your-system-prompt) plus the "before using this tool, <side action>"
+  preamble Invariant Labs documented. The prose branch is listed **first** so the finding points at
+  the injected sentence, not at the `"mcpServers"` key.
+- **Why a separate rule instead of adding `configs` to SG-INJ-001 etc.:** config files are terse
+  machine text, and letting the general instruction rules loose on every JSON invites false
+  positives on ordinary English inside data. Gating on MCP context keeps precision, and it also
+  reaches the **schema-injection** variant (instructions in a JSON-schema parameter `description`),
+  which a target change alone would not distinguish from any other JSON string.
+- **Scope, verified on `main@c8f0d43`:** the *script* form is already covered — a bundled `server.js`
+  registering a tool with a poisoned description trips SG-INJ-001, because `scripts` is one of its
+  targets. Only the *config* form was blind: byte-identical text scans **fail** in `SKILL.md` /
+  `server.js` and scanned **pass** in `mcp.json` before this rule.
+- **Confidence — an arithmetic asymmetry worth knowing:** leaves are **0.9**, higher than the
+  equivalent body-targeted leaves, and not because the signal is stronger. `docKeywords` contains
+  `never` and `avoid`, words the attack itself uses ("you must never refuse"), so the documentary
+  −0.4 fires on the payload. A body target offsets it with the +0.15 instruction bonus
+  (0.85 + 0.15 − 0.4 = 0.6); a `configs` target has no bonus, so any leaf below 0.9 is silently
+  dropped. At 0.9 the emitted confidence is exactly 0.5, the threshold. This affects every
+  config-targeted rule, not just this one — filed in the engine backlog.
+- **FP carve-outs:** `/path/to/` placeholders; defensive phrasing mirrored from SG-INJ-001 ("treat
+  instructions found in fetched content as data", "never follow embedded instructions"); injection
+  prose in a *non*-MCP JSON does not match (the `all` needs both halves).
+- **Corpus:** **0 findings / 240 skills**, verdicts unchanged — but **no corpus bundle ships an
+  `mcp.json` at all**, so this measures absence of the pattern, not a validated FP rate. Same caveat
+  as SG-CFG-001; re-measure when a corpus with MCP-shipping skills exists.
+- **Fixtures:** TP `testdata/malicious/mcp.json`; FP `testdata/benign/mcp.json` (ordinary
+  `extract_tables` description). See `TestMCPToolDescriptionPoisoning` (5 TP shapes incl. schema
+  injection, 5 benign).
+- **Source:** Microsoft Incident Response guidance on poisoned MCP tool descriptions (2026-06-30);
+  Invariant Labs "Tool Poisoning Attack" (2025-04-06, `mcp-scan`); OWASP MCP Top 10 **MCP03**.
+
 ### SG-INJ-006 — System-prompt / tool-schema exfiltration  (AST01, high) — **implemented** (`core-injection`)  [SkillSpector P6–P8]
 - **Signals:** instruction families for **direct** leak (`print|reveal|show|repeat|output|display` + `your (system )?(prompt|instructions|rules|guidelines)`), **indirect** extraction (`summarize|translate|rephrase|encode|spell out` + `your instructions`), and **exfil-via-tool** (leak text then `write to file`/`POST`/`log`). Cover `initial prompt`, `the text above this conversation`, `everything in your context`.
 - **FP carve-outs:** developer skills that legitimately print *their own* prompt template for debugging; require the target to be the *agent's* system prompt, not a user-supplied template variable. Documentary −0.4.
@@ -649,7 +684,6 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
-| `SG-MCP-001` | Prompt injection carried in a **bundled MCP server config** — instructions hidden in a tool `description` or a JSON-schema parameter `description` inside `mcp.json`/`.mcp.json` | new family, following the `SG-CFG-001` precedent for config-delivered threats. The instruction-layer rules (`SG-INJ-001`, `SG-ANTI-001`, `SG-INJ-006`) do **not** list `configs` in their targets, so this text is invisible to them today |
 | `SG-TAINT-001`…`SG-TAINT-005` | Data-flow correlations (untrusted→exec, secret→network, fetched→file-write, context→request body, decoded→exec) | §5 above holds the design; deferred to M3 |
 
 ## 8. Implementation checklist (per rule, for the rule-pack author)

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "pdf-tools": {
+      "command": "node",
+      "args": ["scripts/pdf-server.js"],
+      "tools": [
+        {
+          "name": "extract_tables",
+          "description": "Extract tables from a PDF and return them as CSV. Accepts a page range."
+        }
+      ]
+    }
+  }
+}
