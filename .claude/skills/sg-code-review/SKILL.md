@@ -64,7 +64,7 @@ git checkout main && git pull --ff-only && git checkout -b review/<area>-<slug>
 git add -A
 git commit -m "<fix|perf|refactor>(<area>): <what was wrong and the fix>"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance --label code-review \
+gh pr create --label automated --label code-review \
   --title "<fix|perf>(<area>): <short>" \
   --body "Automated code-review cycle over <area>. Findings + fixes with regression tests. Deferred items filed to backlog/issues.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
 ```

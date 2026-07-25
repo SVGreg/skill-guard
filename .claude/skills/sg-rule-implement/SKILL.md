@@ -74,7 +74,7 @@ git add pkg/rules/ testdata/ docs/
 git commit -m "feat(rules): add <SG-ID> — <threat> (AST0X)"
 git push -u origin HEAD
 # type label: rule-implement (+ research when the backlog row was filed by sg-threat-research)
-gh pr create --label automated --label maintenance --label rule-implement$( [ -n "$ISSUE" ] && echo " --label research" ) \
+gh pr create --label automated --label rule-implement$( [ -n "$ISSUE" ] && echo " --label research" ) \
   --title "feat(rules): <SG-ID> — <threat>" \
   --body "Implements backlog entry <SG-ID> (AST0X). New pack rule + tests + docs; evaluation cross-checked, no regressions.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
 ```

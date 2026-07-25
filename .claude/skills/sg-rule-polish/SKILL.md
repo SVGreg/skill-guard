@@ -105,7 +105,7 @@ git checkout main && git pull --ff-only && git checkout -b polish/<rule-id>-<slu
 git add pkg/rules/ testdata/ docs/rule-verification.md
 git commit -m "fix(rules): widen <RULE-ID> to cover <what>"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance --label rule-polish \
+gh pr create --label automated --label rule-polish \
   --title "fix(rules): polish <RULE-ID> — <short>" \
   --body "Automated rule-polish cycle. New real-world cases + match widening for <RULE-ID>; no lost true positives (cross-verified). Bot-generated; needs review."
 ```

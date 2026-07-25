@@ -50,8 +50,8 @@ enforces them.
      A planned-rule *tracking* issue stays open only until its rule ships; `sg-rule-implement` /
      `sg-issue-implement` must close it. If an issue can't be auto-closed that way, close it
      explicitly: `gh issue close <n> --reason completed --comment "Implemented in #<pr>."`
-4a. **Informative PR labels.** Every automated PR carries `automated` + `maintenance` **plus a type
-    label** that says what it is / where it came from — exactly one of:
+4a. **Informative PR labels.** Every automated PR carries `automated` **plus a type label** that
+    says what it is / where it came from — exactly one of:
     - `rule-implement` — a new detection shipped by `sg-rule-implement` / `sg-issue-implement`
     - `rule-polish` — coverage widening by `sg-rule-polish`
     - `research` — a backlog/threat entry from `sg-threat-research`
@@ -60,8 +60,8 @@ enforces them.
 
     When a `rule-implement` PR ships a rule that was **originally filed by `sg-threat-research`**,
     add `research` as a **second** type label so the source is visible (e.g.
-    `--label automated --label maintenance --label rule-implement --label research`). Create any
-    missing label once with `gh label create <name> -c <hex> -d "<desc>" --force`.
+    `--label automated --label rule-implement --label research`). Create any missing label once with
+    `gh label create <name> -c <hex> -d "<desc>" --force`.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.

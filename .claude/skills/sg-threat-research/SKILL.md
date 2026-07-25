@@ -59,7 +59,7 @@ For each genuinely-new, uncovered threat:
    roadmap / `P2` nice-to-have), status `planned`, and the source URL.
 2. **Create a GitHub issue** (fully autonomous):
    ```sh
-   gh issue create --label maintenance --label threat-research \
+   gh issue create --label threat-research \
      --title "New rule: <SG-ID> — <threat>" \
      --body "$(cat <<'EOF'
    ## Threat
@@ -94,7 +94,7 @@ git checkout main && git pull --ff-only && git checkout -b research/<slug>
 git add docs/planned-rules.md
 git commit -m "docs(backlog): add <SG-ID> — <threat> from research"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance --label research \
+gh pr create --label automated --label research \
   --title "docs(backlog): <SG-ID> — <threat>" \
   --body "Automated threat-research cycle. New backlog entry + tracking issue #<n>. Source: <url>. Bot-generated; needs review."
 ```

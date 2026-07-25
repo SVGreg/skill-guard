@@ -54,7 +54,7 @@ git add -A
 git commit -m "<type>(<scope>): <what> (closes #<n>)"
 git push -u origin HEAD
 # rule-implement type label (+ research when issue #<n> came from sg-threat-research)
-gh pr create --label automated --label maintenance --label rule-implement \
+gh pr create --label automated --label rule-implement \
   --title "<type>(<scope>): <short> (#<n>)" \
   --body "Implements #<n> (owner-greenlit via Implement command). <summary of change + tests>. Closes #<n>. Bot-generated; needs review."
 ```
