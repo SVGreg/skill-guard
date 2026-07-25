@@ -649,6 +649,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
+| `SG-MCP-001` | Prompt injection carried in a **bundled MCP server config** — instructions hidden in a tool `description` or a JSON-schema parameter `description` inside `mcp.json`/`.mcp.json` | new family, following the `SG-CFG-001` precedent for config-delivered threats. The instruction-layer rules (`SG-INJ-001`, `SG-ANTI-001`, `SG-INJ-006`) do **not** list `configs` in their targets, so this text is invisible to them today |
 | `SG-TAINT-001`…`SG-TAINT-005` | Data-flow correlations (untrusted→exec, secret→network, fetched→file-write, context→request body, decoded→exec) | §5 above holds the design; deferred to M3 |
 
 ## 8. Implementation checklist (per rule, for the rule-pack author)
