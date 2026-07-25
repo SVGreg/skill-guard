@@ -144,11 +144,22 @@ func tier(score int) string {
 	}
 }
 
+// dedupKey identifies a finding by its (file, line, rule) triple. It is a struct
+// rather than a concatenated string because both File (a bundle path) and RuleID
+// (an external rulepack may pick any id) can legally contain the delimiter — a
+// filename like "x|1" would otherwise collide with a distinct triple and silently
+// drop one of the two findings.
+type dedupKey struct {
+	file string
+	line int
+	rule string
+}
+
 func dedup(findings []model.Finding) []model.Finding {
-	best := map[string]model.Finding{}
-	var order []string
+	best := map[dedupKey]model.Finding{}
+	var order []dedupKey
 	for _, f := range findings {
-		key := f.File + "|" + itoa(f.StartLine) + "|" + f.RuleID
+		key := dedupKey{f.File, f.StartLine, f.RuleID}
 		if ex, ok := best[key]; !ok || f.Confidence > ex.Confidence {
 			if !ok {
 				order = append(order, key)
@@ -173,26 +184,4 @@ func sortFindings(fs []model.Finding) {
 		}
 		return fs[i].StartLine < fs[j].StartLine
 	})
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }

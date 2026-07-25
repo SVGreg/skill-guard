@@ -69,3 +69,36 @@ func TestSkillMDLineNumbersAreFileAbsolute(t *testing.T) {
 		t.Errorf("SG-INJ-006 (body) reported at line %d, want file line 12", got)
 	}
 }
+
+// TestDedupKeepsHighestConfidencePerTriple guards the documented dedup contract:
+// one finding per (file, line, rule), keeping the highest-confidence hit.
+func TestDedupKeepsHighestConfidencePerTriple(t *testing.T) {
+	in := []model.Finding{
+		{RuleID: "SG-NET-001", File: "SKILL.md", StartLine: 5, Confidence: 0.6},
+		{RuleID: "SG-NET-001", File: "SKILL.md", StartLine: 5, Confidence: 0.9}, // same triple, stronger
+		{RuleID: "SG-NET-001", File: "SKILL.md", StartLine: 6, Confidence: 0.5}, // different line
+	}
+	out := dedup(in)
+	if len(out) != 2 {
+		t.Fatalf("dedup: got %d findings, want 2", len(out))
+	}
+	for _, f := range out {
+		if f.StartLine == 5 && f.Confidence != 0.9 {
+			t.Errorf("dedup kept confidence %v for line 5, want the stronger 0.9", f.Confidence)
+		}
+	}
+}
+
+// TestDedupDistinguishesDelimiterInKey pins the fix for the ambiguous string key:
+// `|` is legal in a bundle filename and in an external rulepack's rule id, so two
+// *distinct* (file, line, rule) triples used to collide under `file|line|rule`
+// concatenation and drop one finding. With a struct key they stay distinct.
+func TestDedupDistinguishesDelimiterInKey(t *testing.T) {
+	// Under the old key both produce the string "x|1|1|1".
+	a := model.Finding{RuleID: "1|1", File: "x", StartLine: 1, Confidence: 0.9}
+	b := model.Finding{RuleID: "1", File: "x|1", StartLine: 1, Confidence: 0.9}
+	out := dedup([]model.Finding{a, b})
+	if len(out) != 2 {
+		t.Fatalf("dedup collapsed two distinct findings into %d — ambiguous key regression", len(out))
+	}
+}
