@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.8](https://github.com/SVGreg/skill-guard/compare/v0.1.7...v0.1.8) (2026-07-25)
+
+
+### Features
+
+* **rules:** add SG-DEP-007 — remote-package auto-execution via a runner (AST02) ([#33](https://github.com/SVGreg/skill-guard/issues/33)) ([6edd78b](https://github.com/SVGreg/skill-guard/commit/6edd78b86c55c1aea31c8a058e3752a5a191adf8))
+
+
+### Bug Fixes
+
+* **policy:** fail closed when a waiver's expiry date is malformed ([#38](https://github.com/SVGreg/skill-guard/issues/38)) ([62876e1](https://github.com/SVGreg/skill-guard/commit/62876e1aa38096fc6b7e8d33a88f3436fedd5981))
+* **rules:** polish SG-SEC-001 — more credential files + exfil verbs ([#27](https://github.com/SVGreg/skill-guard/issues/27)) ([1125da4](https://github.com/SVGreg/skill-guard/commit/1125da45a47978f70772c973937414d8f7f8e428))
+* **rules:** widen SG-ANTI-001 to cover more jailbreak framings ([#39](https://github.com/SVGreg/skill-guard/issues/39)) ([181791f](https://github.com/SVGreg/skill-guard/commit/181791f6a68e0e1786af9d57e421815413eb5619))
+* **rules:** widen SG-SEC-003 to real env-harvest variants; fix printenv FP ([#35](https://github.com/SVGreg/skill-guard/issues/35)) ([756d6be](https://github.com/SVGreg/skill-guard/commit/756d6be3caae0cf9e2cfbf238253eab37b93ee2e))
+* **scan:** use a struct dedup key so '|' in a path or rule id can't collide ([#34](https://github.com/SVGreg/skill-guard/issues/34)) ([8773613](https://github.com/SVGreg/skill-guard/commit/87736130460254e7dfbbe3aa6f750ad02b8e46ab))
+
 ## [0.1.7](https://github.com/SVGreg/skill-guard/compare/v0.1.6...v0.1.7) (2026-07-24)
 
 
