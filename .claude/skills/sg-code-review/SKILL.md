@@ -60,14 +60,16 @@ Defer the rest: append larger items to `docs/planned-rules.md` (or open a GitHub
 ## 5. Open the PR
 
 ```sh
-git checkout -b review/<area>-<slug>
+git checkout main && git pull --ff-only && git checkout -b review/<area>-<slug>
 git add -A
 git commit -m "<fix|perf|refactor>(<area>): <what was wrong and the fix>"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance \
+gh pr create --label automated --label maintenance --label code-review \
   --title "<fix|perf>(<area>): <short>" \
-  --body "Automated code-review cycle over <area>. Findings + fixes with regression tests. Deferred items filed to backlog/issues. Bot-generated; needs review."
+  --body "Automated code-review cycle over <area>. Findings + fixes with regression tests. Deferred items filed to backlog/issues.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
 ```
+
+If the fix resolves an open issue, add `Closes #<n>` to the body so it auto-closes on merge.
 
 Update `state.json` → advance `review_area_cursor` (wrap mod 8). Report the PR link and list any
 deferred findings.

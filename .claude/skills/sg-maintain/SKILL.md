@@ -32,9 +32,10 @@ enforces them.
    boost" in §2), a single cycle may run **`sg-rule-implement` twice**, opening two separate rule PRs.
    If an activity finds more work than fits its PR(s), file the remainder to `docs/planned-rules.md`
    or a GitHub issue.
-4. **Code changes → owner-reviewed PR; non-code changes → merge right away.** Always branch, commit
-   with conventional-commit messages, push, and open a PR labeled `automated` + `maintenance` noting
+4. **Code changes → owner-reviewed PR; non-code changes → merge right away.** Always branch (off
+   fresh `main`, guardrail 7), commit with conventional-commit messages, push, and open a PR noting
    bot authorship. Then:
+   - **Label every PR informatively** (guardrail 4a below).
    - A **code PR** — anything touching `pkg/`, `cmd/`, `testdata/`, a rule pack
      (`pkg/rules/packs/*.yaml`), or a signed skill under `.claude/skills/` — is **left for the owner
      to review and merge**. Never self-merge a code PR.
@@ -43,11 +44,45 @@ enforces them.
      once CI is green (`gh pr merge --squash`). This is the normal ending for `sg-threat-research`
      and `sg-issue-triage` backlog PRs, so planned-rule research and triage land without waiting.
    - Triage comments and issue filings are not PRs and post directly, as before.
+   - **Close the issue a PR implements.** When the work resolves a GitHub issue — a rule filed by
+     `sg-threat-research`, an owner-`Implement` request, a `sg-code-review`/triage finding — put
+     `Closes #<n>` in the **PR body** so the merge (including `gh pr merge --squash`) auto-closes it.
+     A planned-rule *tracking* issue stays open only until its rule ships; `sg-rule-implement` /
+     `sg-issue-implement` must close it. If an issue can't be auto-closed that way, close it
+     explicitly: `gh issue close <n> --reason completed --comment "Implemented in #<pr>."`
+4a. **Informative PR labels.** Every automated PR carries `automated` + `maintenance` **plus a type
+    label** that says what it is / where it came from — exactly one of:
+    - `rule-implement` — a new detection shipped by `sg-rule-implement` / `sg-issue-implement`
+    - `rule-polish` — coverage widening by `sg-rule-polish`
+    - `research` — a backlog/threat entry from `sg-threat-research`
+    - `code-review` — a fix from `sg-code-review`
+    - `triage` — a backlog PR from `sg-issue-triage`
+
+    When a `rule-implement` PR ships a rule that was **originally filed by `sg-threat-research`**,
+    add `research` as a **second** type label so the source is visible (e.g.
+    `--label automated --label maintenance --label rule-implement --label research`). Create any
+    missing label once with `gh label create <name> -c <hex> -d "<desc>" --force`.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.
 6. **Idempotency.** Before creating a branch/PR/issue/comment, check whether an equivalent one
    already exists and continue it instead of duplicating.
+7. **Start every cycle from fresh `main`.** Before any selection or branch, sync the local default
+   branch from the remote — `git checkout main && git pull --ff-only` — and branch off *that*
+   (`git checkout main && git pull --ff-only && git checkout -b <branch>`). A stale local `main` is
+   the primary cause of merge conflicts between the loop's PRs; pulling first is the fix. Every
+   activity skill's branch step assumes this.
+
+## 0. Sync `main` first
+
+Before loading state or selecting an activity, update the local default branch from the remote so
+all work branches off the latest `main` (guardrail 7):
+
+```sh
+git checkout main && git pull --ff-only
+```
+
+If the pull is not a clean fast-forward, note it in the log and resolve before branching.
 
 ## 1. Load state
 

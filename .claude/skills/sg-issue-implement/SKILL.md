@@ -49,14 +49,18 @@ steps. If it's docs/tooling, scope it accordingly. If the ask is genuinely ambig
 ## 4. Open the PR and link back
 
 ```sh
-git checkout -b issue/<n>-<slug>
+git checkout main && git pull --ff-only && git checkout -b issue/<n>-<slug>
 git add -A
 git commit -m "<type>(<scope>): <what> (closes #<n>)"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance \
+# rule-implement type label (+ research when issue #<n> came from sg-threat-research)
+gh pr create --label automated --label maintenance --label rule-implement \
   --title "<type>(<scope>): <short> (#<n>)" \
   --body "Implements #<n> (owner-greenlit via Implement command). <summary of change + tests>. Closes #<n>. Bot-generated; needs review."
 ```
+
+The `Closes #<n>` in the body is **mandatory** — it auto-closes issue #<n> when the PR merges. If the
+issue was filed by `sg-threat-research`, also pass `--label research` so the source is visible.
 
 Then comment on the issue so the trail is clear:
 
