@@ -390,7 +390,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST | Covered by skill-guard `scan`? | Notes |
 |---|---|---|
 | AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns |
-| AST02 Supply Chain | Partial via `sign`/`verify` | provenance/attestation, not the static packs |
+| AST02 Supply Chain | Partial — provenance + one static rule | `sign`/`verify` attestation, plus `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) in the `core-supply` pack; the rest of the SG-DEP family remains planned |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
 | AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest |
 | AST05 Untrusted External Instr. | Partial | `SG-REF-003` (runtime instruction fetch / "external brain") implemented; the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
@@ -400,6 +400,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST09 No Governance | No | organisational; out of a single-bundle scan's scope |
 | AST10 Cross-Platform Reuse | No | multi-registry/platform; out of scope |
 
-A clean `scan` therefore speaks mainly to AST01/AST03/AST04. It is **not** a
-statement about AST02/06/07/09/10, which require provenance, runtime, or
-organisational controls a static scan cannot observe.
+A clean `scan` therefore speaks mainly to AST01/AST03/AST04 (plus the narrow
+AST02 slice `SG-DEP-007` observes — remote-package auto-execution). It is **not** a
+full statement about AST02/06/07/09/10, which otherwise require provenance,
+runtime, or organisational controls a static scan cannot observe.

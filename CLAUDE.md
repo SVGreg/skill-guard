@@ -72,8 +72,8 @@ substring, unicode-category, bidi-control, tag-block, url-host). The regex engin
 load at runtime via `--rulepack` (repeatable).
 
 Packs map to OWASP IDs: `core-injection`, `core-network`, `core-exec`, `core-secret`,
-`core-metadata`. Every finding carries `ast` ids resolved through an `ast_references` map so
-tooling never hard-codes the taxonomy.
+`core-metadata`, `core-supply` (AST02 supply-chain). Every finding carries `ast` ids resolved
+through an `ast_references` map so tooling never hard-codes the taxonomy.
 
 ### Confidence, context modifiers, verdict, risk
 

@@ -19,6 +19,7 @@ Ignore blank lines and comment rows when parsing.
 ## Notes
 
 - Prefer parameterized parsing over string concatenation.
+- Type-check the helper with `npx tsc --noEmit` (a pinned local dev tool).
 - See the docs at https://example.com/pdf-guide for column heuristics.
 - Layout reference: ![column diagram](./docs/columns.png) and the
   [parser guide](https://example.com/pdf-guide?section=columns).
