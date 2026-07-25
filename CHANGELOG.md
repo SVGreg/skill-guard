@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.9](https://github.com/SVGreg/skill-guard/compare/v0.1.8...v0.1.9) (2026-07-25)
+
+
+### Features
+
+* **rules:** add SG-CFG-001 — bundled agent-hook config auto-execution (AST02/AST01) ([#52](https://github.com/SVGreg/skill-guard/issues/52)) ([9148bbb](https://github.com/SVGreg/skill-guard/commit/9148bbb267bc028ad44837acaa4024d71876cbff))
+* **rules:** add SG-DEP-001 — unpinned/floating dependency (AST02/AST07) ([#43](https://github.com/SVGreg/skill-guard/issues/43)) ([f532100](https://github.com/SVGreg/skill-guard/commit/f532100c5da7e66d84ad548e4557747eb19a22b5))
+* **rules:** add SG-MEM-001 — persistent context / memory poisoning (AST01/AST03) ([#53](https://github.com/SVGreg/skill-guard/issues/53)) ([bdf30de](https://github.com/SVGreg/skill-guard/commit/bdf30deb13a4944b9ae80a5bdbf41e5a2ccf9dc0))
+
+
+### Bug Fixes
+
+* **attest:** force mode 0600 on private keys and bind the DSSE payload type ([#46](https://github.com/SVGreg/skill-guard/issues/46)) ([a96f7d0](https://github.com/SVGreg/skill-guard/commit/a96f7d002a477df1b7d6631b49098076eb10d5b4))
+* **rules:** widen SG-AS-001 to real agent-config read idioms ([#51](https://github.com/SVGreg/skill-guard/issues/51)) ([54ac099](https://github.com/SVGreg/skill-guard/commit/54ac0991a54fdff28f2f4fc793b9bcc1ce5eb35c))
+
 ## [0.1.8](https://github.com/SVGreg/skill-guard/compare/v0.1.7...v0.1.8) (2026-07-25)
 
 
