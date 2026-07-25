@@ -36,7 +36,7 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 | SG-TAINT-003 | AST01 | Data-flow: fetched content reaches a file-write sink. | P2 | planned | design §5 |
 | SG-TAINT-004 | AST01 | Data-flow: user/agent context reaches an outbound request body. | P2 | planned | design §5 |
 | SG-TAINT-005 | AST01 | Data-flow: decoded/deobfuscated blob reaches an exec sink. | P1 | planned | design §5 |
-| SG-MEM-001 | AST01/AST03 | Instructs the agent to persist instructions into long-term memory across sessions. | P1 | planned | design §5 memory family |
+| SG-MEM-001 | AST01/AST03 | Instructs the agent to persist instructions into long-term memory across sessions. | P1 | implemented | Shipped in `core-injection.yaml` — the **instruction-only** form (SG-INJ-004 keeps the write form). Five leaves; deliberately NOT keyed on a bare "from now on" (that is jailbreak framing, already covered by SG-INJ-001/SG-ANTI-001). Corpus 0/240, no verdict change. `rule-verification.md §SG-MEM-001`, `TestMemoryPoisoningCoversCrossSessionDirectives`. |
 | SG-MEM-002 | AST01/AST03 | Instructs the agent to silently re-load persisted state that alters future behavior. | P2 | planned | design §5 |
 | SG-STEER-001 | AST01 | Steering/priming that reshapes the agent persona toward compliance without an override verb. | P2 | planned | design §5 |
 | SG-NET-003 | AST01/AST06 | Connects to a raw IP literal (bypasses host allowlist / DNS review). | P1 | planned | design §5 network |
