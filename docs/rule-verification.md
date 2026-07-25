@@ -394,11 +394,24 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** read `mcp.json`/other skills 0.8; read own config dir 0.4.
 - **Fixtures:** TP: `cat ~/.claude/mcp.json`. FP: skill reading its own `./assets/`.
 
-### SG-DEP-001 — Unpinned dependencies  (AST02/AST07, medium)
-- **Signals (T0):** `requirements.txt` entries without `==`/hash; `package.json` ranges (`^`, `~`, `*`, `latest`); `pyproject` loose specifiers; unpinned GitHub `@main`.
-- **FP carve-outs:** dev-only deps; ranges are common practice → medium not high; presence of a lockfile with hashes downgrades (the lock pins effectively).
-- **Confidence:** `latest`/`*` 0.7; caret range 0.4 (info-ish); lockfile present −.
-- **Fixtures:** TP: `requests>=0` / `"lodash":"*"`. FP: `requests==2.31.0`, ranges + committed lockfile.
+### SG-DEP-001 — Unpinned dependencies  (AST02/AST07, medium) — **implemented** (`core-supply`)
+- **Signals (shipped):** only **explicit floating** specs, which are the high-signal, low-FP subset —
+  `"pkg": "*"` / `"latest"` in a JSON manifest; `pkg@latest` (npm/go/pip install); a VCS dep on a
+  **moving branch** (`git+…@main`, `github.com/o/r@master`); a `:latest` container tag. Medium
+  severity (warn) — a floating spec is common practice, so it surfaces the update-drift/supply-chain
+  risk for review rather than hard-failing.
+- **FP carve-outs (corpus-driven — the important part):** caret/tilde ranges (`^1.0`, `~1.2`) are
+  **intentionally not flagged** (too common, ~info-level). The initial draft also matched `"x"`
+  (any-version shorthand) and a `>=0` unbounded bound — the corpus scan **exploded to 63 findings**
+  because `"x"` matches any bare JSON string literal (`{"task":"x"}`) and `>=0` matches numeric
+  comparisons in code (`if (idx >= 0)`, `assert.ok(line >= 0)`). Both were removed; a same-line exact
+  pin (`==`, `@sha256:`, git SHA) is suppressed. Re-measured: **5 findings across 4 skills, all
+  genuine `@latest` install specs** (ClawHub install metadata, `go install …@latest`,
+  `npx create-video@latest`) — no FPs.
+- **Confidence:** `*`/`latest`/`@latest`/`@main` 0.7; `:latest` container tag 0.6.
+- **Fixtures:** `TestUnpinnedDependencyCovered` in `pkg/rules/rules_test.go` — 6 TP forms + 8 benign
+  (caret/tilde ranges, exact pins, `"x"` literal, `idx >= 0` comparisons, digest-pinned image).
+  Requirements-style `>=` bounds are deferred until targeting can be made file-type-aware.
 
 ### SG-DEP-002 — Typosquat / dependency confusion  (AST02, medium)  [SkillSpector SC6]
 - **Signals:** Levenshtein/keyboard-distance ≤ 2 to a top-N popular package with different author; internal-looking scoped names resolvable from public registry (confusion).

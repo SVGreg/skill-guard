@@ -390,12 +390,12 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST | Covered by skill-guard `scan`? | Notes |
 |---|---|---|
 | AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns |
-| AST02 Supply Chain | Partial — provenance + one static rule | `sign`/`verify` attestation, plus `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) in the `core-supply` pack; the rest of the SG-DEP family remains planned |
+| AST02 Supply Chain | Partial — provenance + static rules | `sign`/`verify` attestation, plus the `core-supply` pack: `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) and `SG-DEP-001` (unpinned/floating dependency specs — `*`/`latest`/`@latest`/`@main`/`:latest`); the rest of the SG-DEP family remains planned |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
 | AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest |
 | AST05 Untrusted External Instr. | Partial | `SG-REF-003` (runtime instruction fetch / "external brain") implemented; the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
 | AST06 Weak Isolation | Weak/partial | only visible signals (bind-all listeners); the sandbox itself is a runtime property |
-| AST07 Update Drift | No (runtime/registry) | addressed by pinning + `verify` re-scan, not static content |
+| AST07 Update Drift | Weak/partial (static signal) | mostly runtime/registry, but `SG-DEP-001` flags floating specs (`latest`/`@main`) that invite silent drift; otherwise addressed by pinning + `verify` re-scan |
 | AST08 Poor Scanning | Partial | embedded-secret detection; skill-guard is itself an AST08 mitigation |
 | AST09 No Governance | No | organisational; out of a single-bundle scan's scope |
 | AST10 Cross-Platform Reuse | No | multi-registry/platform; out of scope |

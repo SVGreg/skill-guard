@@ -459,3 +459,50 @@ func TestRemotePackageRunnerCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestUnpinnedDependencyCovered checks SG-DEP-001 against explicit floating
+// dependency specs (AST02/AST07) — "*"/"latest", pkg@latest, git @main, :latest,
+// >=0 — while leaving the (very common, intentionally-unflagged) caret/tilde
+// ranges and exact pins clean.
+func TestUnpinnedDependencyCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-DEP-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-DEP-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// explicit floating specs that must be caught
+		{`"lodash": "*"`, true},
+		{`"left-pad": "latest"`, true},
+		{"npm install some-tool@latest", true},
+		{`"dep": "github.com/evil/pkg@main"`, true},
+		{"pip install git+https://github.com/x/y@master", true},
+		{"FROM node:latest", true},
+		// benign near-misses that must NOT match
+		{`"lodash": "^4.17.21"`, false}, // caret range — intentionally not flagged
+		{`"dep": "~1.2.0"`, false},      // tilde range — intentionally not flagged
+		{`"react": "18.2.0"`, false},    // exact pin
+		{"requests==2.31.0", false},     // exact pin
+		{"FROM node:20.11.0-alpine", false},
+		{"image@sha256:abc123 # digest-pinned", false},
+		{`{"task": "x"}`, false},         // bare "x" literal — not a version spec
+		{"if (idx >= 0) return;", false}, // numeric comparison, not a >=0 dep spec
+		{"assert.ok(line >= 0)", false},  // idem
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("configs", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
