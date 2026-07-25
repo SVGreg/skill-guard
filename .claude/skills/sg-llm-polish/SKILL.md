@@ -40,7 +40,7 @@ starts strong:
    git add docs/planned-rules.md
    git commit -m "docs(backlog): add SG-LLM prompt-design notes"
    git push -u origin HEAD
-   gh pr create --label automated --label maintenance \
+   gh pr create --label automated --label research \
      --title "docs(backlog): SG-LLM prompt-design notes" \
      --body "Accumulated T3 prompt-design cases while the LLM engine is unimplemented (M5). Bot-generated; needs review."
    ```

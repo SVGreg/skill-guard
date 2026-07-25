@@ -78,7 +78,7 @@ git checkout main && git pull --ff-only && git checkout -b triage/backlog-$(date
 git add docs/planned-rules.md
 git commit -m "docs(backlog): track issues #<a>,#<b> from triage"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance --label triage \
+gh pr create --label automated --label triage \
   --title "docs(backlog): track triaged issues" \
   --body "Backlog rows for must-have/useful issues surfaced during triage. Bot-generated; needs review."
 ```
