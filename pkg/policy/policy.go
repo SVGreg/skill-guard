@@ -116,7 +116,14 @@ func (p Policy) WaiverFor(ruleID, file string) string {
 			continue
 		}
 		if w.Expires != "" {
-			if exp, err := time.Parse("2006-01-02", w.Expires); err == nil && time.Now().After(exp) {
+			exp, err := time.Parse("2006-01-02", w.Expires)
+			if err != nil {
+				// A malformed expiry cannot bound the waiver. Fail closed: do not
+				// honor it, so the suppressed finding surfaces rather than being
+				// silently waived forever by a typo in the date.
+				continue
+			}
+			if time.Now().After(exp) {
 				continue // expired waiver no longer applies
 			}
 		}
