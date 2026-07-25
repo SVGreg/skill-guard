@@ -50,6 +50,10 @@ enforces them.
      A planned-rule *tracking* issue stays open only until its rule ships; `sg-rule-implement` /
      `sg-issue-implement` must close it. If an issue can't be auto-closed that way, close it
      explicitly: `gh issue close <n> --reason completed --comment "Implemented in #<pr>."`
+     `Closes #<n>` is a request, not a guarantee — it does nothing if the keyword is edited out at
+     merge time. `sg-issue-implement` §5 re-checks merged-PR-vs-open-issue, and `sg-issue-triage` §2
+     closes any issue whose ask demonstrably already shipped, so a missed auto-close is caught from
+     either direction. Never close an issue whose PR is still open.
 4a. **Informative PR labels.** Every automated PR carries `automated` **plus a type label** that
     says what it is / where it came from — exactly one of:
     - `rule-implement` — a new detection shipped by `sg-rule-implement` / `sg-issue-implement`
@@ -62,6 +66,11 @@ enforces them.
     add `research` as a **second** type label so the source is visible (e.g.
     `--label automated --label rule-implement --label research`). Create any missing label once with
     `gh label create <name> -c <hex> -d "<desc>" --force`.
+4b. **Issue grade labels.** Separately from PR type labels, `sg-issue-triage` puts **exactly one**
+    grade label on every issue it grades — `must-have`, `useful`, `nice-to-have`, `out-of-scope`, or
+    `needs-info` (colours and meanings in that skill's §5). The two label sets are orthogonal: type
+    labels say what a PR *is*, grade labels say how much an issue *matters*. Never put a grade label
+    on a PR or a type label on an issue.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.

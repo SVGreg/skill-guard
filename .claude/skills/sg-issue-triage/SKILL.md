@@ -1,6 +1,6 @@
 ---
 name: sg-issue-triage
-description: Triage open GitHub issues for skill-guard — grade each untriaged issue on a fixed scale, post one marker comment with the grade, rationale, and a possible approach, and never comment on the same issue twice. Use when asked to triage issues, review the issue backlog, or when the maintenance loop selects issue triage.
+description: Triage open GitHub issues for skill-guard — close any whose ask already shipped, grade the rest on a fixed scale, apply the matching grade label (must-have / useful / nice-to-have / out-of-scope / needs-info), post one marker comment with the rationale and a possible approach, and never comment on the same issue twice. Use when asked to triage issues, review the issue backlog, or when the maintenance loop selects issue triage.
 ---
 
 # Triage open GitHub issues
@@ -32,7 +32,44 @@ gh issue view <n> --json comments --jq '.comments[].body' | grep -q 'sg-maintain
 
 Skip any already-triaged issue. Process the rest (cap at a handful per cycle to stay focused).
 
-## 2. Grade each issue
+## 2. Already shipped? Close it instead of grading
+
+Before grading, check whether the ask **already landed** — issues outlive the work that resolves
+them: a rule filed by `sg-threat-research` may have shipped since, an implement PR may have merged
+with a body that failed to auto-close, or a fix may have arrived incidentally.
+
+Look for concrete evidence, not a hunch:
+
+```sh
+git log --oneline -20 --grep "#<n>"          # a commit or squash-merge referencing the issue
+gh pr list --state merged --search "<n> in:body" --json number,title,mergedAt
+grep -rn "<rule-id>" pkg/rules/packs/         # for a rule request: does the rule exist now?
+```
+
+Close **only** when you can name where it landed — a rule ID present in a pack, a merged PR number,
+a commit. Then:
+
+```sh
+gh issue close <n> --reason completed --comment "$(cat <<'EOF'
+<!-- sg-maintain:triage -->
+**Triage: already implemented** — closing.
+
+Shipped in <PR #/commit>: <one line on what landed and where, e.g. the rule ID + pack file>.
+
+_Automated triage by sg-maintain. Reopen if this misread the ask._
+EOF
+)"
+```
+
+The comment carries the same marker, so a closed-as-done issue is never re-triaged, and it says
+where the work landed so a reopen is an informed decision.
+
+**Partial coverage is not done.** If the issue asks for more than what shipped, leave it open, grade
+it normally, and say in the triage comment which part is already covered and which part remains.
+When the evidence is ambiguous, grade rather than close — a wrongly-closed issue is worse than one
+graded twice.
+
+## 3. Grade each issue
 
 Use this fixed scale — pick exactly one grade and justify it in one or two sentences:
 
@@ -48,7 +85,7 @@ Ground the grade in the actual codebase and docs (`docs/skill-guard-design.md`,
 `docs/owasp-ast-taxonomy.md`, existing rules) — check whether the ask is already covered, already
 planned in `docs/planned-rules.md`, or genuinely new.
 
-## 3. Post one marker comment
+## 4. Post one marker comment
 
 ```sh
 gh issue comment <n> --body "$(cat <<'EOF'
@@ -64,10 +101,31 @@ EOF
 )"
 ```
 
-Apply a label matching the grade if the label exists (`gh issue edit <n> --add-label <grade>`);
-create the label first only if the repo already uses grade labels — otherwise skip labeling.
+## 5. Apply the grade label
 
-## 4. Feed the backlog
+Every triaged issue carries **exactly one** grade label, so the backlog is filterable
+(`gh issue list --label must-have`) without reading comments. The comment explains, the label sorts.
+
+Create the label if the repo doesn't have it yet, then apply it:
+
+```sh
+gh label create <grade> -c <hex> -d "<desc>" --force   # idempotent; skip if it already exists
+gh issue edit <n> --add-label <grade>
+```
+
+| Grade | Colour | Description |
+|-------|--------|-------------|
+| `must-have` | `b60205` | Real security gap or correctness bug in scope |
+| `useful` | `0e8a16` | Worthwhile, roadmap-aligned improvement |
+| `nice-to-have` | `c5def5` | Valid but low priority |
+| `out-of-scope` | `cfd3d7` | Outside static SKILL.md scanning + provenance |
+| `needs-info` | `fbca04` | Underspecified — awaiting a concrete answer |
+
+If the issue already carries a *different* grade label (a human graded it, or the scale changed),
+drop the stale one — `gh issue edit <n> --remove-label <old>` — so exactly one remains. Grade labels
+are orthogonal to the PR type labels in the dispatcher's guardrail 4a; never mix the two sets.
+
+## 6. Feed the backlog
 
 For each `must-have` or `useful` issue that isn't already tracked, append a row to
 `docs/planned-rules.md` (or the relevant doc) referencing the issue number, so `sg-rule-implement`
@@ -85,4 +143,4 @@ gh pr create --label automated --label triage \
 
 If no backlog change was needed this cycle, skip the PR — triage comments alone are the output.
 
-Report which issues were graded and how.
+Report which issues were graded (grade + label applied) and which were closed as already-shipped.

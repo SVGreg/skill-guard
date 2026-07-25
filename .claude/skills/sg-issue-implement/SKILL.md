@@ -68,4 +68,25 @@ Then comment on the issue so the trail is clear:
 gh issue comment <n> --body "<!-- sg-maintain:implement --> PR up: <pr-url>. Bot-generated from your Implement command; needs your review + merge."
 ```
 
+## 5. Confirm the issue actually closed
+
+`Closes #<n>` is a request to GitHub, not a guarantee: it silently does nothing when the keyword is
+edited out at merge time, when the PR merges into a non-default branch, or when the merge is a
+squash whose commit message drops the line. Since this skill opens the PR and the **owner** merges
+it later, the check belongs at the *start* of the next cycle that touches this issue:
+
+```sh
+gh pr view <pr> --json state,mergedAt -q '.state'      # MERGED?
+gh issue view <n> --json state -q '.state'             # still OPEN?
+```
+
+Merged PR + open issue ⇒ close it explicitly and say where it landed:
+
+```sh
+gh issue close <n> --reason completed --comment "Implemented in #<pr>."
+```
+
+`sg-issue-triage` §2 performs the same reconciliation for issues it encounters, so a missed
+auto-close is caught from either direction — but never close an issue whose PR is still open.
+
 Report the PR + issue links. One issue, one PR per cycle.
