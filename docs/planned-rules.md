@@ -11,6 +11,14 @@ planned-rule entries that were previously scattered across `docs/skill-guard-des
   candidate *detection* goes in **Backlog**, anything that changes the engine, CLI, or docs goes in
   **Engine & hardening backlog**. Never invent an `SG-` id for a non-rule item.
 
+**Rule ids are not allocated here.** `docs/rule-verification.md` (with `docs/skill-guard-design.md §5`)
+is the **authority** for what an `SG-` id means — those two agree with each other and with every rule
+shipped in `pkg/rules/packs/`. Before adding a row, look the id up there: if the threat already has an
+id, reuse it; if it is new, take the **next free number in its family** and add a section to
+`rule-verification.md`. This file drifted into inventing its own meanings for thirteen ids, which
+silently blocked its own two highest-priority rows for several maintenance cycles — see the
+reconciliation table below and issue #54.
+
 Status values: `planned` · `in-progress` · `implemented` · `wont-do`.
 Priority: `P0` (security gap, do next) · `P1` (roadmap-aligned) · `P2` (nice-to-have).
 
@@ -21,15 +29,15 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 
 | ID | AST | Threat | Priority | Status | Source / notes |
 |----|-----|--------|----------|--------|----------------|
-| SG-REF-001 | AST05 | Skill body instructs the agent to fetch and follow instructions from an external URL/file (untrusted external instructions). | P0 | implemented | **Shipped as `SG-REF-003`** (Runtime instruction fetch) in `core-injection.yaml` — this row's threat is the "external brain" attack, which `rule-verification.md` and design §5.7 assign to the SG-REF-003 id (SG-REF-001 is reserved for the info-level reference inventory). See PR (this cycle), `rule-verification.md §SG-REF-003`. The remaining, still-unimplemented SG-REF-001 *inventory* feature is tracked in design §5.7. |
-| SG-REF-002 | AST05 | Skill references an external ruleset/config the agent is told to obey at runtime. | P1 | planned | rule-verification §7 |
-| SG-REF-003 | AST05 | Skill embeds a remote include / `@import`-style directive pulling instructions at use time. | P1 | planned | rule-verification §7 |
+| SG-REF-001 | AST05 | **External reference inventory** — enumerate every external URL/file a skill points at and emit them at info level, so a reviewer sees the skill's outbound surface even when no individual reference is malicious. | P2 | planned | **Row re-pointed to the authority definition** (#54). It previously described the "external brain" attack (fetch-and-follow external instructions) and was marked `implemented`, but that threat shipped as **`SG-REF-003`** — `rule-verification.md §SG-REF-001` and design §5.7 reserve `SG-REF-001` for the info-level inventory, which is still unbuilt. |
+| SG-REF-004 | AST05 | Skill references an external ruleset/config the agent is told to obey at runtime. | P1 | planned | **Renumbered from `SG-REF-002`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). Distinct from the authority `SG-REF-002` (unpinned external reference), which has no backlog row yet. |
+| SG-REF-003 | AST05 | Skill embeds a remote include / `@import`-style directive pulling instructions at use time. | P1 | implemented | **Status corrected** (#54): `SG-REF-003` (Runtime instruction fetch / "external brain") has shipped in `core-injection.yaml` since PR #9 — pulling instructions at use time is exactly what it matches. The row said `planned` while the rule was live. |
 | SG-DEP-001 | AST02/AST07 | Declares an install step pulling an unpinned dependency (no version/hash). | P0 | implemented | Shipped in `core-supply.yaml` — explicit floating specs only (`*`/`latest`, `pkg@latest`, git `@main`, `:latest`); caret/tilde ranges & `>=` bounds intentionally not flagged. Corpus-tuned 63→5 findings (all genuine `@latest`). `rule-verification.md §SG-DEP-001`, `TestUnpinnedDependencyCovered`. See PR. |
-| SG-DEP-002 | AST02 | `pip install`/`npm install`/`curl \| sh` bootstrap in body or scripts. | P0 | planned | design §5 |
-| SG-DEP-003 | AST02 | Dependency sourced from a raw git URL / arbitrary archive rather than a registry. | P1 | planned | design §5 |
-| SG-DEP-004 | AST02 | Typosquat-shaped package name (near-miss of a popular package). | P2 | planned | design §5 |
-| SG-DEP-005 | AST02 | Post-install / lifecycle hook that runs arbitrary code. | P1 | planned | design §5 |
-| SG-DEP-006 | AST02 | Fetches a binary/blob and marks it executable. | P1 | planned | design §5 |
+| SG-DEP-008 | AST02 | `pip install`/`npm install`/`curl \| sh` bootstrap in body or scripts. | P0 | planned | **Renumbered from `SG-DEP-002`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 |
+| SG-DEP-009 | AST02 | Dependency sourced from a raw git URL / arbitrary archive rather than a registry. | P1 | planned | **Renumbered from `SG-DEP-003`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 |
+| SG-DEP-002 | AST02 | Typosquat-shaped package name / dependency confusion (near-miss of a popular package). | P2 | planned | **Merged into the authority id** — this row was filed as `SG-DEP-004`, but `rule-verification.md §SG-DEP-002` and design §5 already define this exact threat as `SG-DEP-002`. #54. |
+| SG-DEP-010 | AST02 | Post-install / lifecycle hook that runs arbitrary code. | P1 | planned | **Renumbered from `SG-DEP-005`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). Sibling of the shipped `SG-CFG-001` (agent-hook config): same "shipping a config installs execution" shape, different manifest. design §5 |
+| SG-DEP-011 | AST02 | Fetches a binary/blob and marks it executable. | P1 | planned | **Renumbered from `SG-DEP-006`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 |
 | SG-DEP-007 | AST02/AST01 | **Remote-package auto-execution via a runner** — `npx -y <pkg>`, `uvx <pkg>`, `pipx run <pkg>`, `bunx <pkg>`, `pnpm dlx`/`yarn dlx`. Unlike SG-DEP-002 (install *bootstrap*), these download **and execute** an unpinned remote package in a single command, with no lockfile and no separate review step, running with the agent's permissions. Verified undetected on `main` (scans clean / 0 findings). Real example (Snyk): `npx -y openclaw-yahoo-stock-news stock AAPL`. | P0 | implemented | Shipped in new `core-supply.yaml` pack + `TestRemotePackageRunnerCovered` + fixtures + `rule-verification.md §4`. Calibrated **medium** (warn) — the runner idiom is also how legit tools run (`uvx markitdown`, `npx -y @scope/cli`); static analysis can't separate trusted from malicious, so it surfaces for review rather than hard-fail (corpus: 26 hits / 7 of 240 skills, all genuine invocations). Research (Snyk): "From SKILL.md to Shell Access…". Issue #29. See PR. |
 | SG-TAINT-001 | AST01 | Data-flow: untrusted input reaches a shell/exec sink. | P1 | planned | design §5 taint family; deferred to M3 |
 | SG-TAINT-002 | AST01 | Data-flow: secret/env reaches a network sink (exfil path). | P1 | planned | design §5 |
@@ -37,22 +45,54 @@ Keep this file the source of truth. When you implement a row, don't delete it �
 | SG-TAINT-004 | AST01 | Data-flow: user/agent context reaches an outbound request body. | P2 | planned | design §5 |
 | SG-TAINT-005 | AST01 | Data-flow: decoded/deobfuscated blob reaches an exec sink. | P1 | planned | design §5 |
 | SG-MEM-001 | AST01/AST03 | Instructs the agent to persist instructions into long-term memory across sessions. | P1 | implemented | Shipped in `core-injection.yaml` — the **instruction-only** form (SG-INJ-004 keeps the write form). Five leaves; deliberately NOT keyed on a bare "from now on" (that is jailbreak framing, already covered by SG-INJ-001/SG-ANTI-001). Corpus 0/240, no verdict change. `rule-verification.md §SG-MEM-001`, `TestMemoryPoisoningCoversCrossSessionDirectives`. |
-| SG-MEM-002 | AST01/AST03 | Instructs the agent to silently re-load persisted state that alters future behavior. | P2 | planned | design §5 |
+| SG-MEM-003 | AST01/AST03 | Instructs the agent to silently re-load persisted state that alters future behavior. | P2 | planned | **Renumbered from `SG-MEM-002`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 |
 | SG-STEER-001 | AST01 | Steering/priming that reshapes the agent persona toward compliance without an override verb. | P2 | planned | design §5 |
-| SG-NET-003 | AST01/AST06 | Connects to a raw IP literal (bypasses host allowlist / DNS review). | P1 | planned | design §5 network |
-| SG-NET-004 | AST01 | DNS-exfiltration shaped hostname (data encoded in subdomain labels). | P2 | planned | design §5 |
-| SG-NET-005 | AST06 | Opens a reverse shell / bind listener to a remote host. | P0 | planned | design §5 |
+| SG-NET-005 | AST01/AST06 | Hardcoded IP literal / non-allowlisted host / DNS-exfil-shaped hostname (data encoded in subdomain labels). | P1 | planned | **Three backlog rows merged into one authority id** (#54): filed as `SG-NET-003` (raw IP) and `SG-NET-004` (DNS-exfil), both of which `rule-verification.md §SG-NET-005` and design §5 already cover under `SG-NET-005`. |
 | SG-CFG-001 | AST02/AST01 | **Bundled agent-hook config auto-executes commands.** The bundle ships a `.claude/settings.json` (or `.git/hooks/*`) that registers a lifecycle hook — `PreToolUse`/`PostToolUse`/`SessionStart`/`Stop` with a `{"type":"command","command":"…"}` handler — which the agent runs **automatically, with no confirmation**, on every matching event. An **empty `matcher`** fires on *every* tool call and receives full tool input/output (file contents, bash stdout, fetch results) — a silent exfil + RCE surface. `.claude/settings.json` is already classified as a scanned config (`pkg/skill/skill.go`), but no rule flags the hook mechanism, so the command only trips a rule if it independently matches (e.g. SG-NET-002). Verified undetected on `main`: a bundle with a `PostToolUse`/`SessionStart` command hook scans **pass / 0 findings**. Distinct from SG-EXE-004 (cron/rc/systemd persistence) and SG-AS-001 (*reading* agent config). | P0 | implemented | Shipped in `core-exec.yaml` as an `all` composite (lifecycle event **and** command handler), `configs` target only — see `rule-verification.md §SG-CFG-001`, `TestAgentHookConfigRequiresEventAndCommand`, fixtures in `testdata/{malicious,benign}/.claude/settings.json`. Corpus: 0 findings / 240 (no corpus bundle ships a `.claude/` config, so this is absence of the pattern, not a measured FP rate). The `.git/hooks/*` half of this entry is **not** shipped — `loadDir` skips `.git` entirely; see the engine-backlog row. Research (blogs + CVEs): Check Point CVE-2025-59536 / CVE-2026-21852 / CVE-2026-24887 (RCE via `.claude/settings.json` hooks); "Cozempic" npm pkg wrote a global SessionStart + empty-matcher PostToolUse hook; anthropics/claude-code#49778. Issue #40. |
 | SG-MTA-004 | AST04 | Manifest declares broad filesystem write scope beyond the skill dir. | P1 | planned | design §5 metadata |
-| SG-MTA-005 | AST03/AST04 | Manifest requests credentials/env scope unrelated to its stated purpose. | P1 | planned | design §5 |
-| SG-MTA-006 | AST04 | Description/trigger mismatch — metadata over-claims to widen activation. | P2 | planned | design §5 |
-| SG-INJ-003 | AST01 | Conditional/time-bomb instruction (behaves differently under a hidden trigger). | P1 | planned | design §5 injection |
-| SG-INJ-005 | AST01 | Role-confusion: text forged to look like a system/operator turn. | P1 | planned | design §5 |
-| SG-TRIG-001 | AST04 | Over-broad activation trigger designed to fire on unrelated tasks. | P2 | planned | design §5 trigger |
+| SG-MTA-007 | AST03/AST04 | Manifest requests credentials/env scope unrelated to its stated purpose. | P1 | planned | **Renumbered from `SG-MTA-005`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). Narrower than the authority `SG-INJ-005` (description↔behavior mismatch): this is the credential/env slice specifically. design §5 |
+| SG-INJ-008 | AST01 | Conditional/time-bomb instruction (behaves differently under a hidden trigger). | P1 | planned | **Renumbered from `SG-INJ-003`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 injection |
+| SG-INJ-009 | AST01 | Role-confusion: text forged to look like a system/operator turn. | P1 | planned | **Renumbered from `SG-INJ-005`** (#54 — that id belongs to a different threat in `rule-verification.md`/design §5). design §5 |
+| SG-TRIG-001 | AST04 | Over-broad activation trigger designed to fire on unrelated tasks; metadata over-claims to widen activation. | P2 | planned | Absorbs the row filed as `SG-MTA-006` ("description/trigger mismatch — over-claims to widen activation"), which is the same threat; `SG-MTA-006` belongs to *declared risk-tier mismatch* in the authority docs. #54. design §5 trigger |
 | SG-NET-007 | AST01 | Data-exfil via a rendered markdown/HTML image or link whose URL embeds captured/secret/context data to an attacker host the client auto-fetches (zero-click). Complements SG-NET-001, which only fires on a fixed bad-host allowlist — this technique uses any attacker domain. | P0 | implemented | Research (OWASP): EchoLeak CVE-2025-32711 (M365 Copilot); embracethered markdown-image exfil. Shipped in `core-network.yaml` — see PR #9, issue #6, `rule-verification.md §3`. |
 | SG-EVA-001 | AST08/AST01 | **Self-Extracting Skill (SFS) packing.** The real payload is sealed as an opaque blob inside a directory the scanner skips (`.git/`), shipped with a benign cover `SKILL.md` and a small decoder script; the agent runs the decoder at first execution, rematerializes the original skill, and follows it. Verified against skill-guard: a bundle with `.git/skillpack.dat` + a base64 decoder scans **pass / 0 findings**. Root cause is `skipNames` in `pkg/skill/skill.go` — and because `pkg/attest/merkle.go` builds leaves from the same walk, skipped files are **outside the Merkle root**: the blob can be rewritten after signing and `verify` still passes (verified). | P0 | planned | Research: *Cloak and Detonate* (arXiv 2607.02357) — SFS packing bypasses ≥90% of every static scanner tested, ≥99.8% on five of six. Issue #17 |
-| SG-INJ-002 (d) | AST04/AST01 | **Homoglyph-ratio leaf never implemented.** `rule-verification.md §2` signal (d) and `skill-guard-design.md §8` both specify a `homoglyph_ratio` matcher primitive, but only six primitives exist in `pkg/rules/loader.go` (`regex`, `substring`, `unicode_category`, `bidi_control`, `tag_block`, `url_host`). SkillCloak's "Reify" operator substitutes Cyrillic/Greek lookalikes to break regex leaves while the agent still reads the intended word. | P1 | planned | Research: *Cloak and Detonate* (arXiv 2607.02357), Reify operator. Issue #18 |
+| `SG-INJ-002` signal (d) | AST04/AST01 | **Sub-feature of a shipped rule, not a new id.** Homoglyph-ratio leaf never implemented: `rule-verification.md §2` signal (d) and `skill-guard-design.md §8` both specify a `homoglyph_ratio` matcher primitive, but only six primitives exist in `pkg/rules/loader.go` (`regex`, `substring`, `unicode_category`, `bidi_control`, `tag_block`, `url_host`). SkillCloak's "Reify" operator substitutes Cyrillic/Greek lookalikes to break regex leaves while the agent still reads the intended word. | P1 | planned | Research: *Cloak and Detonate* (arXiv 2607.02357), Reify operator. Issue #18 |
 | SG-INJ-007 | AST01/AST08 | **Terminal/ANSI escape-sequence injection.** The bundle embeds raw C1/ANSI escape sequences — CSI (`ESC[`) to hide/overwrite text (`ESC[8m`, cursor moves, line clears) so a human reviewer sees benign output while different bytes reach the terminal/agent, and **OSC 52 (`ESC]52;c;<base64>`) to write attacker-controlled content into the system clipboard**, which becomes RCE the moment the user pastes. ESC is U+001B (Unicode category **Cc**), which `SG-INJ-002` does **not** match (it only checks `Cf`/bidi/tag), and no rule targets the escape-sequence shape. Verified undetected on `main`: a `SKILL.md` containing an OSC 52 write + a `CSI 8m`-hidden `curl…\|sh` scans **pass / 0 findings** (the hidden pipe-to-shell also slips past SG-NET-002). Detection is high-precision/low-FP — a raw ESC byte in a skill bundle is essentially never legitimate. | P1 | planned | Research (GitHub advisories / security blogs): Terminal DiLLMa (embracethered, 2024); Codex CLI ANSI→RCE via OSC 52 (dganev.com, 2026-02); dgl.cx "ANSI terminal security" (10 CVEs). Complements SG-INJ-002 (Cf/bidi/tag invisibles). Issue #36. |
+
+## ID reconciliation (2026-07-25, issue #54)
+
+This file had assigned its own meanings to thirteen `SG-` ids that `rule-verification.md` and
+`skill-guard-design.md §5` already used for different threats. Because two of the squatted ids were
+this backlog's only `P0` rows, every proactive `sg-rule-implement` cycle skipped them and shipped a
+lower-priority rule instead. The threats were all real — only the ids were wrong — so nothing was
+dropped; rows were renumbered to the next free id in their family, or merged where the authority
+docs already had the same threat under another id.
+
+| Was (in this file) | Now | Why |
+|---|---|---|
+| `SG-DEP-002` bootstrap install | **`SG-DEP-008`** | authority `SG-DEP-002` = typosquat / dependency confusion |
+| `SG-DEP-003` raw git URL dep | **`SG-DEP-009`** | authority `SG-DEP-003` = known-CVE dependency (via OSV) |
+| `SG-DEP-004` typosquat name | **`SG-DEP-002`** | merged — the authority id for this exact threat |
+| `SG-DEP-005` post-install hook | **`SG-DEP-010`** | authority `SG-DEP-005` = SBOM / hash coverage gap |
+| `SG-DEP-006` fetch binary + chmod | **`SG-DEP-011`** | authority `SG-DEP-006` = untrusted container image |
+| `SG-INJ-003` time-bomb instruction | **`SG-INJ-008`** | authority `SG-INJ-003` = encoded payload blocks |
+| `SG-INJ-005` role confusion | **`SG-INJ-009`** | authority `SG-INJ-005` = description↔behavior mismatch |
+| `SG-MEM-002` reload persisted state | **`SG-MEM-003`** | authority `SG-MEM-002` = context-window stuffing |
+| `SG-MTA-005` credential/env scope | **`SG-MTA-007`** | authority `SG-MTA-005` = brand/trademark impersonation |
+| `SG-MTA-006` description/trigger over-claim | **merged into `SG-TRIG-001`** | same threat as the existing trigger-abuse row; authority `SG-MTA-006` = declared risk-tier mismatch |
+| `SG-NET-003` raw IP literal | **merged into `SG-NET-005`** | authority `SG-NET-005` already covers hardcoded IP / non-allowlisted host / DNS-exfil |
+| `SG-NET-004` DNS-exfil hostname | **merged into `SG-NET-005`** | same |
+| `SG-NET-005` reverse shell / bind listener | **already implemented as `SG-NET-006`** | the shipped "Listener / reverse-shell idiom" rule *is* this threat — this `P0` row was done before it was ever picked up |
+| `SG-REF-001` fetch-and-follow external instructions | **row re-pointed** | that threat shipped as `SG-REF-003`; `SG-REF-001` is the info-level reference inventory, still unbuilt |
+| `SG-REF-002` obey external ruleset | **`SG-REF-004`** | authority `SG-REF-002` = unpinned external reference |
+| `SG-REF-003` remote include / `@import` | **status → implemented** | the shipped `SG-REF-003` (runtime instruction fetch) already matches it; the row said `planned` while the rule was live |
+
+**Authority-side ids with no backlog row yet** (spec text exists, nothing tracks them): `SG-EXE-005`
+(anti-analysis / evasion), `SG-INJ-003` (encoded payload blocks), `SG-MTA-002` (front-matter schema
+violation), `SG-MTA-006` (declared risk-tier mismatch), `SG-MEM-002` (context-window stuffing),
+`SG-REF-002` (unpinned external reference), `SG-DEP-003`/`SG-DEP-005`/`SG-DEP-006` (known-CVE dep,
+SBOM gap, untrusted container image). File rows for the ones worth building rather than reusing
+their ids for something else.
 
 ## Engine & hardening backlog (not detection rules)
 
