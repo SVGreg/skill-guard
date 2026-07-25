@@ -90,14 +90,18 @@ The backlog doc is committed, so its change rides a PR (issues are created direc
 is the PR):
 
 ```sh
-git checkout -b research/<slug>
+git checkout main && git pull --ff-only && git checkout -b research/<slug>
 git add docs/planned-rules.md
 git commit -m "docs(backlog): add <SG-ID> — <threat> from research"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance \
+gh pr create --label automated --label maintenance --label research \
   --title "docs(backlog): <SG-ID> — <threat>" \
-  --body "Automated threat-research cycle. New backlog entry + tracking issue. Source: <url>. Bot-generated; needs review."
+  --body "Automated threat-research cycle. New backlog entry + tracking issue #<n>. Source: <url>. Bot-generated; needs review."
 ```
+
+Insert the new backlog row in a *distinct* region of the table (not always the end) so it does not
+collide with another open backlog PR. The tracking issue stays open until `sg-rule-implement` ships
+the rule and closes it via `Closes #<n>`.
 
 Update `state.json` → `source_last_researched["<source>"]` = now. Report the issue + PR links, and
 note whether anything should feed `sg-llm-polish` (e.g. a novel prompt-injection technique worth a

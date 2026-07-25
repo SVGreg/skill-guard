@@ -69,14 +69,17 @@ go test ./pkg/rules/ ./pkg/scan/ -v
 ## 7. Open the PR
 
 ```sh
-git checkout -b rule/<SG-ID>-<slug>
+git checkout main && git pull --ff-only && git checkout -b rule/<SG-ID>-<slug>
 git add pkg/rules/ testdata/ docs/
 git commit -m "feat(rules): add <SG-ID> — <threat> (AST0X)"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance \
+# type label: rule-implement (+ research when the backlog row was filed by sg-threat-research)
+gh pr create --label automated --label maintenance --label rule-implement$( [ -n "$ISSUE" ] && echo " --label research" ) \
   --title "feat(rules): <SG-ID> — <threat>" \
   --body "Implements backlog entry <SG-ID> (AST0X). New pack rule + tests + docs; evaluation cross-checked, no regressions.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
 ```
 
-If the backlog entry was filed from a GitHub issue, add `Closes #<n>` to the body. Report the PR
-link and mark the cycle done.
+**Close the tracking issue.** If the backlog entry was filed from a GitHub issue, `Closes #<n>` in
+the body is **mandatory** — it auto-closes the tracking issue when the PR merges. (If the row was
+filed by `sg-threat-research`, `$ISSUE` is that issue number; the second `--label research` marks the
+source.) Report the PR link and mark the cycle done.

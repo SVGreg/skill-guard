@@ -74,11 +74,11 @@ For each `must-have` or `useful` issue that isn't already tracked, append a row 
 or `sg-code-review` can pick it up later. Commit that doc change on a branch and open a small PR:
 
 ```sh
-git checkout -b triage/backlog-$(date +%Y%m%d)
+git checkout main && git pull --ff-only && git checkout -b triage/backlog-$(date +%Y%m%d)
 git add docs/planned-rules.md
 git commit -m "docs(backlog): track issues #<a>,#<b> from triage"
 git push -u origin HEAD
-gh pr create --label automated --label maintenance \
+gh pr create --label automated --label maintenance --label triage \
   --title "docs(backlog): track triaged issues" \
   --body "Backlog rows for must-have/useful issues surfaced during triage. Bot-generated; needs review."
 ```
