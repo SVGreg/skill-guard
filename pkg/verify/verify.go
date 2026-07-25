@@ -5,6 +5,7 @@ package verify
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"strconv"
 	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/attest"
@@ -116,14 +117,29 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 			"Obtain a re-signed bundle from a non-revoked key."))
 	}
 
-	// Expiry.
-	if exp, err := time.Parse(time.RFC3339, st.Predicate.ExpiresAt); err == nil {
-		if time.Now().After(exp.Add(2 * time.Minute)) { // small clock-skew tolerance
-			res.Expired = true
-			res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
-				"Attestation expired", "The attestation's expires_at is in the past.",
-				"Re-sign the bundle."))
-		}
+	// Expiry — fail closed. An absent or unparseable expires_at used to skip the
+	// check silently, so an attestation claiming `"expires_at": "never"` was
+	// treated as perpetually fresh. Same reasoning as the policy-waiver expiry
+	// fix (#38): an expiry we cannot read is not an expiry we can honour.
+	exp, err := time.Parse(time.RFC3339, st.Predicate.ExpiresAt)
+	switch {
+	case st.Predicate.ExpiresAt == "":
+		res.Expired = true
+		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
+			"Attestation has no expiry",
+			"The statement's predicate omits expires_at, so freshness cannot be established.",
+			"Re-sign the bundle: skill-guard sign <path>."))
+	case err != nil:
+		res.Expired = true
+		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
+			"Attestation expiry unreadable",
+			"expires_at is not an RFC3339 timestamp ("+strconv.Quote(st.Predicate.ExpiresAt)+"), so freshness cannot be established.",
+			"Re-sign the bundle: skill-guard sign <path>."))
+	case time.Now().After(exp.Add(2 * time.Minute)): // small clock-skew tolerance
+		res.Expired = true
+		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
+			"Attestation expired", "The attestation's expires_at is in the past.",
+			"Re-sign the bundle."))
 	}
 
 	// Merkle integrity.

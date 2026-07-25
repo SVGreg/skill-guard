@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/SVGreg/skill-guard/pkg/attest"
 	"github.com/SVGreg/skill-guard/pkg/policy"
@@ -57,11 +58,11 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 		fmt.Printf("merkle root: %s%s%s\n", c(col), mm, c(reset))
 		if res.Statement != nil {
 			if res.Publisher != "" {
-				fmt.Printf("publisher: %s\n", res.Publisher)
+				fmt.Printf("publisher: %s\n", safeText(res.Publisher))
 			}
 			if res.Statement.Scan != nil {
 				fmt.Printf("scan-at-signing: %s (risk %d/100)\n",
-					res.Statement.Scan.Verdict, res.Statement.Scan.RiskScore)
+					safeText(res.Statement.Scan.Verdict), res.Statement.Scan.RiskScore)
 			} else {
 				fmt.Println("scan-at-signing: UNSCANNED (integrity-only)")
 			}
@@ -83,3 +84,13 @@ func verificationFailed(res *sgverify.Result, pol policy.Policy) bool {
 	}
 	return false
 }
+
+// safeText renders a string that came out of an attestation statement. Those
+// fields are attacker-controlled until a signature verifies against a roster
+// key — and anyone can write a .skillsig, no key required — so printed raw they
+// can forge skill-guard's own output: an `identity` carrying "\n\033[32mmerkle
+// root: MATCH\033[0m\nsignature: VALID (trusted key)" prints two convincing
+// green lines directly under the real MISMATCH. Quoting escapes the control
+// characters and makes the tampering visible instead of invisible; pkg/report
+// already prints scanned excerpts with %q for exactly this reason.
+func safeText(s string) string { return strconv.Quote(s) }
