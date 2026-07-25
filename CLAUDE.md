@@ -75,6 +75,12 @@ Packs map to OWASP IDs: `core-injection`, `core-network`, `core-exec`, `core-sec
 `core-metadata`, `core-supply` (AST02 supply-chain). Every finding carries `ast` ids resolved
 through an `ast_references` map so tooling never hard-codes the taxonomy.
 
+**`docs/rule-verification.md` (with `docs/skill-guard-design.md §5`) is the authority for what an
+`SG-` id means.** Allocate a new id by taking the next free number in its family *and* adding a
+section there — never by picking a number in a backlog row or an issue. `docs/planned-rules.md`
+tracks status/priority for ids defined in the authority docs; it once invented its own meanings for
+thirteen ids, which silently blocked its two highest-priority rows (see its ID-reconciliation table).
+
 ### Confidence, context modifiers, verdict, risk
 
 Not every pattern hit becomes a finding. Each candidate starts at the rule's base confidence,
