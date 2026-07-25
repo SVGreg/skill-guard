@@ -37,6 +37,19 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 	}
 	res.Present = true
 
+	// design §7.3 step 1: bind the envelope to this payload type before touching
+	// the payload. The PAE covers payloadType, so a foreign type cannot verify —
+	// but checking it up front is what stops a signature made by the same key in
+	// another context (notably the USF field signature, which is published in
+	// plaintext in SKILL.md front-matter) from being replayed as an attestation.
+	if env.PayloadType != attest.PayloadType {
+		res.Findings = append(res.Findings, prv("SG-PRV-002", model.SevCritical,
+			"Unexpected attestation payload type",
+			"The envelope's payloadType is not "+attest.PayloadType+"; it was signed for a different purpose.",
+			"Re-sign the bundle: skill-guard sign <path>."))
+		return res
+	}
+
 	st, _, err := attest.DecodeStatement(env)
 	if err != nil {
 		res.Findings = append(res.Findings, prv("SG-PRV-002", model.SevCritical,

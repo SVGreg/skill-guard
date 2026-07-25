@@ -83,7 +83,34 @@ func SaveKey(s *LocalSigner, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return writeSecret(path, data)
+}
+
+// writeSecret writes private key material to path, forcing mode 0600 even when
+// path already exists. os.WriteFile applies its perm argument only when it
+// creates the file, so writing over a pre-existing world-readable file (a
+// restored backup, a stray `touch`, an earlier tool) would silently leave the
+// seed at 0644 while keygen reports "mode 0600". Symlinks are refused rather
+// than followed, matching the bundle walk's Lstat guard in pkg/skill.
+func writeSecret(path string, data []byte) error {
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to write a private key through symlink %q", path)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	// Chmod before the seed is written: if the mode cannot be tightened the
+	// file is still empty when we bail out.
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		return fmt.Errorf("cannot restrict %q to mode 0600: %w", path, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // PubPath derives the ".pub" companion path for a ".key" path: "publisher.key"

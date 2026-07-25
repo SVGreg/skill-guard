@@ -118,6 +118,61 @@ func TestSavePubIsPublicOnly(t *testing.T) {
 	}
 }
 
+// TestSaveKeyForcesRestrictiveMode guards the §7.4 promise that keygen prints
+// ("mode 0600, private"). os.WriteFile only applies its perm on creation, so
+// writing over a pre-existing 0644 file used to leave the seed world-readable.
+func TestSaveKeyForcesRestrictiveMode(t *testing.T) {
+	signer, err := GenerateKey("mode-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "pre-existing.key")
+	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveKey(signer, path); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Fatalf("private key left at mode %v, want 0600", got)
+	}
+	if _, err := LoadKey(path); err != nil {
+		t.Fatalf("key unreadable after overwrite: %v", err)
+	}
+}
+
+// TestSaveKeyRefusesSymlink keeps private material from being written through a
+// link into an attacker-chosen location.
+func TestSaveKeyRefusesSymlink(t *testing.T) {
+	signer, err := GenerateKey("symlink-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "elsewhere.txt")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "publisher.key")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	if err := SaveKey(signer, link); err == nil {
+		t.Fatal("SaveKey followed a symlink instead of refusing")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("key material written through symlink: %s", data)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
