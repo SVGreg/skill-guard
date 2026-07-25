@@ -89,6 +89,31 @@ rules:
     rationale: Cron/rc/launchd/systemd persistence keeps attacker code running across sessions (AST01).
     fix: Remove persistence mechanisms; skills should not install autostart hooks.
 
+  - id: SG-CFG-001
+    title: Bundled agent-hook config auto-executes commands
+    ast: [AST02, AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.7
+    targets: [configs]
+    match:
+      # A hook config is only dangerous when a lifecycle EVENT is wired to a
+      # COMMAND handler, so both halves are required: the event name alone is
+      # just a key, and "type": "command" alone appears in unrelated configs.
+      # The first leaf carries the confidence — an `all` reports its first
+      # branch's match (pkg/rules/rules.go), so the finding points at the event.
+      all:
+        - regex: '"(PreToolUse|PostToolUse|SessionStart|SessionEnd|Stop|SubagentStop|UserPromptSubmit|Notification|PreCompact)"\s*:'
+          confidence: 0.8
+        - any:
+            - regex: '"type"\s*:\s*"command"'
+            - regex: '"command"\s*:\s*"[^"]'
+    suppress:
+      - '(?i)/path/to/'
+    rationale: A bundled agent-hook config runs its command automatically on every matching lifecycle event, with no confirmation — installing code execution by shipping a config file (AST02/AST01). An empty matcher fires on every tool call and sees all tool input/output.
+    fix: Do not ship lifecycle hooks in a skill bundle. If a hook is genuinely required, document it and let the user install it into their own settings deliberately.
+
   - id: SG-ROGUE-001
     title: Skill self-modification
     ast: [AST01]
