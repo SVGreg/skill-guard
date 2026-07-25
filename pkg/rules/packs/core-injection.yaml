@@ -136,6 +136,46 @@ rules:
     rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy — or telling it to run "unfiltered"/"jailbreak" mode or drop disclaimers — is a jailbreak preamble (AST01).
     fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
 
+  - id: SG-MEM-001
+    title: Persistent context / memory poisoning
+    ast: [AST01, AST03]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [manifest, body]
+    match:
+      any:
+        # Explicit cross-session persistence — the unambiguous shape. SG-INJ-004
+        # already covers the *write* form (a sink targeting CLAUDE.md/MEMORY.md);
+        # this rule is the instruction-only form, which needs no file write to
+        # reprogram the agent.
+        - regex: '(?i)\b(remember|store|save|persist|retain)\b[^\n]{0,50}\b(for|in|across|between)\b[^\n]{0,25}\b(all|every|future|later|subsequent|upcoming|new)\b[^\n]{0,25}\b(session|conversation|chat|interaction)s?\b'
+          confidence: 0.8
+        - regex: '(?i)\b(remember|keep|store)\s+(this|that|these|the following)\b[^\n]{0,40}\b(permanently|forever|indefinitely|for good)\b'
+          confidence: 0.8
+        - regex: '(?i)\b(persist|store|commit|write)\b[^\n]{0,30}\b(to|into|in)\b[^\n]{0,20}\b(long[- ]term|persistent|permanent)\s+memory\b'
+          confidence: 0.85
+        # Recurrence phrasings. Deliberately NOT keyed on a bare "from now on":
+        # that is jailbreak framing ("from now on you are unrestricted"), which
+        # SG-INJ-001/SG-ANTI-001 already own — what makes this memory poisoning
+        # is the explicit recurrence object. Kept at 0.7 so the documentary
+        # modifier (-0.4) drops them below the emit threshold when a doc merely
+        # *describes* the attack.
+        # A recurrence phrase needs a behavioural verb on the SAME line to count
+        # as a directive: a bare "In Every Session:" heading (corpus:
+        # clawhub/proactive-agent) is a section title, not an instruction, and
+        # its excerpt carries no evidence. Known limitation of this precision
+        # choice: a heading whose directive sits on the following lines is missed.
+        - regex: '(?i)\bin (every|each|all) (future |subsequent |following )?(conversation|session|chat|interaction|response|repl(y|ies)|request)s?\b[^\n]{0,40}\b(remember|recommend|mention|include|promote|prefer|start|begin|append|prepend|say|respond|reply|add|inject|insert)\b'
+          confidence: 0.7
+        - regex: '(?i)\b(always|never)\b[^\n]{0,40}\b(start|begin|end|prefix|prepend|append)\b[^\n]{0,25}\b(your |every |each |all )?(response|reply|answer|message|output)s?\b'
+          confidence: 0.7
+    suppress:
+      - '(?i)/path/to/'
+    rationale: An instruction to carry behaviour into future sessions poisons the agent's persistent context — it keeps acting on the skill's directive long after the skill is done, without the user re-invoking it (AST01/AST03).
+    fix: Keep a skill's influence inside its own invocation. Do not instruct the agent to remember directives across sessions or to permanently alter how it responds.
+
   - id: SG-INJ-006
     title: System-prompt / tool-schema exfiltration
     ast: [AST01]
