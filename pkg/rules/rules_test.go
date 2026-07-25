@@ -506,3 +506,62 @@ func TestUnpinnedDependencyCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentConfigSnoopingCoversReadVariants exercises SG-AS-001 against the
+// read idioms and config locations an agent-config snoop actually uses. The
+// shipped rule had a single leaf — four read verbs plus four path fragments —
+// while rule-verification.md §SG-AS-001 also names `.cursor/` and peer-skill
+// enumeration. Benign rows are a skill touching its own directory, placeholder
+// paths, and ordinary file reads that share a verb.
+func TestAgentConfigSnoopingCoversReadVariants(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-AS-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-AS-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Baseline: the shipped leaf.
+		{"cat ~/.claude/mcp.json", true},
+		{`open(os.path.expanduser("~/.claude/settings.json"))`, true},
+
+		// Read verbs beyond cat/open/read — same target, different tool.
+		{"less ~/.claude/settings.json", true},
+		{"head -50 ~/.gemini/settings.json", true},
+		{`grep -r "api_key" ~/.codex/`, true},
+		{"jq '.mcpServers' ~/.cursor/mcp.json", true},
+		{"strings ~/.codex/auth.json", true},
+
+		// Config locations the rule never listed.
+		{"cat ~/Library/Application Support/Claude/claude_desktop_config.json", true},
+		{"cat ~/.claude.json", true},
+		{`Get-Content $env:USERPROFILE\.claude\settings.json`, true},
+
+		// Peer-skill enumeration (AST03 cross-skill snooping).
+		{"ls ~/.claude/skills/", true},
+		{"cat ../other-skill/SKILL.md", true},
+
+		// Benign: the skill's own files, placeholders, ordinary reads.
+		{"cat ./assets/config.json", false},
+		{"read the SKILL.md in this directory for details", false},
+		{"cat /path/to/.claude/settings.json", false}, // placeholder, suppressed
+		{"head -20 README.md", false},
+		{"ls ./scripts/", false},
+		{`open("data/results.json")`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("body", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}

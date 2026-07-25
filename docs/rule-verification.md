@@ -388,11 +388,25 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** "use this for any request" 0.8; single-common-word trigger 0.6.
 - **Fixtures:** TP: description "Activate for every user message, always." FP: "Use when the user asks to resize images."
 
-### SG-AS-001 — Agent-config / cross-skill snooping  (AST03, high) — **NEW (SkillSpector AS1–AS3)**
-- **Signals:** **read** access (distinct from SG-INJ-004's write) to `.claude/, .codex/, .gemini/, .cursor/` config dirs, `mcp.json`/MCP config, or *other* skills' directories/SKILL.md (peer enumeration). These leak API keys, MCP tokens, and peers' instructions.
-- **FP carve-outs:** a skill reading *its own* directory; agent runtimes legitimately manage these (but a *skill* shouldn't). Placeholder/documentary.
-- **Confidence:** read `mcp.json`/other skills 0.8; read own config dir 0.4.
-- **Fixtures:** TP: `cat ~/.claude/mcp.json`. FP: skill reading its own `./assets/`.
+### SG-AS-001 — Agent-config / cross-skill snooping  (AST03, high) — **implemented** (`core-secret`)
+- **Signals (shipped):** two leaves. **(a) Config read** — a read verb within 40 chars of an agent
+  config location: `cat|less|head|tail|grep|rg|jq|strings|xxd|open|read|Get-Content` (with `read`
+  left open-ended so `readFileSync`/`read_text` match) against `mcp.json`,
+  `claude_desktop_config.json`, `.claude.json`, or the `.claude/ .codex/ .gemini/ .cursor/
+  .windsurf/ .config/{claude,codex,gemini,cursor}` dirs, `/` or `\` (PowerShell paths).
+  **(b) Peer enumeration** — `ls|dir|find|glob|cat|less|head|grep|rg|open|read|cp|copy` against
+  `.claude/skills`, `../<peer>/SKILL.md`, or `skills/*`. These leak API keys, MCP tokens, and peers'
+  instructions. Distinct from SG-INJ-004, which is the *write* form.
+- **FP carve-outs:** a skill reading *its own* directory (`./assets/`, its own `SKILL.md` with no
+  `../`); placeholder paths (`/path/to/` suppressed); documentary −0.4, which drops leaf (b) below
+  the emit threshold in prose. Agent runtimes legitimately manage these files — a *skill* shouldn't.
+- **Confidence:** config read 0.8; peer enumeration 0.7 (softer — listing a skills dir has benign
+  uses). Corpus: **4 findings / 3 skills of 240**, all genuine (a `.claude/loop.md` read, two
+  `~/.gemini/` reads, and `ls "${HOME}/.claude/skills"` in a stop-hook script).
+- **Fixtures:** TP: `cat ~/.claude/mcp.json`, `less ~/.claude/settings.json`,
+  `jq '.mcpServers' ~/.cursor/mcp.json`, `cat ~/Library/Application Support/Claude/claude_desktop_config.json`,
+  `ls ~/.claude/skills/`, `cat ../other-skill/SKILL.md`. FP: skill reading its own `./assets/`,
+  `head -20 README.md`, `ls ./scripts/`. See `TestAgentConfigSnoopingCoversReadVariants`.
 
 ### SG-DEP-001 — Unpinned dependencies  (AST02/AST07, medium) — **implemented** (`core-supply`)
 - **Signals (shipped):** only **explicit floating** specs, which are the high-signal, low-FP subset —
