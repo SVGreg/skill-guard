@@ -7,7 +7,9 @@ planned-rule entries that were previously scattered across `docs/skill-guard-des
 - **`sg-threat-research`** appends new gaps here (one row per candidate rule).
 - **`sg-rule-implement`** consumes the highest-priority `planned` row, ships it, and flips its
   status to `implemented` (linking the PR).
-- **`sg-issue-triage`** appends notable `must-have`/`useful` issues here.
+- **`sg-issue-triage`** appends notable `must-have`/`useful` issues to whichever table fits: a
+  candidate *detection* goes in **Backlog**, anything that changes the engine, CLI, or docs goes in
+  **Engine & hardening backlog**. Never invent an `SG-` id for a non-rule item.
 
 Status values: `planned` · `in-progress` · `implemented` · `wont-do`.
 Priority: `P0` (security gap, do next) · `P1` (roadmap-aligned) · `P2` (nice-to-have).
@@ -63,6 +65,9 @@ deliberately carry no `SG-` rule ID, because none of them is a rule.
 | `pkg/skill` + `pkg/scan` | **Reference/asset files are never scanned.** `classify` files every non-`SKILL.md` markdown as `asset`; `scan.Scan` builds targets only from `manifest`/`body`/`Scripts`/`Configs`. A payload in `references/*.md` scans clean (verified on `main@7287e27`). Side effect: the `refs` entry in `targets:` on rules like `SG-NET-001` is inert — no `refs` target is ever assembled. Distinct from `SG-REF-001..003`, which detect *instructions to fetch external content* rather than scanning content already in the bundle. | P0 | planned | issue #13, triaged `must-have`; found by `sg-code-review` over `pkg/skill` |
 | `pkg/rules` | **SG-NET-001 evadable via URL userinfo.** `scanURLHost`'s `urlHostRe` doesn't strip a `userinfo@` prefix, so `https://evil.com@pastebin.com` captures the whole authority and never matches the allowlist — verified `pastebin.com` flags, `evil.com@pastebin.com` does not. Affects every `url_host:` leaf (SG-NET-001 today). | P1 | planned | issue #24; found by `sg-code-review` over `pkg/rules` |
 | `pkg/skill` | **No total-bytes cap across a bundle.** `maxFileSize` bounds each file; nothing bounds the sum, and `File.Content` is retained for every file. Cannot cause a wrong verdict — resource exhaustion only, mainly for batch/CI scanning. Ceiling is a policy decision (constant vs `.skillguard.yaml` knob). Best sequenced *after* the row above, which changes which files' content must stay resident. | P1 | planned | issue #14, triaged `useful` |
+| `pkg/attest` | **`LoadKey` ignores the declared algorithm.** `keyFile.Algorithm` is parsed and never checked, so a key file declaring e.g. `ecdsa-p256` is silently loaded and used as Ed25519 while the attestation claims `ed25519`. Fix: accept `""` (keys written before the field was meaningful) or `"ed25519"`, reject the rest. | P2 | planned | issue #47, triaged `useful`; found by `sg-code-review` over `pkg/attest` |
+| `pkg/attest` | **`sign --usf` fails on an empty front-matter block.** `fmBlockRe` requires a newline between the delimiters, so `---\n---\n` never matches; `WriteUSFFields` then errors "has no front-matter block", which is misleading — the block exists, it is just empty. Fix with a `NormalizeSkillMD` round-trip test proving the Merkle root stays stable. | P2 | planned | issue #47, triaged `useful` |
+| `pkg/attest` | **`SavePub`/`WriteEnvelope` claim a mode they don't set.** Same create-only-perm behaviour as the `SaveKey` bug fixed in #46: `os.WriteFile`'s perm applies only when the file is created, so a `.pub` written over a `0600` file stays `0600` while `keygen` prints `mode 0644`. Harmless (public data) — either force the mode as `SaveKey` now does, or stop printing a mode the code does not guarantee. | P2 | planned | issue #47, triaged `useful` |
 
 ## SG-LLM-* (opt-in semantic engine — M5, engine not yet built)
 

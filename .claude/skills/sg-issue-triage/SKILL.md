@@ -43,11 +43,18 @@ Look for concrete evidence, not a hunch:
 ```sh
 git log --oneline -20 --grep "#<n>"          # a commit or squash-merge referencing the issue
 gh pr list --state merged --search "<n> in:body" --json number,title,mergedAt
-grep -rn "<rule-id>" pkg/rules/packs/         # for a rule request: does the rule exist now?
+grep -rn "<rule-id>" pkg/rules/packs/         # rule request: does the rule exist now?
 ```
 
+Those three are cheap but shallow — work that landed without citing the issue number leaves no
+trace in any of them. **The decisive evidence is the implicated code itself:** open the function,
+rule, or doc section the issue names and check whether it now does what was asked. For a rule
+request that is the pack entry plus its test; for an engine/CLI issue it is the function body
+(`awk '/^func <Name>/,/^}/' <file>`), and a row in `docs/planned-rules.md` flipped to `implemented`
+is a strong pointer to the PR that did it.
+
 Close **only** when you can name where it landed — a rule ID present in a pack, a merged PR number,
-a commit. Then:
+a commit, or the changed function. Then:
 
 ```sh
 gh issue close <n> --reason completed --comment "$(cat <<'EOF'
@@ -116,7 +123,7 @@ gh issue edit <n> --add-label <grade>
 | Grade | Colour | Description |
 |-------|--------|-------------|
 | `must-have` | `b60205` | Real security gap or correctness bug in scope |
-| `useful` | `0e8a16` | Worthwhile, roadmap-aligned improvement |
+| `useful` | `1a7f37` | Worthwhile, roadmap-aligned improvement |
 | `nice-to-have` | `c5def5` | Valid but low priority |
 | `out-of-scope` | `cfd3d7` | Outside static SKILL.md scanning + provenance |
 | `needs-info` | `fbca04` | Underspecified — awaiting a concrete answer |
@@ -128,8 +135,17 @@ are orthogonal to the PR type labels in the dispatcher's guardrail 4a; never mix
 ## 6. Feed the backlog
 
 For each `must-have` or `useful` issue that isn't already tracked, append a row to
-`docs/planned-rules.md` (or the relevant doc) referencing the issue number, so `sg-rule-implement`
-or `sg-code-review` can pick it up later. Commit that doc change on a branch and open a small PR:
+`docs/planned-rules.md` referencing the issue number, so `sg-rule-implement` or `sg-code-review` can
+pick it up later. **That file has two tables — pick the one that fits:**
+
+| Issue asks for | Table | Row shape |
+|----------------|-------|-----------|
+| a new detection | `## Backlog` | `ID \| AST \| Threat \| Priority \| Status \| Source` — needs an `SG-` id |
+| an engine, CLI, parsing, or resource change | `## Engine & hardening backlog (not detection rules)` | `Area \| Item \| Priority \| Status \| Source` — **no** `SG-` id |
+
+A code-hygiene or engine issue has no AST id and no rule id; forcing it into the rule table (or
+skipping the backlog because it doesn't fit there) is the failure mode to avoid. Commit the doc
+change on a branch and open a small PR:
 
 ```sh
 git checkout main && git pull --ff-only && git checkout -b triage/backlog-$(date +%Y%m%d)
