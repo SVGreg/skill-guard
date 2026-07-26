@@ -369,6 +369,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-INJ-004` | Write to agent identity/config file | AST01 | **AST01, AST03** | +AST03 (checklist files identity-file writes under both AST01 and AST03) |
 | `SG-ANTI-001` | Anti-refusal / jailbreak framing | AST01, AST05 | **AST01** | −AST05 (P1) |
 | `SG-INJ-006` | System-prompt / tool-schema exfiltration | AST01 | **AST01** | unchanged |
+| `SG-INJ-009` | Role confusion / forged operator turn | AST01 | **AST01** | authored into `SKILL.md` prose (a forged system/operator turn), so AST01 like the rest of the injection family; needs no override verb — the framing is the escalation |
 | `SG-MTA-001` | Unsafe YAML/deserialization tag | AST04 | **AST04** | unchanged (P4: `!!python/object` at load) |
 | `SG-MTA-003` | Over-broad allowed-tools | AST03 | **AST03** | unchanged (over-broad grant) |
 | `SG-NET-001` | Egress to suspicious host | AST01, AST05 | **AST01** | −AST05 (P2: exfil/C2, not instruction fetch) |
