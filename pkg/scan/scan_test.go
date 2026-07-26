@@ -52,7 +52,7 @@ func TestMaliciousFails(t *testing.T) {
 // TestSkillMDLineNumbersAreFileAbsolute guards against the front-matter/body
 // blobs being reported at blob-local line numbers instead of true file lines.
 // In testdata/malicious/SKILL.md the description injection is on file line 3 and
-// the body's system-prompt exfiltration is on file line 12.
+// the body's system-prompt exfiltration is on file line 15.
 func TestSkillMDLineNumbersAreFileAbsolute(t *testing.T) {
 	rep := scanFixture(t, "../../testdata/malicious")
 	line := func(rule string) int {
@@ -66,9 +66,23 @@ func TestSkillMDLineNumbersAreFileAbsolute(t *testing.T) {
 	if got := line("SG-INJ-001"); got != 3 {
 		t.Errorf("SG-INJ-001 (front-matter description) reported at line %d, want file line 3", got)
 	}
-	if got := line("SG-INJ-006"); got != 12 {
-		t.Errorf("SG-INJ-006 (body) reported at line %d, want file line 12", got)
+	if got := line("SG-INJ-006"); got != 15 {
+		t.Errorf("SG-INJ-006 (body) reported at line %d, want file line 15", got)
 	}
+}
+
+// TestMaliciousFixtureTriggersRoleConfusion asserts the SG-INJ-009 bundle
+// fixture (a forged <|im_start|>system turn on line 12) end-to-end. Its own test
+// rather than a row in TestMaliciousFails' `want` map: that map is a single line
+// every rule PR appends to, so it conflicts on every concurrently-open branch.
+func TestMaliciousFixtureTriggersRoleConfusion(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-INJ-009" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-INJ-009")
 }
 
 // TestDedupKeepsHighestConfidencePerTriple guards the documented dedup contract:

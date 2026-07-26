@@ -279,3 +279,56 @@ rules:
     fix: >-
       Do not instruct the agent to fetch and obey external instructions. Keep all directives inside the
       reviewed bundle; if external data is needed, fetch it as data to process, never as instructions.
+
+  - id: SG-INJ-009
+    title: Role confusion — text forged to look like a system/operator turn
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.85
+    targets: [body, manifest, configs]
+    match:
+      # A skill body is *user-turn* content. When it embeds the delimiters a
+      # model uses to separate turns, the text that follows can be read as a
+      # higher-privilege turn than it is — the injected directive arrives
+      # wearing the operator's voice. Distinct from SG-INJ-001 (which needs an
+      # override verb like "ignore previous instructions"): this needs no verb
+      # at all, because the *framing* does the work.
+      #
+      # Precision comes from the tokens being artifacts, not English. Measured
+      # across the 240-skill evaluation corpus: every leaf below had **zero**
+      # hits except the Llama one (a single line inside a security-patterns
+      # reference file that documents this very attack).
+      any:
+        # ChatML / Llama-3 / OpenAI special tokens. A SKILL.md has no honest
+        # reason to contain a turn delimiter.
+        - regex: '<\|\s*(im_start|im_end|system|user|assistant|end_header_id|start_header_id|endoftext|channel)\s*\|>'
+          confidence: 0.9
+        # Llama-2 / Mistral instruction and system delimiters.
+        - regex: '(\[/?INST\]|<</?SYS>>)'
+          confidence: 0.85
+        # XML-style role envelopes.
+        - regex: '(?i)</?(system|developer|admin)(_prompt)?>'
+          confidence: 0.85
+        # A forged operator header on its own line: "[SYSTEM]:", "[ADMIN]".
+        - regex: '(?im)^\s*\[\s*(SYSTEM|ADMIN|DEVELOPER|OPERATOR)\s*\]\s*:?'
+          confidence: 0.85
+        # Explicit prompt-boundary markers.
+        - regex: '(?i)\b(BEGIN|START|END)\s+SYSTEM\s+(PROMPT|MESSAGE|INSTRUCTIONS?)\b'
+          confidence: 0.85
+        # "system: you are …" — a role label followed by a directive. The
+        # directive words are required so an ordinary `system:` config key or
+        # the word "system:" in prose does not match.
+        - regex: '(?im)^\s*(system|developer)\s*:\s*(you|your|always|never|from now|ignore|disregard)'
+          confidence: 0.85
+    suppress:
+      - '(?i)/path/to/'
+    rationale: >-
+      Text in a skill body that imitates a system or operator turn — ChatML/Llama special tokens,
+      an XML role envelope, or a forged "[SYSTEM]:" header — can be read by the agent as a
+      higher-privilege instruction than the user-turn content it actually is. Unlike an explicit
+      override it needs no imperative verb: the forged framing alone carries the escalation (AST01).
+    fix: >-
+      Remove turn delimiters and role headers from skill content. A skill is user-turn material;
+      express its guidance as ordinary prose, and never imitate the operator or system voice.
