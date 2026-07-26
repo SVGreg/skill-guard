@@ -133,3 +133,53 @@ rules:
       - '(?i)(registry\.npmjs\.org|pypi\.org/simple|proxy\.golang\.org)'
     rationale: Redirecting a package manager to a non-default index, registry, or module proxy makes every subsequent install fetch code from a host the skill chose — the delivery half of dependency confusion and typosquatting, and it silently outlives the skill when set via config or env (AST02/AST07).
     fix: Install from the default public registry, or pin the exact artifact by hash. If your organisation genuinely uses an internal mirror, waive this rule in .skillguard.yaml rather than shipping the redirect in a skill.
+
+  - id: SG-DEP-009
+    title: Dependency sourced from a raw VCS URL or arbitrary archive
+    ast: [AST02, AST07]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [body, scripts, configs, manifest]
+    match:
+      # Sibling of SG-DEP-008. That rule catches "same package name, attacker's
+      # registry"; this one catches "no registry at all" — the dependency is a
+      # git ref or a bare archive URL, so nothing about it is versioned, hashed,
+      # yank-able, or subject to any registry's malware scanning, and a `main`
+      # branch reference re-resolves to different code on every install.
+      #
+      # Every leaf is 0.9 for the same forced reason documented on SG-DEP-008:
+      # `scripts`/`configs` targets get no +0.15 instruction bonus, so a single
+      # nearby documentary keyword (`example` is one, and example.com is the
+      # natural host to write in a fixture) would sink anything lower.
+      any:
+        # pip / uv — VCS reference, or a direct URL to an archive/wheel.
+        - regex: '(?i)\b(pip3?|uv pip|uv add|python\s+-m\s+pip)\s+(install|add)\b[^\n]{0,120}\bgit\+'
+          confidence: 0.9
+        - regex: '(?i)\b(pip3?|uv pip|python\s+-m\s+pip)\s+install\b[^\n]{0,120}https?://[^\s]+\.(tar\.gz|tgz|zip|whl)'
+          confidence: 0.9
+        # PEP 508 direct reference in a requirements file: `name @ git+…` /
+        # `name @ https://…/pkg-1.0.tar.gz`. Anchored so prose like
+        # "contact the author @ https://example.com" cannot match — the URL must
+        # end in a VCS scheme or an archive extension.
+        - regex: '(?im)^\s*[\w.-]+\s*@\s*(git\+\S+|https?://\S+\.(tar\.gz|tgz|zip|whl))'
+          confidence: 0.9
+        # npm / yarn / pnpm / bun — git dependency or a tarball URL.
+        - regex: '(?i)\b(npm|pnpm|yarn|bun)\s+(install|i|add)\b[^\n]{0,120}(git\+|github:|gitlab:|bitbucket:|https?://[^\s]+\.(tgz|tar\.gz))'
+          confidence: 0.9
+        # The same thing declared in package.json rather than on a command line.
+        # Requires a VCS scheme or an archive extension, so an ordinary
+        # `"homepage": "https://github.com/me/proj"` is not a dependency spec.
+        - regex: '(?i)"[\w@/.-]+"\s*:\s*"(git\+|github:|gitlab:|bitbucket:|https?://[^"]+\.(tgz|tar\.gz))'
+          confidence: 0.9
+        # Cargo — `cargo add --git`, or a git dependency in Cargo.toml.
+        - regex: '(?im)\bcargo\s+add\b[^\n]{0,80}--git\b|^\s*[\w-]+\s*=\s*\{[^\n]*\bgit\s*='
+          confidence: 0.9
+        # Bundler — `gem "x", git:/github:` in a Gemfile.
+        - regex: '(?im)^\s*gem\s+[\x27"][\w-]+[\x27"][^\n]{0,80},\s*(git|github)\s*:'
+          confidence: 0.9
+    suppress:
+      - '(?i)/path/to/'
+    rationale: A dependency pulled from a raw git URL or a bare archive URL bypasses the registry entirely — no version resolution, no integrity hash, no yank or malware scanning, and a branch reference re-resolves to whatever the repository holds at install time (AST02/AST07).
+    fix: Depend on a published, version-pinned package from the default registry. If a VCS dependency is unavoidable, pin it to an immutable commit SHA and record the artifact hash.
