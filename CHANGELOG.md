@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.10](https://github.com/SVGreg/skill-guard/compare/v0.1.9...v0.1.10) (2026-07-26)
+
+
+### Features
+
+* **rules:** add SG-DEP-008 — install redirected to a non-default registry (AST02/AST07) ([#59](https://github.com/SVGreg/skill-guard/issues/59)) ([2fe8177](https://github.com/SVGreg/skill-guard/commit/2fe8177f671c308cce93561628efadec33f830f3))
+* **rules:** add SG-DEP-009 — dependency from a raw VCS URL or bare archive (AST02/AST07) ([#67](https://github.com/SVGreg/skill-guard/issues/67)) ([2af3632](https://github.com/SVGreg/skill-guard/commit/2af36322192f9777b22edae9b6947580a1aa5b3e))
+* **rules:** add SG-INJ-009 — role confusion / forged operator turn (AST01) ([#70](https://github.com/SVGreg/skill-guard/issues/70)) ([bce68b0](https://github.com/SVGreg/skill-guard/commit/bce68b0f662a10c9d59c743f6dfc12e55c5f8d22))
+* **rules:** add SG-MCP-001 — MCP tool-description poisoning (AST04/AST01) ([#58](https://github.com/SVGreg/skill-guard/issues/58)) ([36d0173](https://github.com/SVGreg/skill-guard/commit/36d01737371fcd87b12d59acf3e484f94be49d55))
+* **rules:** add SG-MTA-004 — over-broad filesystem permission scope (AST03) ([#71](https://github.com/SVGreg/skill-guard/issues/71)) ([7ed404f](https://github.com/SVGreg/skill-guard/commit/7ed404f6c90bc509a1acd23e216ee1e578e42dc4))
+* **rules:** add SG-NET-005 — DNS exfiltration / hardcoded IP endpoint (AST01/AST06) ([#62](https://github.com/SVGreg/skill-guard/issues/62)) ([26b569a](https://github.com/SVGreg/skill-guard/commit/26b569a031eab11f9233b6ded8d1bbc2e99208d3))
+* **rules:** add SG-SEC-005 — instruction to attach a credential to an outbound request (AST03/AST01) ([#66](https://github.com/SVGreg/skill-guard/issues/66)) ([f833c33](https://github.com/SVGreg/skill-guard/commit/f833c33a97c11fa1a9b8a85ecb562faa8d07af55))
+
+
+### Bug Fixes
+
+* **report:** escape terminal control characters in the text report ([#68](https://github.com/SVGreg/skill-guard/issues/68)) ([dacd91d](https://github.com/SVGreg/skill-guard/commit/dacd91d080e797c538386288346dc94dd4ac8549))
+* **rules:** widen SG-CFG-001 to YAML and TOML hook configs ([#61](https://github.com/SVGreg/skill-guard/issues/61)) ([1ec654b](https://github.com/SVGreg/skill-guard/commit/1ec654bab258f6db4703a003d0cb34d14483f43a))
+* **verify:** neutralize forged verdict lines and fail closed on unreadable expiry ([#60](https://github.com/SVGreg/skill-guard/issues/60)) ([d8fa7ef](https://github.com/SVGreg/skill-guard/commit/d8fa7efde0a2d2480ccd8b0187607930447dea59))
+
 ## [0.1.9](https://github.com/SVGreg/skill-guard/compare/v0.1.8...v0.1.9) (2026-07-25)
 
 
