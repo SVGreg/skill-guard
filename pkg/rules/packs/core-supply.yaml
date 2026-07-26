@@ -89,3 +89,47 @@ rules:
     fix: >-
       Pin an exact version and commit a lockfile with hashes (`pkg==1.2.3`, `"pkg": "1.2.3"`,
       `image@sha256:…`, a git tag or commit SHA). Avoid `latest`/`*`/`@main`.
+
+  - id: SG-DEP-008
+    title: Package install redirected to a non-default registry
+    ast: [AST02, AST07]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [body, scripts, configs, manifest]
+    match:
+      # Every leaf is 0.9, with no gradation by signal strength — that is forced,
+      # not chosen. `docKeywords` includes "example", so any match near an
+      # example.com/`.example` URL takes the documentary -0.4, and a scripts /
+      # configs target has no +0.15 instruction bonus to absorb it. At 0.85 the
+      # env-var and .npmrc leaves silently failed their own tests. Same cliff as
+      # SG-MCP-001; see the engine-backlog row on the documentary modifier.
+      any:
+        # pip / uv: index redirect on the command line or via env.
+        - regex: '(?i)\b(pip3?|uv pip|python\s+-m\s+pip)\s+install\b[^\n]{0,120}--(extra-)?index-url[=\s]'
+          confidence: 0.9
+        - regex: '(?i)\b(pip3?|uv pip|python\s+-m\s+pip)\s+install\b[^\n]{0,120}--trusted-host[=\s]'
+          confidence: 0.9
+        - regex: '(?i)\bPIP_(EXTRA_)?INDEX_URL\s*='
+          confidence: 0.9
+        # npm / yarn / pnpm: per-command registry, persisted config, or .npmrc.
+        - regex: '(?i)\b(npm|pnpm|yarn)\s+(install|i|add)\b[^\n]{0,120}--registry[=\s]'
+          confidence: 0.9
+        - regex: '(?i)\b(npm|pnpm|yarn)\s+config\s+set\s+registry\b'
+          confidence: 0.9
+        - regex: '(?im)^\s*(@[\w-]+:)?registry\s*=\s*https?://'
+          confidence: 0.9
+        - regex: '(?i)\bNPM_CONFIG_REGISTRY\s*='
+          confidence: 0.9
+        # Go module proxy / Rust source replacement.
+        - regex: '(?i)\bgo\s+env\s+-w\s+GO(PROXY|PRIVATE|NOSUMDB|SUMDB)\s*='
+          confidence: 0.9
+        - regex: '(?i)\breplace-with\s*=\s*["\x27]'
+          confidence: 0.9
+    suppress:
+      - '(?i)/path/to/'
+      # The canonical public indexes are not a redirect.
+      - '(?i)(registry\.npmjs\.org|pypi\.org/simple|proxy\.golang\.org)'
+    rationale: Redirecting a package manager to a non-default index, registry, or module proxy makes every subsequent install fetch code from a host the skill chose — the delivery half of dependency confusion and typosquatting, and it silently outlives the skill when set via config or env (AST02/AST07).
+    fix: Install from the default public registry, or pin the exact artifact by hash. If your organisation genuinely uses an internal mirror, waive this rule in .skillguard.yaml rather than shipping the redirect in a skill.

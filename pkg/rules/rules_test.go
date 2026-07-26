@@ -769,3 +769,51 @@ func TestAgentHookConfigRequiresEventAndCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestIndexRedirectCoversDependencyConfusion pins SG-DEP-008 to the index/
+// registry-redirect subset of "bootstrap install". The broad form is
+// deliberately not flagged: 71 of the 217 corpus skills mention a plain
+// `pip install`/`npm install`, so a rule on that would fire on a third of all
+// skills. Redirecting the index is the delivery half of dependency confusion
+// and had zero corpus hits.
+func TestIndexRedirectCoversDependencyConfusion(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-DEP-008" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-DEP-008 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"pip install requests --index-url https://pkgs.internal.example/simple", true},
+		{"pip3 install -r requirements.txt --extra-index-url=https://mirror.example/py", true},
+		{"python -m pip install foo --trusted-host mirror.example", true},
+		{"export PIP_INDEX_URL=https://pkgs.example/simple", true},
+		{"npm install left-pad --registry https://npm.example.com", true},
+		{"npm config set registry https://npm.example.com", true},
+		{"registry=https://npm.example.com", true},
+		{"go env -w GOPROXY=https://proxy.example.com,direct", true},
+
+		// Benign: ordinary installs, and the canonical public indexes.
+		{"pip install -r requirements.txt", false},
+		{"npm install --save-dev typescript", false},
+		{"npm install && npm run build", false},
+		{"pip install requests --index-url https://pypi.org/simple", false}, // canonical, suppressed
+		{"registry=https://registry.npmjs.org/", false},                     // canonical, suppressed
+		{"go install golang.org/x/tools/cmd/goimports@latest", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}

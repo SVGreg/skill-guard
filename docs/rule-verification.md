@@ -551,6 +551,14 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** content-trust disabled 0.7; `:latest` 0.4.
 - **Fixtures:** TP: `docker pull evil:latest --disable-content-trust`. FP: `image@sha256:…`.
 
+### SG-DEP-008 — Package install redirected to a non-default registry  (AST02/AST07, high) — **implemented** (`core-supply`)
+- **Signals (shipped):** an install pointed at a **non-default index/registry/proxy** — `pip|uv pip|python -m pip install … --index-url|--extra-index-url|--trusted-host`, `PIP_(EXTRA_)INDEX_URL=`, `npm|pnpm|yarn (install|add) … --registry`, `npm config set registry`, an `.npmrc` `registry=https://…` line (including scoped `@scope:registry=`), `NPM_CONFIG_REGISTRY=`, `go env -w GOPROXY|GOPRIVATE|GONOSUMDB|GOSUMDB=`, and a Cargo `replace-with = "…"` source replacement.
+- **Scope, decided by measurement.** The backlog row read "`pip install`/`npm install`/`curl | sh` bootstrap", but **71 of the 217 corpus skills mention a plain install command** — a rule on that fires on a third of all skills and is unusable. `curl … | sh` is already SG-NET-002 (critical), `sudo <pkg-manager>` is already SG-EXE-003 (`^\s*sudo\s+\w`, high), and `npx -y`/`uvx` is SG-DEP-007. What was left uncovered, and what actually carries the attack, is the **index redirect**: the delivery half of dependency confusion and typosquatting. Corpus prevalence of that subset: **0 of 217**.
+- **FP carve-outs:** the canonical public indexes are suppressed (`registry.npmjs.org`, `pypi.org/simple`, `proxy.golang.org`) — pointing at the default is not a redirect. `/path/to/` placeholders. A legitimate corporate mirror will match by design; the `fix` text directs those to a `.skillguard.yaml` waiver rather than a looser rule.
+- **Confidence — every leaf is 0.9, and the flatness is forced, not chosen.** `docKeywords` includes `example`, so a match anywhere near an `example.com` / `.example` URL takes the documentary −0.4, and a `scripts`/`configs` target has no +0.15 instruction bonus to absorb it. At 0.85 the `PIP_INDEX_URL`, `.npmrc` and `GOPROXY` leaves failed their own tests for that reason alone. Signal-strength gradation is currently unusable on non-body targets — see the engine-backlog row (SG-MCP-001 hit the same cliff independently).
+- **Corpus:** **0 findings / 240 skills**, verdicts unchanged (209/22/9).
+- **Fixtures:** TP `testdata/malicious/setup.sh` (`pip install … --index-url https://pkgs.internal-mirror.test/simple`). FP: `pip install -r requirements.txt`, `npm install --save-dev typescript`, and both canonical registries. See `TestIndexRedirectCoversDependencyConfusion` (8 TP, 6 benign).
+
 ### SG-DEP-007 — Remote-package auto-execution via a package runner  (AST02/AST01, medium) — **implemented** (`core-supply`)
 - **Signals:** the fetch-**and-execute** runner idioms — `npx -y` / `bunx -y` (explicit
   auto-confirm), `pnpm dlx` / `yarn dlx` (the download-and-run subcommand), `uvx <tool>`, and
@@ -678,7 +686,6 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 
 | ID | Threat | Family note |
 |---|---|---|
-| `SG-DEP-008` | `pip install` / `npm install` / `curl \| sh` bootstrap in body or scripts | distinct from `SG-DEP-007` (runner auto-execution) and `SG-NET-002` (pipe-to-shell in a command) |
 | `SG-DEP-009` | Dependency sourced from a raw git URL / arbitrary archive rather than a registry | |
 | `SG-DEP-010` | Post-install / lifecycle hook that runs arbitrary code | sibling of `SG-CFG-001` — shipping a manifest that installs execution |
 | `SG-DEP-011` | Fetches a binary/blob and marks it executable | |
