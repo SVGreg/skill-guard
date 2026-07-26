@@ -392,7 +392,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns |
 | AST02 Supply Chain | Partial — provenance + static rules | `sign`/`verify` attestation, plus the `core-supply` pack: `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) and `SG-DEP-001` (unpinned/floating dependency specs — `*`/`latest`/`@latest`/`@main`/`:latest`), and `SG-CFG-001` in `core-exec` (a bundled agent-hook config that auto-executes commands — shipping the config *is* the supply-chain delivery); the rest of the SG-DEP family remains planned |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
-| AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest |
+| AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest, and `SG-MCP-001` — instructions planted in a bundled MCP config's tool/parameter descriptions (OWASP MCP Top 10 MCP03) |
 | AST05 Untrusted External Instr. | Partial | `SG-REF-003` (runtime instruction fetch / "external brain") implemented; the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
 | AST06 Weak Isolation | Weak/partial | only visible signals (bind-all listeners); the sandbox itself is a runtime property |
 | AST07 Update Drift | Weak/partial (static signal) | mostly runtime/registry, but `SG-DEP-001` flags floating specs (`latest`/`@main`) that invite silent drift; otherwise addressed by pinning + `verify` re-scan |
