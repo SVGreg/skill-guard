@@ -23,8 +23,55 @@ rules:
           confidence: 0.85
         - regex: '(?i)\bchild_process\.(exec|execSync)\s*\('
           confidence: 0.7
+        # Python's `exec` builtin. The rule is named "eval / exec" and
+        # rule-verification's headline TP fixture is exec(base64.b64decode(…)),
+        # but only `eval(` was ever matched — `exec(` slipped through entirely.
+        # The leading [^.\w] also keeps JS `regex.exec(s)` / `pattern.exec(s)`
+        # out while still catching the destructured
+        # `const {exec} = require('child_process'); exec(cmd)` form that the
+        # `child_process.exec(` leaf above cannot see.
+        # No `\s*` before the paren, unlike the other leaves: `exec (` with a
+        # space matches English as readily as code, and did — a corpus comment
+        # reading "the string-form exec (xprintidle / gdbus)" was a measured
+        # false positive. Both Python and JS write the call as `exec(`.
+        - regex: '(?:^|[^.\w])exec\('
+          confidence: 0.7
+        # Import a module by name at runtime — the evasion primitive behind
+        # __import__('os').system(…), which reaches a sink without naming it
+        # (rule-verification AST9: reflective access is *more* suspicious).
+        - regex: '\b__import__\s*\('
+          confidence: 0.85
+        # Direct exec/spawn syscall wrappers — os.system's lower-level siblings.
+        - regex: '(?i)\bos\.(execv[pe]*|execl[pe]*|spawn[lv]p?e?)\s*\('
+          confidence: 0.75
+        # The classic shell upgrade in reverse-shell payloads.
+        - regex: '(?i)\bpty\.spawn\s*\('
+          confidence: 0.85
+        # Node's vm module: compile and run a string in a fresh context.
+        - regex: '(?i)\bvm\.runIn(This|New)?Context\s*\('
+          confidence: 0.8
+        # JS eval-equivalent: the Function constructor compiles a string body.
+        # Case-SENSITIVE, deliberately: `new function(){…}` (lowercase) is the
+        # ordinary anonymous-object idiom and has nothing to do with the
+        # constructor. Under (?i) it matched, and a vendored echarts bundle in
+        # the corpus proved it.
+        - regex: '\bnew\s+Function\s*\('
+          confidence: 0.7
+        # PowerShell's eval. `irm <url> | iex` is the Windows counterpart of
+        # curl|sh (SG-NET-002 only matches the POSIX pipe-to-shell form).
+        # 0.9, not 0.8, for the reason documented on SG-DEP-008: this idiom
+        # almost always carries a URL on the same line, `example` is a
+        # docKeyword, and a `scripts` target has no +0.15 instruction bonus to
+        # absorb the resulting -0.4. At 0.8 the canonical `irm … | iex` payload
+        # silently failed its own test.
+        - regex: '(?i)(\bInvoke-Expression\b|\|\s*iex\b)'
+          confidence: 0.9
     suppress:
       - '(?i)ast\.literal_eval'
+      # A *definition* named exec is not a call into an execution sink.
+      # `\bexec\b` does not match exec_payload, so a helper wrapping a real
+      # sink is still flagged by its own body.
+      - '(?i)\b(function|def)\s+exec\b'
     rationale: Dynamic execution sinks enable arbitrary code execution, especially when fed untrusted input (AST01).
     fix: Avoid eval/exec/shell=True. Use explicit argument lists and validate all inputs.
 
