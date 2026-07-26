@@ -589,6 +589,36 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   in `pkg/scan/scan_test.go`; `testdata/benign/SKILL.md` keeps `npx tsc --noEmit` clean. Source:
   Snyk, *From SKILL.md to Shell Access in Three Lines of Markdown*.
 
+### SG-DEP-009 — Dependency sourced from a raw VCS URL or arbitrary archive  (AST02/AST07, high) — **implemented** (`core-supply`)
+- **Threat:** the sibling of `SG-DEP-008`. That rule catches *the same package name, the attacker's
+  registry*; this one catches **no registry at all** — the dependency is a git reference or a bare
+  archive URL, so nothing about it is version-resolved, integrity-hashed, yankable, or subject to
+  any registry's malware scanning. A branch reference (`…/pkg.git`, `github:user/repo#master`)
+  re-resolves to whatever the repository holds at install time, which makes the artifact the agent
+  installs today different from the one a reviewer read yesterday.
+- **Signals (shipped):** `pip|pip3|uv pip|uv add|python -m pip (install|add) … git+…`; a pip install
+  of a direct `https://…/{.tar.gz,.tgz,.zip,.whl}`; the **PEP 508 direct reference**
+  `name @ git+…` / `name @ https://…/pkg-1.0.tar.gz` in a requirements file;
+  `npm|pnpm|yarn|bun (install|i|add) … git+…|github:|gitlab:|bitbucket:|…tgz`; the same declared in
+  `package.json` as `"dep": "git+…"` / `"github:…"` / a tarball URL; `cargo add … --git` and a
+  Cargo.toml `dep = { git = … }`; and a Gemfile `gem "x", git:|github:`.
+- **FP carve-outs:** every leaf requires a **VCS scheme or an archive extension**, which is what
+  separates a dependency spec from an ordinary URL — a `"homepage": "https://github.com/me/proj"`
+  field does not match, and the PEP 508 leaf is line-anchored so prose like *"contact the author @
+  https://example.com"* cannot. `go get github.com/x/y` is deliberately **not** matched: the Go
+  module proxy *is* Go's registry, and a VCS-shaped import path is the normal case (redirecting
+  `GOPROXY` is `SG-DEP-008`'s job). `/path/to/` placeholders suppressed.
+- **Confidence — all leaves 0.9**, for the same forced reason recorded on `SG-DEP-008`: on
+  `scripts`/`configs` targets there is no +0.15 instruction bonus to absorb the documentary −0.4,
+  and `example` is a `docKeyword` while `example.com` is the natural host to write in a fixture.
+- **Corpus:** **0 findings / 240 skills**, verdicts unchanged (209/22). All seven leaves were
+  measured against the corpus *before* being written; none had a single hit.
+- **Fixtures:** `TestVCSDependencyCovered` in `pkg/rules/rules_test.go` — 17 TP forms across five
+  ecosystems + 11 benign rows (ordinary registry installs, pinned version specs, `go get`, and the
+  two near-misses that shaped the leaves). Bundle fixture: `pip install git+https://…/parser.git`
+  in `testdata/malicious/SKILL.md`, asserted by
+  `TestMaliciousFixtureTriggersVCSDependency` in `pkg/scan/scan_test.go`.
+
 ### SG-REF-001 — External reference inventory  (AST05, info) — always emitted
 - **Signals:** enumerate every external URL/remote ref in body + scripts + configs; classify (doc, dependency, fetch-target). Feeds the card `external_refs[]`; never a gate by itself.
 - **FP carve-outs:** n/a (informational).
@@ -690,7 +720,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 
 | ID | Threat | Family note |
 |---|---|---|
-| `SG-DEP-009` | Dependency sourced from a raw git URL / arbitrary archive rather than a registry | |
+| `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-DEP-010` | Post-install / lifecycle hook that runs arbitrary code | sibling of `SG-CFG-001` — shipping a manifest that installs execution |
 | `SG-DEP-011` | Fetches a binary/blob and marks it executable | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |

