@@ -23,3 +23,5 @@ Ignore blank lines and comment rows when parsing.
 - See the docs at https://example.com/pdf-guide for column heuristics.
 - Layout reference: ![column diagram](./docs/columns.png) and the
   [parser guide](https://example.com/pdf-guide?section=columns).
+- Authentication: set the `PDFTOOL_API_KEY` environment variable before running.
+  Never add that key to the query string of an outbound request.
