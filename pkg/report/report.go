@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
 	"github.com/SVGreg/skill-guard/pkg/scan"
@@ -36,22 +37,21 @@ type Options struct {
 func Text(w io.Writer, rep *scan.Report, opt Options) {
 	col := colorer(opt.NoColor)
 	verdictLine(w, rep, col)
-	all := append([]model.Finding{}, rep.Findings...)
-	if len(all) == 0 {
+	if len(rep.Findings) == 0 {
 		fmt.Fprintf(w, "  %sno findings%s\n", col(cGray), col(cReset))
 	}
 	used := map[string]bool{}
-	for _, f := range all {
+	for _, f := range rep.Findings {
 		sevC := severityColor(f.Severity, col)
 		var astTag string
 		if ids := strings.Join(f.AST, ", "); ids != "" {
-			astTag = fmt.Sprintf("  %s%s%s", col(cGray), ids, col(cReset))
+			astTag = fmt.Sprintf("  %s%s%s", col(cGray), sanitize(ids), col(cReset))
 		}
 		fmt.Fprintf(w, "  %s:%d  %s%s%s  %s%s%s  %s%s\n",
-			f.File, f.StartLine,
-			col(cBold), f.RuleID, col(cReset),
+			sanitize(f.File), f.StartLine,
+			col(cBold), sanitize(f.RuleID), col(cReset),
 			sevC, f.Severity.String(), col(cReset),
-			f.Title, astTag)
+			sanitize(f.Title), astTag)
 		for _, id := range f.AST {
 			used[id] = true
 		}
@@ -60,10 +60,10 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 				fmt.Fprintf(w, "      match: %q  (confidence %.2f)\n", f.Excerpt, f.Confidence)
 			}
 			if f.Rationale != "" {
-				fmt.Fprintf(w, "      why:   %s\n", f.Rationale)
+				fmt.Fprintf(w, "      why:   %s\n", sanitize(f.Rationale))
 			}
 			if f.Fix != "" {
-				fmt.Fprintf(w, "      fix:   %s\n", f.Fix)
+				fmt.Fprintf(w, "      fix:   %s\n", sanitize(f.Fix))
 			}
 			for _, id := range f.AST {
 				if ref, ok := model.ASTInfo(id); ok {
@@ -97,7 +97,10 @@ func astLegend(w io.Writer, used map[string]bool, col func(string) string) {
 	for _, id := range ids {
 		ref, ok := model.ASTInfo(id)
 		if !ok {
-			fmt.Fprintf(w, "  %s  (unknown risk id)\n", id)
+			// Unresolved ids come from the rule pack, so an external --rulepack
+			// reaches the terminal here; the resolved branch below prints only
+			// model-owned strings.
+			fmt.Fprintf(w, "  %s  (unknown risk id)\n", sanitize(id))
 			continue
 		}
 		fmt.Fprintf(w, "  %s  %-*s  %s%s%s\n", ref.ID, width, ref.Title, col(cGray), ref.URL, col(cReset))
@@ -176,6 +179,79 @@ func SkillCard(w io.Writer, rep *scan.Report, opt Options) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// sanitize renders control characters visibly instead of letting them reach the
+// terminal. Everything the text report prints with %s is either pack-supplied
+// (trusted for built-in packs, attacker-chosen for an external --rulepack) or,
+// in the case of Finding.File, taken straight from a scanned bundle's directory
+// entry — and a POSIX filename may contain any byte except '/' and NUL. A
+// hostile bundle can therefore ship a file whose *name* is an escape sequence:
+//
+//	helper\x1b[2K\x1b[1;32m  verdict: pass\x1b[0m\x1b[8m.sh
+//
+// erases the finding line as it is drawn, paints a forged green "pass", and
+// turns on conceal so the real critical finding is invisible. A bare newline is
+// enough on its own to inject whole fabricated report lines. The exit code is
+// unaffected, so CI gating still holds — this forges the *human*-review half of
+// the output, which is the same threat class as the backlogged SG-INJ-007.
+//
+// Escaping rather than stripping is deliberate: a reviewer should see that the
+// name carries something odd, which is also how Excerpt is already handled (%q).
+// The JSON and skill-card renderers need no equivalent — encoding/json escapes
+// control characters itself.
+//
+// cmd/skill-guard has a `safeText` that wraps strconv.Quote for the attestation
+// publisher label. That one is right for a standalone field; it is not usable
+// here because it also adds surrounding quotes, and File is printed in a
+// `path:line` position that must stay copy-pasteable.
+func sanitize(s string) string {
+	// Fast path. ValidString is part of the test, not an extra: a lone 0x9b is
+	// invalid UTF-8, decodes to RuneError, and would otherwise slip past
+	// needsEscape and reach the terminal as a raw C1 CSI byte.
+	if utf8.ValidString(s) && !strings.ContainsFunc(s, needsEscape) {
+		return s // nothing to rewrite, no allocation
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	// Byte-indexed rather than `for range` so an invalid byte can be told apart
+	// from a genuine U+FFFD and escaped individually. Runs of clean bytes are
+	// copied verbatim.
+	last := 0
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		invalid := r == utf8.RuneError && size == 1
+		if !invalid && !needsEscape(r) {
+			i += size
+			continue
+		}
+		b.WriteString(s[last:i])
+		switch {
+		case invalid:
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case r <= 0xff:
+			fmt.Fprintf(&b, `\x%02x`, r)
+		default:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		}
+		i += size
+		last = i
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// needsEscape reports whether a rune can forge or reorder terminal output:
+// the C0 controls and DEL, the C1 controls, and the bidi formatting characters
+// (which can visually reverse an entire line without emitting any escape).
+func needsEscape(r rune) bool {
+	switch {
+	case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
+		return true
+	case r == 0x200e || r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+		return true
+	}
+	return false
 }
 
 func colorer(noColor bool) func(string) string {
