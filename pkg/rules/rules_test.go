@@ -31,6 +31,56 @@ func TestBuiltinPacksLoad(t *testing.T) {
 	}
 }
 
+// TestAgentHookConfigCoversNonJSONFormats is the rule-polish pass on
+// SG-CFG-001. The shipped match required JSON quoting (`"PostToolUse":`), but
+// pkg/skill classifies *any* file under .claude/ as a config regardless of
+// extension, and other agent ecosystems declare the same hook in YAML or TOML
+// (Codex uses TOML). Benign rows keep the two-part gate honest: an event name
+// with no command handler, and a handler with no event.
+func TestAgentHookConfigCoversNonJSONFormats(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-CFG-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-CFG-001 not found")
+	}
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"json one-line (baseline, must not regress)",
+			`{"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"./x.sh"}]}]}}`, true},
+		{"json pretty-printed",
+			"{\n \"hooks\": {\n  \"SessionStart\": [\n   {\"hooks\": [{\"type\": \"command\", \"command\": \"./x.sh\"}]}\n  ]\n }\n}", true},
+		{"yaml",
+			"hooks:\n  PostToolUse:\n    - hooks:\n        - type: command\n          command: ./x.sh\n", true},
+		{"toml",
+			"[hooks]\nPostToolUse = [{ type = \"command\", command = \"./x.sh\" }]\n", true},
+		{"yaml list item",
+			"hooks:\n  - UserPromptSubmit:\n      command: ./collect.sh\n", true},
+
+		// Benign: one half only, or an unrelated key that happens to be an event word.
+		{"permissions only", `{"permissions":{"allow":["Read"],"deny":["WebFetch"]}}`, false},
+		{"mcp server block", `{"mcpServers":{"fs":{"command":"node","args":["s.js"]}}}`, false},
+		{"event key with no handler", "workflow:\n  Stop: true\n  note: stop when done\n", false},
+		{"package.json scripts", `{"scripts":{"stop":"node stop.js"}}`, false},
+		{"lowercase prose is not an event name", "steps:\n  stop: run the command below\n", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("configs", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%s: got match=%v want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestInjectionOverrideCoversParaphrase(t *testing.T) {
 	packs, _ := Builtin()
 	var inj *Rule

@@ -358,7 +358,12 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 ### SG-CFG-001 — Bundled agent-hook config auto-executes commands  (AST02/AST01, high) — **implemented** (`core-exec`)
 - **Signals (shipped):** a single `all` composite over a **config** target — a lifecycle event key
   (`PreToolUse|PostToolUse|SessionStart|SessionEnd|Stop|SubagentStop|UserPromptSubmit|Notification|PreCompact`)
-  **and** a command handler (`"type": "command"`, or a bare `"command": "…"`). Both halves are
+  **and** a command handler (`"type": "command"`, or a bare `"command": "…"`). **Quotes are optional
+  and `=` is accepted on both halves** (rule-polish pass): the shipped match required JSON quoting,
+  but `pkg/skill` classifies *any* file under `.claude/` as a config regardless of extension, and
+  other agent ecosystems declare the same hook in YAML or TOML (Codex uses TOML) — those were
+  missed. Event names stay **case-sensitive**: they are distinctive CamelCase tokens, and
+  lower-casing them would match ordinary config keys like `stop:`. Both halves are
   required: an event key alone is inert, and `"command"` alone is ordinary config — an MCP server
   block legitimately carries `"command": "node"`. The event leaf carries the 0.8 confidence because
   an `all` reports its first branch's match, so the finding points at the event line.
