@@ -408,11 +408,53 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Fixtures:** TP: `curl http://169.254.169.254/latest/meta-data/iam/security-credentials/`. FP: `http://localhost:8080/health`.
 
 ### SG-EXE-001 — Dynamic eval/exec  (AST01, high) — **implemented** (`core-exec`)  [SkillSpector AST1–AST9 — use real AST, not regex]
-- **Signals:** **AST-based** where a parser exists (Python `ast`, JS via tree-sitter): `exec, eval, compile, __import__, getattr(obj, dynamic)`, `subprocess(..., shell=True)`, `os.system/popen`, `Function()/eval()` in JS, `child_process.exec`. Regex fallback only for languages without a bundled parser. **Escalate to high-confidence "execution chain" (AST8)** when exec's argument traces to a dynamic source (network, decoded blob, dynamic import) — that correlation is the real attack.
-- **FP carve-outs:** `ast.literal_eval` is safe (not `eval`); `subprocess.run([...], shell=False)` with a literal arg list is fine; `eval` in a math-DSL skill that sandboxes builtins. Reflective `getattr(os,'system')` with a **constant** name is *more* suspicious (evasion, AST9), not less — do not carve that out.
-- **Escalation:** `dynamic` engine to confirm exploitability (opt-in).
-- **Confidence:** exec-chain (exec+dynamic source) 0.95; bare `eval(userinput)` 0.85; `shell=True` 0.7; literal-arg subprocess 0.3.
-- **Fixtures:** TP: `exec(base64.b64decode(fetch(url)))`, `getattr(os,'system')('rm -rf')`. FP: `ast.literal_eval(cfg)`, `subprocess.run(['ls','-la'])`.
+- **Signals (shipped):** `subprocess.<any>(…, shell=True)`, `os.system`/`os.popen`, bare `eval(`,
+  `getattr(os|builtins|__builtins__, …)`, `child_process.exec|execSync(` — plus, from the
+  **rule-polish pass**: Python's **`exec(`** builtin, `__import__(`, the lower-level
+  `os.execv*`/`os.execl*`/`os.spawn*` wrappers, `pty.spawn(`, Node's `vm.runInThisContext` /
+  `vm.runInNewContext`, the JS **`new Function(`** constructor, and PowerShell's
+  **`Invoke-Expression` / `| iex`**.
+- **The `exec(` gap.** The rule is named *"Dynamic eval / exec"* and this section's own headline TP
+  fixture is `exec(base64.b64decode(fetch(url)))`, but until the polish pass only `eval(` was ever
+  matched — every `exec(` payload passed clean. Adding it also picks up the destructured
+  `const {exec} = require('child_process'); exec(cmd)` form, which the dotted `child_process.exec(`
+  leaf cannot see.
+- **`Invoke-Expression` is the Windows half of pipe-to-shell.** `SG-NET-002` covers `curl … | sh`;
+  `irm <url> | iex` is the same attack on PowerShell and had no rule at all.
+- **FP carve-outs:** `ast.literal_eval` is safe (not `eval`); `subprocess.run([...], shell=False)`
+  with a literal arg list is fine. Reflective `getattr(os,'system')` with a **constant** name is
+  *more* suspicious (evasion, AST9), not less — deliberately not carved out. Three carve-outs were
+  added by the polish pass, each forced by a measured corpus false positive:
+  - the `exec` leaf refuses a **preceding `.`**, so JS `regex.exec(s)` / `pattern.exec(s)` — by far
+    the most common `exec` in real JS — is not an execution sink;
+  - it also refuses a **space before the paren** (`exec\(`, not `exec\s*\(`): `exec (` matches
+    English as readily as code, and a corpus comment reading *"the string-form exec (xprintidle /
+    gdbus)"* was flagging;
+  - `new Function(` is **case-sensitive**: lowercase `new function(){…}` is the ordinary
+    anonymous-object idiom and is unrelated to the constructor — under `(?i)` a vendored
+    `echarts.min.js` in the corpus matched it.
+  - `suppress` gained `(function|def)\s+exec\b` — a *definition* named `exec` is not a call.
+    `\bexec\b` does not match `exec_payload`, so a helper wrapping a real sink is still caught by
+    its own body.
+- **Escalation:** `dynamic` engine to confirm exploitability (opt-in). **Escalate to a
+  high-confidence "execution chain" (AST8)** when exec's argument traces to a dynamic source
+  (network, decoded blob, dynamic import) — that correlation is the real attack, and is the
+  `SG-TAINT-005` row deferred to M3.
+- **Confidence:** `__import__`/`pty.spawn`/`getattr` 0.85; `Invoke-Expression`/`iex` **0.9**;
+  `vm.runIn*Context` 0.8; `os.exec*`/`os.spawn*` 0.75; `exec(`/`new Function(`/`shell=True`/
+  `os.system`/`child_process.exec` 0.7; bare `eval(` 0.6. The `iex` leaf is 0.9 for the reason
+  documented on `SG-DEP-008`: the idiom nearly always carries a URL on the same line, `example` is
+  a `docKeyword`, and a `scripts` target has no +0.15 instruction bonus to absorb the −0.4 — at 0.8
+  the canonical `irm … | iex` payload silently failed its own test.
+- **Corpus:** newly flags **3 of 240** skills (1.25%, inside the 2% precision budget) with **zero
+  true positives lost**; total findings 110 → 120. The new hits are two real `new Function(...)`
+  eval sinks, a `vm.runInNewContext`, and a destructured `child_process` `exec(cmd, cb)`. One
+  residual known FP: a test asserting a string's *absence*,
+  `assert.doesNotMatch(helper, /-Print \| Invoke-Expression/)` — left unsuppressed rather than
+  encoding test-framework names into the rule.
+- **Fixtures:** `TestDynamicExecSinksCovered` in `pkg/rules/rules_test.go` — 20 TP forms (the five
+  baseline leaves plus every widened one) and 10 benign rows, including the three corpus-driven
+  carve-outs above.
 
 ### SG-EXE-002 — Destructive filesystem ops  (AST01, high) — **implemented** (`core-exec`)
 - **Signals:** `rm -rf` on broad/dynamic targets (`/`, `~`, `$VAR`, `*`), `shutil.rmtree`, recursive `chmod -R 777`/`chown -R`, `dd of=/dev/…`, `mkfs`, `> /dev/sda`, `find … -delete` broad.

