@@ -841,6 +841,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-INJ-008` | Conditional / time-bomb instruction (behaves differently under a hidden trigger) | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
+| `SG-NET-008` | Disabled TLS / certificate verification (`verify=False`, `rejectUnauthorized: false`, `curl -k`, `InsecureSkipVerify: true`, …) | next free network id after SG-NET-007; SkillSpector *Tool Misuse* TM3 |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
 | `SG-SEC-005` | ~~Instruction to attach a credential or env var to an outbound request~~ — **shipped**, spec now at §3 above | `SG-SEC-004` is a retired alias of `SG-SSRF-001`, so 005 was the next free id in the family. The instruction-layer counterpart of `SG-TAINT-002` (same threat as a *data-flow* in code, still deferred to M3) |
