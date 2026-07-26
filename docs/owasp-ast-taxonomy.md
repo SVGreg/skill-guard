@@ -372,6 +372,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-INJ-009` | Role confusion / forged operator turn | AST01 | **AST01** | authored into `SKILL.md` prose (a forged system/operator turn), so AST01 like the rest of the injection family; needs no override verb — the framing is the escalation |
 | `SG-MTA-001` | Unsafe YAML/deserialization tag | AST04 | **AST04** | unchanged (P4: `!!python/object` at load) |
 | `SG-MTA-003` | Over-broad allowed-tools | AST03 | **AST03** | unchanged (over-broad grant) |
+| `SG-MTA-004` | Over-broad filesystem permission scope | AST04 | **AST03** | AST04→AST03 — the harm is the breadth of the filesystem *grant* (`read: "/"`), not metadata deception; the file-scope sibling of SG-MTA-003 |
 | `SG-NET-001` | Egress to suspicious host | AST01, AST05 | **AST01** | −AST05 (P2: exfil/C2, not instruction fetch) |
 | `SG-NET-002` | Pipe-to-shell execution | AST01 | **AST01** | unchanged (`curl … \| bash` of remote code) |
 | `SG-NET-006` | Listener / reverse-shell idiom | AST06 | **AST01, AST06** | +AST01 primary (P7: backdoor is malicious content; AST06 kept for the network-exposure dimension) |

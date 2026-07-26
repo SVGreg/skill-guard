@@ -572,11 +572,29 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** wildcard 0.85; missing-but-capabilities-detected 0.7.
 - **Fixtures:** TP: `allowed-tools: ["Bash(*)"]`. FP: `allowed-tools: ["Bash(jq:*)","Read"]`.
 
-### SG-MTA-004 — Over-broad permission globs  (AST03, medium)
-- **Signals:** path permissions with `**/*`, `/`, `~`, `*` as the whole scope.
-- **FP carve-outs:** reasonably-scoped globs (`src/**/*.py`) are fine; only whole-fs/home breadth flags.
-- **Confidence:** `**/*` root scope 0.7.
-- **Fixtures:** TP: `read: ["**/*"]`. FP: `read: ["./data/*.csv"]`.
+### SG-MTA-004 — Over-broad filesystem permission scope  (AST03, medium) — **implemented** (`core-metadata`)
+- **Threat:** the file-scope sibling of `SG-MTA-003` (over-broad *tool* grant). A manifest that
+  declares a `read`/`write`/`edit`/`paths`/`permissions`/`filesystem`/`fs`/`allow-*`/`scope` key
+  whose value is the **whole tree** — a bare `/`, `~`, `*`, `**`, `**/*`, or `/**` — hands the skill
+  far more reach than any single function needs (AST03).
+- **`manifest`-only, on purpose.** The front-matter is where a permission is *declared*. An earlier
+  draft scanned the body too and its lone corpus match was `path: '/'` inside a **JavaScript cookie
+  config** in a fenced code block — real code, not a grant. Scoping the rule to the manifest
+  excludes that whole FP class by construction rather than by carve-out.
+- **Precision — the broad glob must be the *whole* value.** `src/**/*.py` is a scoped path and must
+  pass; only a value that is *entirely* a whole-tree glob flags. RE2 has no backreferences, so the
+  closing quote is optional and the value is anchored by end-of-line / list-close instead. Two
+  leaves: a scalar (`write: "/"`, `read: **/*`) and a single-element flow array (`"write": ["/"]`).
+- **FP carve-outs:** the key is `paths` (plural), never bare `path` — a singular `path:` is almost
+  always a route/URL/cookie path, not a permission list (this is exactly the cookie FP above). A
+  value with a real subpath (`permissions: "read:tickets"`, `read: "src/**/*.py"`) is not a
+  whole-tree grant and does not match.
+- **Confidence:** scalar 0.7, flow-array 0.75. `manifest` carries the +0.15 instruction bonus.
+- **Corpus:** **0 hits / 240 skills**, verdicts unchanged (209/22).
+- **Fixtures:** `TestBroadFilesystemScopeCovered` in `pkg/rules/rules_test.go` — 10 TP forms across
+  the key set + 8 benign rows (scoped globs, the singular `path`/`baseUrl` non-permission keys, and
+  a subpath permission). Bundle fixture: `read: "/"` in `testdata/malicious/SKILL.md`'s
+  front-matter, asserted by `TestMaliciousFixtureTriggersBroadFsScope` in `pkg/scan/scan_test.go`.
 
 ### SG-MTA-005 — Brand/trademark impersonation  (AST04, medium)
 - **Signals:** `name`/`description` claiming to be an official first-party skill of a known brand while publisher identity is unverified; homoglyph/typosquat of a known skill name.
