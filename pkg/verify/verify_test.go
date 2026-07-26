@@ -114,3 +114,41 @@ func TestVerifyNoAttestation(t *testing.T) {
 		t.Fatalf("missing SG-PRV-001, got %+v", res.Findings)
 	}
 }
+
+// TestVerifyFailsClosedOnUnreadableExpiry: an expiry we cannot read is not an
+// expiry we can honour. Before this, a missing or malformed expires_at skipped
+// the check silently, so `"expires_at": "never"` read as perpetually fresh.
+// Mirrors the policy-waiver expiry fix (#38).
+func TestVerifyFailsClosedOnUnreadableExpiry(t *testing.T) {
+	for _, tc := range []struct {
+		name, expires, wantTitle string
+	}{
+		{"missing", "", "Attestation has no expiry"},
+		{"malformed", "never", "Attestation expiry unreadable"},
+		{"not rfc3339", "2027/01/01", "Attestation expiry unreadable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, env, signer, roster := signedFixture(t)
+			st, _, err := attest.DecodeStatement(env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			st.Predicate.ExpiresAt = tc.expires
+			env2, err := attest.SignWith(context.Background(), st, signer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res := Verify(b, env2, roster)
+			if !res.Expired {
+				t.Errorf("expires_at=%q: Expired=false, want true", tc.expires)
+			}
+			if !hasFinding(res, tc.wantTitle) {
+				t.Errorf("expires_at=%q: missing %q, got %+v", tc.expires, tc.wantTitle, res.Findings)
+			}
+			// The signature is still valid — this is a freshness problem, not tampering.
+			if !res.SignatureValid || !res.MerkleMatch {
+				t.Errorf("expires_at=%q: unexpectedly reported as invalid/tampered: %+v", tc.expires, res)
+			}
+		})
+	}
+}
