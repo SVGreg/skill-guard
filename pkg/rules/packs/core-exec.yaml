@@ -104,11 +104,16 @@ rules:
       # The first leaf carries the confidence — an `all` reports its first
       # branch's match (pkg/rules/rules.go), so the finding points at the event.
       all:
-        - regex: '"(PreToolUse|PostToolUse|SessionStart|SessionEnd|Stop|SubagentStop|UserPromptSubmit|Notification|PreCompact)"\s*:'
+        # Quotes optional and `=` accepted: the same hook declaration appears in
+        # YAML and TOML configs (Codex uses TOML), and pkg/skill classifies any
+        # file under .claude/ as a config regardless of extension. Event names
+        # stay case-sensitive — they are distinctive CamelCase tokens, and
+        # lower-casing them would match prose like "stop:" in ordinary config.
+        - regex: '(?m)(^|[{,\[\s])"?(PreToolUse|PostToolUse|SessionStart|SessionEnd|Stop|SubagentStop|UserPromptSubmit|Notification|PreCompact)"?\s*[:=]'
           confidence: 0.8
         - any:
-            - regex: '"type"\s*:\s*"command"'
-            - regex: '"command"\s*:\s*"[^"]'
+            - regex: '(?i)"?\btype"?\s*[:=]\s*"?command\b'
+            - regex: '(?i)"?\bcommand"?\s*[:=]\s*["'']?[^\s"'']'
     suppress:
       - '(?i)/path/to/'
     rationale: A bundled agent-hook config runs its command automatically on every matching lifecycle event, with no confirmation — installing code execution by shipping a config file (AST02/AST01). An empty matcher fires on every tool call and sees all tool input/output.
