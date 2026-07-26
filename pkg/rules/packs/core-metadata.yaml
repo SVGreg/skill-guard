@@ -42,3 +42,35 @@ rules:
           confidence: 0.8
     rationale: Wildcard tool grants disable least-privilege boundaries (AST03).
     fix: Declare a scoped allowlist, e.g. Bash(git:*), Read — never Bash(*) or "*".
+
+  - id: SG-MTA-004
+    title: Over-broad filesystem permission scope
+    ast: [AST03]
+    severity: medium
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [manifest]
+    match:
+      # Sibling of SG-MTA-003 (which covers over-broad *tool* grants). This
+      # covers a manifest that declares whole-filesystem or home-directory
+      # *path* scope: a read/write/edit/paths/permissions key whose value is a
+      # bare `/`, `~`, `*`, `**`, or `**/*` — the entire tree, not a subdir.
+      #
+      # `manifest`-only on purpose: the front-matter is where a permission is
+      # *declared*. The lone corpus match of an earlier draft was `path: '/'`
+      # inside a JavaScript cookie config in a fenced body block — real code, not
+      # a grant — and scoping to the manifest excludes it by construction.
+      any:
+        # The broad token must be the WHOLE quoted value (RE2 has no
+        # backreferences, so the closing quote is optional and the value is
+        # anchored by end-of-line / list-close instead). This is what lets
+        # `src/**/*.py` through — the glob there is a suffix, not the scope.
+        - regex: '(?im)^\s*(read|write|edit|paths|permissions?|filesystem|fs|allow(?:ed)?[-_]?(?:paths?|write|read)|scope)\s*:\s*\[?\s*[''"]?(\*\*/\*|/\*\*|\*\*|~/?|/|\*)[''"]?\s*[,\]]?\s*$'
+          confidence: 0.7
+        # Same declaration written as a JSON/flow array of only broad globs:
+        # `"write": ["/"]`, `read: ['**/*']`.
+        - regex: '(?im)^\s*[''"]?(read|write|edit|paths|permissions?|filesystem|fs)[''"]?\s*:\s*\[\s*[''"](\*\*/\*|/\*\*|\*\*|~/?|/|\*)[''"]\s*\]'
+          confidence: 0.75
+    rationale: A manifest that grants read/write/edit access to the whole filesystem (`/`), the home directory (`~`), or an unbounded glob (`**/*`, `*`) hands the skill far more reach than any single function needs — the file-scope half of over-privilege (AST03).
+    fix: 'Scope filesystem permissions to the skill''s own workspace and the specific files it needs, e.g. `read: ["./data/*.csv"]` — never `/`, `~`, or `**/*`.'

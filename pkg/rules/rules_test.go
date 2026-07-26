@@ -384,6 +384,60 @@ func TestMCPToolDescriptionPoisoning(t *testing.T) {
 	}
 }
 
+// TestBroadFilesystemScopeCovered pins SG-MTA-004 to the whole-tree /
+// home-directory permission grant — the file-scope sibling of SG-MTA-003's
+// over-broad *tool* grant. The precision lever is that the broad glob must be
+// the *whole* value: `src/**/*.py` is a scoped path and must pass, while a bare
+// `/`, `~`, `*`, or `**/*` is the entire filesystem and must flag. Benign rows
+// are the scoped forms and a `path: "/"` that is not a permission key.
+func TestBroadFilesystemScopeCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-MTA-004" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-MTA-004 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Whole-tree / home grants — the entire value is a broad glob.
+		{`read: "**/*"`, true},
+		{`write: '/'`, true},
+		{`edit: ~`, true},
+		{`paths: "~/"`, true},
+		{`permissions: "*"`, true},
+		{`filesystem: /**`, true},
+		{`allowed-paths: "**"`, true},
+		{`allow_write: "/"`, true},
+		{`  write: ["/"]`, true},
+		{`  read: ['**/*']`, true},
+
+		// Benign: scoped forms — the glob is a suffix, not the whole scope.
+		{`read: "src/**/*.py"`, false},
+		{`write: "./output/*.json"`, false},
+		{`paths: ["./data", "./cache"]`, false},
+		{`edit: "docs/*.md"`, false},
+		// Not a filesystem-permission key at all (the cookie-config FP).
+		{`path: '/'`, false},
+		{`baseUrl: "/"`, false},
+		// A permission key with a real subpath value.
+		{`permissions: "read:tickets"`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("manifest", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestAntiRefusalCoversJailbreakFraming checks SG-ANTI-001 against real-world
 // jailbreak framings beyond the original six leaves — unfiltered/uncensored
 // responses, "respond without any restrictions", "enable jailbreak mode", and
