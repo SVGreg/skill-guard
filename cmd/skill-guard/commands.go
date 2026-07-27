@@ -31,7 +31,7 @@ func loadRuleset(extra []string) ([]*rules.Rule, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintf(os.Stderr, "note: loaded unsigned rule-pack %s (provenance: unsigned)\n", path)
+		fmt.Fprintf(os.Stderr, "note: loaded unsigned rule-pack %q (provenance: unsigned)\n", path)
 		packs = append(packs, p)
 	}
 	return rules.AllRules(packs), nil
@@ -186,7 +186,7 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 			if summary == nil {
 				scanNote = "integrity-only (--no-scan)"
 			}
-			fmt.Printf("wrote %s\n  merkle_root %s\n  %s\n", sigPath, st.Subject.MerkleRoot, scanNote)
+			fmt.Printf("wrote %q\n  merkle_root %s\n  %s\n", sigPath, st.Subject.MerkleRoot, scanNote)
 
 			if emitFields {
 				ch, sig, err := attest.USFFields(context.Background(), b, signer)
@@ -197,7 +197,7 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 				if err := attest.WriteUSFFields(mdPath, ch, sig); err != nil {
 					return fail(4, "usf write: %v", err)
 				}
-				fmt.Printf("  updated %s front-matter: content_hash, signature\n", mdPath)
+				fmt.Printf("  updated %q front-matter: content_hash, signature\n", mdPath)
 			}
 			return nil
 		},
@@ -305,7 +305,7 @@ EXIT CODES: 0 success · 4 internal error.`,
 			if err := attest.SaveKey(signer, out); err != nil {
 				return fail(4, "cannot write key to %q: %v", out, err)
 			}
-			fmt.Printf("wrote %s (mode 0600, private — keep secret)\n  keyid: %s\n  public_key: %s\n",
+			fmt.Printf("wrote %q (mode 0600, private — keep secret)\n  keyid: %s\n  public_key: %s\n",
 				out, signer.KeyID(), signer.PublicKeyBase64())
 			if !noPub {
 				if pubOut == "" {
@@ -314,7 +314,7 @@ EXIT CODES: 0 success · 4 internal error.`,
 				if err := attest.SavePub(signer, pubOut); err != nil {
 					return fail(4, "cannot write public key to %q: %v", pubOut, err)
 				}
-				fmt.Printf("wrote %s (mode 0644, public — safe to share)\n", pubOut)
+				fmt.Printf("wrote %q (mode 0644, public — safe to share)\n", pubOut)
 			}
 			fmt.Println("  share the public key so verifiers can add it to their policy trust roster.")
 			return nil

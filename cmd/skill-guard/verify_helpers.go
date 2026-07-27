@@ -35,10 +35,17 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 		}
 		return false
 	}
+	// Paths are printed with %q, not %s: a bundle path can be discovered by
+	// tooling rather than typed by the user (e.g. a directory unpacked from a
+	// hostile archive), and a filename may contain any byte but '/' and NUL — so
+	// a raw %s of the path could smuggle terminal escapes into this output. %q
+	// escapes them and matches how the error paths (loadBundleFriendly, fail)
+	// already quote paths. Findings below are model-owned SG-PRV-* constants, and
+	// merkle_root/keyid are hex/base64, so those stay %s.
 	switch {
 	case !res.Present:
-		fmt.Printf("attestation: absent (no %s)\n", sigPath)
-		fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %s --key <key>\n", skillPath)
+		fmt.Printf("attestation: absent (no %q)\n", sigPath)
+		fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %q --key <key>\n", skillPath)
 	case res.SignatureValid && res.Trusted:
 		fmt.Printf("attestation: present, signature %sVALID%s (trusted key)\n", c(green), c(reset))
 	case res.SignatureValid:
