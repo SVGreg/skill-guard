@@ -346,10 +346,23 @@ func scanURLHost(text string, hosts []string, conf float64) []match {
 var docKeywords = regexp.MustCompile(`(?i)\b(example|e\.g\.|for instance|do not|don't|never|detect|flag|insecure|avoid)\b`)
 
 func contextModifier(target, text string, pos int) float64 {
-	var delta float64
-	if target == "manifest" || target == "body" {
-		delta += modInstruction
+	// The documentary and code-example penalties model *prose* registers: a
+	// fenced example or a "never run …" sentence in narrative text that
+	// *describes* an attack rather than committing it. They apply only to the
+	// prose targets (body/manifest). On scripts/configs the same keywords are
+	// code, not description — a `--insecure` flag, an `example.com` placeholder,
+	// a `# never commit secrets` comment — and a rule match there is the payload
+	// itself, so penalizing it is wrong. Doing so created a "documentary cliff":
+	// with no instruction bonus to absorb the −0.4, a leaf on scripts/configs had
+	// to be inflated to ≥0.9 just to clear the 0.5 threshold, which forced
+	// SG-MCP-001, SG-DEP-008, SG-EXE-001, and SG-NET-008 to distort their
+	// confidences. Structural leaves are exempt from these penalties everywhere
+	// for the same reason ("an invisible char in 'documentation' is still an
+	// invisible char"); scripts/configs are exempt here on the same logic.
+	if target != "manifest" && target != "body" {
+		return 0
 	}
+	delta := modInstruction
 	if inCodeFence(text, pos) {
 		delta += modCodeExample
 	} else if nearDocKeyword(text, pos) {

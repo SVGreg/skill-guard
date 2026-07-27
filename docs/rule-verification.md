@@ -29,12 +29,13 @@ A single regex is both **too narrow** (misses paraphrases: `ignore any text writ
 
 | Modifier | Δ | When |
 |---|---|---|
-| in fenced code block / indented code / `example`/`e.g.`/`do not` proximity | **−0.4** | T1 text rules in prose files (mirrors SkillSpector `is_code_example`) |
+| in fenced code block / indented code / `example`/`e.g.`/`do not` proximity | **−0.4** | T1 text rules on **prose targets only** (`body`/`manifest`) — see note below |
 | inside `SKILL.md` front-matter or body (instruction surface) | **+0.15** | injection/anti-refusal/steering rules (this is where instructions actually reach the model) |
 | inside a tool/parameter *description* field | **+0.2** | tool-poisoning rules (description text is read by the LLM) |
 | corroborating signal from another rule on same span (e.g. taint sink + secret source) | **+0.2** | correlation rules |
 | matched span is itself a documented negative (allowlisted domain, placeholder path `/path/to/x`, `example.com`) | **−0.5** | all rules |
 
+- **The documentary/code-example penalties are prose-only** (`contextModifier`, `pkg/rules/rules.go`). They model a *narrative* register — a fenced example or a "never run …" sentence that *describes* an attack — so they apply only to `body`/`manifest`. On `scripts`/`configs` the same keywords are code, not description (a `--insecure` flag, an `example.com` placeholder, a `# never commit secrets` comment), and a rule match there is the payload itself. Penalizing it created a **documentary cliff**: with no +0.15 instruction bonus on those targets to absorb the −0.4, a leaf had to be inflated to ≥0.9 just to clear the 0.5 threshold — which distorted SG-MCP-001, SG-DEP-008, SG-EXE-001, and SG-NET-008. The context modifier now returns 0 for `scripts`/`configs`, mirroring the structural-leaf exemption ("an invisible char in 'documentation' is still an invisible char"). Regenerating the full 240-skill corpus over the change produced **zero** finding or verdict differences — the fix removes the trap for future rules without altering any current detection.
 - **Emit threshold** `_MIN_CONFIDENCE = 0.5` after modifiers (configurable per pack). Below it, the candidate is dropped (or, if `--explain`, recorded as `suppressed`).
 - **Dedup:** keep the highest-confidence finding per `(file, line, rule_id)`.
 - Confidence maps to the design doc's severity only for *display ordering*; **verdict gating uses severity**, so a low-confidence critical still surfaces but can be waived (§10.4 policy).

@@ -747,6 +747,62 @@ func TestRuntimeInstructionFetchCovered(t *testing.T) {
 	}
 }
 
+// TestDocumentaryModifierIsProseOnly pins the documentary-cliff fix: the
+// documentary (−0.4) and code-example (−0.4) penalties, and the instruction
+// (+0.15) bonus, apply only to the prose targets (body/manifest). On
+// scripts/configs the context modifier is always 0, so a match near a keyword
+// like "example"/"never"/"insecure" — which on those targets is code, not a
+// description — emits at its base confidence instead of being pushed under the
+// threshold. SG-DEP-008 is the witness: its `.npmrc` leaf is 0.9 today only
+// because of this cliff; on a `configs` target near an `example` placeholder it
+// must still emit.
+func TestDocumentaryModifierIsProseOnly(t *testing.T) {
+	packs, _ := Builtin()
+	var dep *Rule
+	for _, p := range packs {
+		for _, r := range p.Rules {
+			if r.ID == "SG-DEP-008" {
+				dep = r
+			}
+		}
+	}
+	if dep == nil {
+		t.Fatal("SG-DEP-008 not found")
+	}
+	// A registry redirect on a configs target with the docKeyword "example" on
+	// the same line (as a placeholder host). Before the fix the −0.4 sank it
+	// below threshold on configs; after, configs carries no documentary penalty.
+	const line = `registry=https://npm.internal.example/  # example mirror`
+	if got := len(dep.Evaluate("configs", line)); got == 0 {
+		t.Errorf("SG-DEP-008 did not emit on a configs target near a docKeyword — documentary cliff still in effect")
+	}
+	// Body/manifest behaviour must be UNCHANGED — verified directly on
+	// contextModifier so the assertion doesn't depend on any rule's confidence.
+	const near = "never run this command"     // carries the docKeyword "never"
+	const plain = "run this command normally" // no docKeyword, no fence
+	cases := []struct {
+		target string
+		text   string
+		want   float64
+	}{
+		// Prose targets: instruction bonus, and the documentary penalty still bites.
+		{"body", plain, modInstruction},
+		{"body", near, modInstruction + modDocumentary},
+		{"manifest", near, modInstruction + modDocumentary},
+		// Code targets: always neutral, keyword or not — the fix.
+		{"scripts", plain, 0},
+		{"scripts", near, 0},
+		{"configs", plain, 0},
+		{"configs", near, 0},
+		{"refs", near, 0},
+	}
+	for _, c := range cases {
+		if got := contextModifier(c.target, c.text, len(c.text)); got != c.want {
+			t.Errorf("contextModifier(%q, %q) = %v, want %v", c.target, c.text, got, c.want)
+		}
+	}
+}
+
 // TestPerLineDedupKeepsHighestConfidence guards the rule-verification.md §1.2
 // contract: when several leaves of one rule match on the same line, the emitted
 // finding must carry the *highest* confidence (and its excerpt), not whichever
