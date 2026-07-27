@@ -17,10 +17,31 @@ rules:
           confidence: 0.95
         - regex: '(?i)\b(curl|wget|fetch)\b[^\n|]{0,200}\|\s*(python[23]?|perl|node|ruby)\b'
           confidence: 0.9
-        - regex: '(?i)\b(bash|sh)\s+-c\s+["'']?\$\((curl|wget)'
+        - regex: '(?i)\b(bash|sh)\s+-c\s+["'']?\$\((curl|wget|fetch)'
           confidence: 0.9
-        - regex: '(?i)\b(iwr|invoke-webrequest)\b[^\n|]{0,200}\|\s*iex\b'
+        # Process substitution `bash <(curl …)` / `sh <(wget …)` — a fetch-exec
+        # form that never uses a pipe, so the leaves above miss it entirely.
+        - regex: '(?i)\b(ba|z|k|d)?sh\b\s*<\(\s*(sudo\s+)?(curl|wget|fetch)\b'
+          confidence: 0.9
+        # `. <(curl …)` / `source <(curl …)` — sourcing a fetched stream into the
+        # current shell; same effect, different keyword.
+        - regex: '(?im)(\bsource\s+|(^|\s)\.\s+)<\(\s*(curl|wget|fetch)\b'
+          confidence: 0.9
+        # `eval "$(curl …)"` — command substitution fed straight to eval; the
+        # canonical install-script fetch-exec that isn't a pipe.
+        - regex: '(?i)\beval\b[^\n]{0,30}\$\(\s*(sudo\s+)?(curl|wget|fetch)\b'
+          confidence: 0.9
+        # `python -c "$(curl …)"` and peers — the downloaded text becomes the
+        # interpreter's own program.
+        - regex: '(?i)\b(python[23]?|perl|ruby|node)\s+-c\s+["'']?\$\(\s*(curl|wget|fetch)\b'
+          confidence: 0.9
+        # PowerShell download-and-run: `irm/iwr … | iex` (irm = Invoke-RestMethod,
+        # at least as common as iwr for this) …
+        - regex: '(?i)\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n|]{0,200}\|\s*iex\b'
           confidence: 0.95
+        # … and the prefix form `iex (irm …)` / `iex (New-Object Net.WebClient).DownloadString(…)`.
+        - regex: '(?i)\biex\b\s*\(?\s*(iwr|irm|invoke-webrequest|invoke-restmethod|new-object\s+net\.webclient)'
+          confidence: 0.9
     rationale: Downloading and piping content directly into an interpreter executes unreviewed remote code (AST01).
     fix: Never pipe network downloads into a shell/interpreter. Fetch, verify a checksum, review, then run.
 
