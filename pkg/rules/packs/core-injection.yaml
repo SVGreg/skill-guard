@@ -332,3 +332,37 @@ rules:
     fix: >-
       Remove turn delimiters and role headers from skill content. A skill is user-turn material;
       express its guidance as ordinary prose, and never imitate the operator or system voice.
+
+  - id: SG-INJ-008
+    title: Conditional / time-bomb instruction
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [body, manifest, scripts]
+    match:
+      # A logic bomb correlates a *hidden trigger* — a future calendar date, an
+      # invocation counter, or a stealth condition ("no one is watching", "in
+      # production") — with a *destructive or covert* action (delete/encrypt/
+      # exfiltrate/secretly-send-a-secret). Each leaf is a single regex so the two
+      # halves must be co-located (whole-target `all` would fire on a body that
+      # merely mentions a year somewhere and "delete" somewhere else). Two leaves
+      # cover both orderings: trigger→action and action→trigger. The trigger's
+      # date branch requires a real 4-digit year or a `date is after …` comparison
+      # — never the bare word "date" — so log-rotation ("older than 30 days,
+      # delete") and build cleanup ("after the build, remove temp") stay clean.
+      any:
+        - regex: '(?i)(?:(?:after|once|when|as of|starting|beginning|if|on or after)[^\n]{0,30}(?:(?:date|today|it''?s|current date)[^\n]{0,20}(?:is\s+)?(?:after|past|beyond|later than|>=?|on or after)[^\n]{0,20}(?:20[2-9]\d|[A-Z][a-z]{2,8}\s+\d{1,2})|20[2-9]\d\b|\d{1,2}[-/]\d{1,2}[-/]20\d\d)|(?:on|after)\s+(?:the\s+)?\d{1,3}(?:st|nd|rd|th)\s+(?:run|invocation|execution|time|use)|no(?:body|\s+one|\s+human)\b[^\n]{0,25}(?:watching|looking|present|observing|monitoring|around)|(?:only\s+)?(?:in|when\s+in|once\s+in)\s+production\b)[^\n]{0,80}(?:delete|remove|wipe|erase|destroy|rm\s+-rf|shred|reformat|encrypt|ransom|exfiltrat\w*|leak\b|silently[^\n]{0,25}(?:send|email|upload|post|delete|remove|transmit)|without[^\n]{0,20}(?:telling|informing|notifying|asking|the user''?s?\s+knowledge)|(?:send|transmit|upload|post|email|forward|beacon|leak)[^\n]{0,25}(?:secrets?|credentials?|api[\s_-]?keys?|tokens?|\.env\b|passwords?|private\s+keys?|conversation|chat\s+history))'
+          confidence: 0.7
+        - regex: '(?i)(?:delete|remove|wipe|erase|destroy|rm\s+-rf|shred|reformat|encrypt|ransom|exfiltrat\w*|leak\b|silently[^\n]{0,25}(?:send|email|upload|post|delete|remove|transmit)|without[^\n]{0,20}(?:telling|informing|notifying|asking|the user''?s?\s+knowledge)|(?:send|transmit|upload|post|email|forward|beacon|leak)[^\n]{0,25}(?:secrets?|credentials?|api[\s_-]?keys?|tokens?|\.env\b|passwords?|private\s+keys?|conversation|chat\s+history))[^\n]{0,80}(?:(?:after|once|when|as of|starting|beginning|if|on or after)[^\n]{0,30}(?:(?:date|today|it''?s|current date)[^\n]{0,20}(?:is\s+)?(?:after|past|beyond|later than|>=?|on or after)[^\n]{0,20}(?:20[2-9]\d|[A-Z][a-z]{2,8}\s+\d{1,2})|20[2-9]\d\b|\d{1,2}[-/]\d{1,2}[-/]20\d\d)|(?:on|after)\s+(?:the\s+)?\d{1,3}(?:st|nd|rd|th)\s+(?:run|invocation|execution|time|use)|no(?:body|\s+one|\s+human)\b[^\n]{0,25}(?:watching|looking|present|observing|monitoring|around)|(?:only\s+)?(?:in|when\s+in|once\s+in)\s+production\b)'
+          confidence: 0.7
+    rationale: >-
+      A skill that gates a destructive or exfiltrating action behind a future date, an invocation
+      count, or a "nobody is watching" / "only in production" condition is a logic bomb: it scans and
+      behaves benignly during review, then activates the harmful branch once the hidden trigger fires.
+      Correlating the trigger with the harmful action in one clause is the signal (AST01).
+    fix: >-
+      Remove behavior that changes on a hidden date/counter/environment trigger. A skill should do the
+      same reviewable thing every run; never couple a destructive or data-exfiltrating step to a clock,
+      a run count, or a "not being observed" check.
