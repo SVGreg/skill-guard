@@ -160,6 +160,20 @@ func TestMaliciousFixtureTriggersFetchChmodExec(t *testing.T) {
 	t.Error("expected malicious fixture to trigger SG-DEP-011")
 }
 
+// TestMaliciousFixtureTriggersInstallHook asserts the SG-DEP-010 fixture (a
+// `postinstall` script in testdata/malicious/package.json) end-to-end. Its own
+// test rather than a row in TestMaliciousFails' `want` map — that map is a single
+// line every rule PR appends to and conflicts on every concurrently-open branch.
+func TestMaliciousFixtureTriggersInstallHook(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-DEP-010" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-DEP-010")
+}
+
 // TestMaliciousFixtureTriggersVCSDependency asserts the SG-DEP-009 bundle
 // fixture end-to-end. It lives in its own test rather than in TestMaliciousFails'
 // `want` map on purpose: that map is a single line every new rule appends to, so
