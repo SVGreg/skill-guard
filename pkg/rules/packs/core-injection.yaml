@@ -366,3 +366,57 @@ rules:
       Remove behavior that changes on a hidden date/counter/environment trigger. A skill should do the
       same reviewable thing every run; never couple a destructive or data-exfiltrating step to a clock,
       a run count, or a "not being observed" check.
+
+  - id: SG-INJ-010
+    title: Concealment / secrecy directive
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [body, manifest, scripts]
+    match:
+      # A concealment directive tells the agent to hide its own action from the
+      # user — the defining trait of in-the-wild malicious skills ("Do Not Mention
+      # This to the User", arXiv 2602.06547). It needs no override verb (SG-INJ-001)
+      # and no time-bomb trigger (SG-INJ-008 only sees "without telling" when it is
+      # coupled to a destructive action + hidden trigger). Four leaves cover the
+      # concealment surface; the suppress list is the whole job — it keeps
+      # secret-protection advice ("do not reveal the API key"), privacy/marketing
+      # copy ("we don't share your data"), and the benign consent form ("do not do
+      # X without asking the user") out.
+      any:
+        # do-not-<conceal-verb> … (to the) user
+        - regex: '(?i)\b(do not|don''?t|never|avoid|refrain from)\s+(mention|reveal|disclose|report|acknowledge|indicate|hint at|let[^\n]{0,6}know)\b[^\n]{0,30}\b(to\s+)?(the\s+)?(user|operator|human|owner)\b'
+          confidence: 0.7
+        # do-not-<tell-verb> … user
+        - regex: '(?i)\b(do not|don''?t|never)\s+(tell|inform|notify|alert|warn|make[^\n]{0,8}aware)\b[^\n]{0,25}\b(the\s+)?(user|operator|human|owner|them)\b'
+          confidence: 0.7
+        # without telling / without the user's knowledge (concealment of disclosure,
+        # not consent — "asking/permission" is excluded because it flips under a
+        # leading "do not")
+        - regex: '(?i)\bwithout\s+(the\s+user''?s?\s+(knowledge|awareness|noticing)|(telling|informing|notifying|alerting)\s+(the\s+)?(user|operator|human))'
+          confidence: 0.7
+        # act silently / silently <action> / keep this hidden / conceal from user
+        - regex: '(?i)(\bact\s+silently\b|\bsilently\b[^\n]{0,25}\b(delete|remove|send|upload|modify|write|read|copy|exfiltrat\w*|run|execute|install|fetch|post|collect|forward)|keep\s+(this|it|that)[^\n]{0,20}\b(hidden|secret|quiet|concealed)\b|(hide|conceal)\s+(this|it|that|the\s+\w+)[^\n]{0,20}from\s+(the\s+)?(user|operator|human))'
+          confidence: 0.7
+    suppress:
+      # Secret-protection advice: hiding a *secret* from output is the opposite of
+      # a concealment directive — it protects the user, it does not deceive them.
+      - '(?i)\b(do not|don''?t|never)\s+(reveal|disclose|expose|share|print|echo|log|show|display|output|leak)\b[^\n]{0,25}\b(password|secret|api[\s_-]?key|token|credential|private key|passphrase|\.env|answer|solution|spoiler)\b'
+      # Privacy / marketing copy.
+      - '(?i)(we\s+(do not|don''?t|never)\s+(share|sell|store|collect|track|retain)|your\s+(privacy|data)\b[^\n]{0,20}(safe|secure|protected|private|not shared))'
+      # Benign consent form: "do not / never <X> without asking/telling/permission"
+      # — the leading negation makes this *require* disclosure, the mirror image of
+      # the attack.
+      - '(?i)\b(do not|don''?t|never)\b[^\n]{0,45}\bwithout\s+(asking|telling|informing|notifying|getting|obtaining|first|prior|the\s+user''?s?\s+(permission|consent|approval|sign[- ]?off))'
+    rationale: >-
+      A skill that instructs the agent to hide its own action from the user — "do not mention this to
+      the user", "act silently and do not report", "without the user's knowledge" — turns the agent
+      into a co-conspirator: it performs a sensitive step and suppresses the disclosure the user would
+      otherwise see. A skill has no legitimate reason to demand secrecy from the operator, which makes
+      the directive a high-signal marker of malicious intent (AST01).
+    fix: >-
+      Never instruct the agent to conceal, downplay, or omit reporting what it did. A skill's actions
+      must be transparent to the user; remove any directive to act silently or to withhold disclosure,
+      and surface every side effect the skill causes.
