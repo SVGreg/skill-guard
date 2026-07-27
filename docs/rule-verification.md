@@ -338,6 +338,47 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   Anthropic) → **0 SG-NET-007 findings**. The first pass surfaced 1 FP, fixed by the CLI-flag guard
   above; corpus totals after the fix: 220 pass / 20 fail, 78 findings.
 
+### SG-NET-008 — Disabled TLS / certificate verification  (AST01/AST06, medium) — **implemented** (`core-network`)
+- **Threat:** a bundled script or config turns off certificate verification on the skill's own
+  network calls, so every request becomes silently interceptable — a MITM can read or rewrite the
+  traffic, including any credential sent or any payload fetched to run. SkillSpector's *Tool Misuse*
+  category names this (pattern TM3, "overly permissive defaults — disabled TLS").
+- **Signals (shipped):** `ssl._create_unverified_context(`, `ssl.CERT_NONE`, `check_hostname = False`,
+  `urllib3.disable_warnings(`, `verify=False` (requests/httpx/aiohttp), `rejectUnauthorized: false`
+  (Node), `curl|wget … -k|--insecure|--no-check-certificate`, Go `InsecureSkipVerify: true`, and git
+  `http.sslVerify=false` / `GIT_SSL_NO_VERIFY`.
+- **Severity is `medium` (warn), decided by measurement — not the "TLS off is critical" instinct.**
+  Disabling verification is unambiguous in code but not always *malicious*: a skill talking to a
+  local self-signed service does it legitimately. The corpus proves this — the one true hit is
+  `searxng/scripts/searxng.py`'s `verify=False  # For local self-signed certs`. Static analysis
+  cannot separate that from "disable verification so my MITM works," so the rule surfaces the
+  capability for review rather than hard-failing (the SG-DEP-007 precedent). Risk climbs when paired
+  with an exfil sink (SG-NET-004/007).
+- **The `NODE_TLS_REJECT_UNAUTHORIZED=0` env var is deliberately NOT matched.** An early draft
+  included it and drew **24 hits across two skills** — nearly all in comments and in security tests
+  that *defend against* the flag (the `evolver`/`capability-evolver` suites pin a strict agent and
+  assert the cert is rejected even when the global flag is 0). Matching it flagged those
+  security-positive skills; the code toggle `rejectUnauthorized: false` had 0 corpus hits and carries
+  the Node signal cleanly. Cut the noisy signal, keep the precise one (same discipline as SG-NET-005's
+  dropped bare-public-IP leaf).
+- **Confidence & the documentary cliff:** stdlib-ssl and `InsecureSkipVerify` leaves 0.8–0.85
+  (API calls, never benign, 0 corpus hits); `verify=False`/git 0.7–0.8. The **curl/wget leaf is 0.9**
+  for a self-inflicted reason worth recording: the flag `--insecure` literally contains the
+  `docKeyword` "insecure", so the leaf's own match text always draws the documentary −0.4, and the
+  host is often `example…`, drawing it again — at the base it could never emit. This is the **fourth**
+  independent rule to hit the documentary-modifier cliff (after SG-MCP-001, SG-DEP-008, SG-EXE-001);
+  see the engine-backlog row.
+- **FP carve-outs:** `suppress` drops a line that shows the *secure* value too (`verify=True`,
+  `rejectUnauthorized: true`) — documentation, not a disabled default — both word-anchored so
+  `GIT_SSL_NO_VERIFY=true` (its own real toggle) is not mistaken for `verify=True`.
+- **Corpus:** **1 finding / 240** — `searxng`'s genuine `verify=False`, at `warn`. No verdict
+  regressions attributable to this rule.
+- **Fixtures:** `TestDisabledTLSCovered` in `pkg/rules/rules_test.go` — 15 TP forms across five
+  ecosystems + 7 benign rows (the documentation forms, the secure values, and the deliberately-unmatched
+  `NODE_TLS_REJECT_UNAUTHORIZED` env var). Bundle fixture: `wget --no-check-certificate` in
+  `testdata/malicious/setup.sh`, asserted by `TestMaliciousFixtureTriggersDisabledTLS` in
+  `pkg/scan/scan_test.go`.
+
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical) — **implemented** (`core-secret`)
 - **Signals:** path references to `~/.ssh/, ~/.aws/, ~/.config/gcloud, .env, **/credentials*, *.pem, *.key, id_rsa, *.wallet, keystore`, browser stores (`Login Data`, `cookies.sqlite`, `Local Storage`), OS keychains (`security find-generic-password`, `secret-tool`, `Credential Manager`) — **in a read/access context**.
 - **FP carve-outs:** *placeholder* paths (`/path/to/credentials`, `~/.aws/credentials # example`), `.env.example`, `.gitignore` entries listing these (not reading them), a skill that documents where creds live. Require an actual read sink (`open`, `cat`, `read`, glob-then-iterate) — a mere string mention → info.
@@ -859,7 +900,6 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-INJ-008` | Conditional / time-bomb instruction (behaves differently under a hidden trigger) | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
-| `SG-NET-008` | Disabled TLS / certificate verification (`verify=False`, `rejectUnauthorized: false`, `curl -k`, `InsecureSkipVerify: true`, …) | next free network id after SG-NET-007; SkillSpector *Tool Misuse* TM3 |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
 | `SG-SEC-005` | ~~Instruction to attach a credential or env var to an outbound request~~ — **shipped**, spec now at §3 above | `SG-SEC-004` is a retired alias of `SG-SSRF-001`, so 005 was the next free id in the family. The instruction-layer counterpart of `SG-TAINT-002` (same threat as a *data-flow* in code, still deferred to M3) |

@@ -189,3 +189,69 @@ rules:
           confidence: 0.8
     rationale: Instance-metadata endpoints return temporary IAM credentials — a high-value SSRF/credential-theft target (AST03/AST01).
     fix: Remove metadata-endpoint access unless strictly required; never expose returned credentials.
+
+  - id: SG-NET-008
+    title: Disabled TLS / certificate verification
+    ast: [AST01, AST06]
+    # medium (warn, not fail), decided by corpus measurement. Disabling cert
+    # verification is unambiguous in code, but it is not always *malicious*: a
+    # skill talking to a local self-signed service (e.g. a self-hosted SearXNG)
+    # legitimately sets `verify=False`. Static analysis cannot separate that from
+    # "disable verification so my MITM works", so this surfaces the capability
+    # for review rather than hard-failing — the SG-DEP-007 precedent. The risk
+    # climbs sharply when paired with an exfil sink (SG-NET-004/007).
+    severity: medium
+    engine: static
+    layer: code
+    confidence: 0.7
+    targets: [scripts, configs]
+    match:
+      any:
+        # Python stdlib ssl: build an unverified context, or turn checks off.
+        # These are API calls essentially never present for a benign reason —
+        # 0 corpus hits — so they carry the higher confidence.
+        - regex: '(?i)ssl\._create_unverified_context\s*\('
+          confidence: 0.85
+        - regex: '(?i)\bssl\.CERT_NONE\b'
+          confidence: 0.8
+        - regex: '(?i)\bcheck_hostname\s*=\s*False\b'
+          confidence: 0.8
+        - regex: '(?i)urllib3\.disable_warnings\s*\('
+          confidence: 0.75
+        # requests / httpx / aiohttp: verify=False. Real skills do this for
+        # local self-signed certs, so it stays at the medium base — a nearby
+        # documentary keyword (a comment explaining it) nets it below threshold,
+        # which is the right outcome for `verify=False  # local self-signed`.
+        - regex: '(?i)\bverify\s*=\s*False\b'
+          confidence: 0.7
+        # Node: reject nothing. The env-var form NODE_TLS_REJECT_UNAUTHORIZED=0
+        # is deliberately NOT matched — corpus measurement found it appears
+        # almost entirely in comments and in security tests that *defend against*
+        # it (the evolver skills pin a strict agent and assert the cert is
+        # rejected even when the global flag is 0). Matching it flagged those
+        # security-positive skills 24 times; the actual code toggle below had 0
+        # corpus hits and carries the Node signal cleanly.
+        - regex: '(?i)\brejectUnauthorized\s*:\s*false\b'
+          confidence: 0.8
+        # curl / wget: skip verification on the command line. 0.9, not the base,
+        # for a self-inflicted reason: the flag `--insecure` literally contains
+        # the docKeyword "insecure", so this leaf's own match text always draws
+        # the documentary -0.4 — and the host is often `example...`, drawing it
+        # again. At the base it would never emit. Same documentary-modifier cliff
+        # documented on SG-DEP-008/SG-EXE-001; see the engine-backlog row.
+        - regex: '(?im)\b(curl|wget)\b[^\n|]{0,80}(\s-k\b|--insecure\b|--no-check-certificate\b)'
+          confidence: 0.9
+        # Go crypto/tls escape hatch.
+        - regex: '(?i)\bInsecureSkipVerify\s*:\s*true\b'
+          confidence: 0.85
+        # git: turn off TLS verification for a clone/fetch.
+        - regex: '(?i)(http\.sslVerify\s*=\s*false|GIT_SSL_NO_VERIFY)'
+          confidence: 0.8
+    suppress:
+      # A line that shows the secure value too is documentation ("change
+      # verify=False to verify=True"), not a disabled default. Word-anchored so
+      # `GIT_SSL_NO_VERIFY=true` (its own real toggle) is not mistaken for it.
+      - '(?i)\bverify\s*=\s*True\b'
+      - '(?i)\brejectUnauthorized\s*:\s*true\b'
+    rationale: A skill that turns off TLS certificate verification on its own network calls (verify=False, rejectUnauthorized:false, curl -k, InsecureSkipVerify, GIT_SSL_NO_VERIFY, an unverified ssl context) makes every request silently interceptable — a man-in-the-middle can read or rewrite the traffic, including any credential it sends (AST01 authored insecure behaviour / AST06 weakened transport boundary).
+    fix: Keep certificate verification on. For a genuinely self-signed internal host, pin that host's CA certificate instead of disabling verification globally.

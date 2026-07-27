@@ -540,6 +540,71 @@ func TestDNSExfilCoversCovertChannel(t *testing.T) {
 	}
 }
 
+// TestDisabledTLSCovered pins SG-NET-008 to the certificate-verification
+// escape hatches across ecosystems. It is medium severity by design — a skill
+// talking to a local self-signed service legitimately sets verify=False — so
+// the benign rows are the documentation forms that must NOT trip it (a line
+// that also shows verify=True, rejectUnauthorized:true) and unrelated uses of
+// the same words.
+func TestDisabledTLSCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-NET-008" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-NET-008 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Python.
+		{`requests.get(url, verify=False)`, true},
+		{`httpx.Client(verify=False)`, true},
+		{`ctx = ssl._create_unverified_context()`, true},
+		{`ctx.verify_mode = ssl.CERT_NONE`, true},
+		{`ctx.check_hostname = False`, true},
+		{`urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)`, true},
+		// Node.
+		{`const agent = new https.Agent({ rejectUnauthorized: false })`, true},
+		// The NODE_TLS_REJECT_UNAUTHORIZED env var is deliberately NOT matched:
+		// corpus measurement found it lives in comments and in tests that defend
+		// against it, so it is a false-positive magnet. The code toggle above is
+		// the reliable Node signal.
+		{`process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'`, false},
+		{`// overrides NODE_TLS_REJECT_UNAUTHORIZED=0 for the mock hub`, false},
+		// CLI.
+		{`curl -k https://example.test/install.sh`, true},
+		{`curl --insecure https://host/x`, true},
+		{`wget --no-check-certificate https://host/pkg.tgz`, true},
+		// Go and git.
+		{`tls.Config{InsecureSkipVerify: true}`, true},
+		{`git -c http.sslVerify=false clone https://host/repo`, true},
+		{`GIT_SSL_NO_VERIFY=true git fetch`, true},
+
+		// Benign: documentation showing the secure value, and the secure value.
+		{`change verify=False to verify=True in the httpx request`, false}, // shows verify=True
+		{`requests.get(url, verify=True)`, false},
+		{`new https.Agent({ rejectUnauthorized: true })`, false},
+		// Unrelated uses of the same words.
+		{`if verify_signature(sig) == False:`, false}, // not `verify=False`
+		{`# always verify certificates before shipping`, false},
+		{`curl https://example.com/data.json -o out.json`, false}, // no -k/--insecure
+		{`self.check_hostname = True`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 func TestReverseShellIdiomsCovered(t *testing.T) {
 	packs, _ := Builtin()
 	var r *Rule
