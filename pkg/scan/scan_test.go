@@ -71,6 +71,20 @@ func TestSkillMDLineNumbersAreFileAbsolute(t *testing.T) {
 	}
 }
 
+// TestMaliciousFixtureTriggersDisabledTLS asserts the SG-NET-008 fixture (a
+// `wget --no-check-certificate` in setup.sh) end-to-end. Its own test rather
+// than a row in TestMaliciousFails' `want` map — that map is a single line every
+// rule PR appends to and conflicts on every concurrently-open branch.
+func TestMaliciousFixtureTriggersDisabledTLS(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-NET-008" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-NET-008")
+}
+
 // TestMaliciousFixtureTriggersRoleConfusion asserts the SG-INJ-009 bundle
 // fixture (a forged <|im_start|>system turn) end-to-end. Its own test rather
 // than a row in TestMaliciousFails' `want` map: that map is a single line every

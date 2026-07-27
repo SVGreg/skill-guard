@@ -377,6 +377,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-NET-002` | Pipe-to-shell execution | AST01 | **AST01** | unchanged (`curl … \| bash` of remote code) |
 | `SG-NET-006` | Listener / reverse-shell idiom | AST06 | **AST01, AST06** | +AST01 primary (P7: backdoor is malicious content; AST06 kept for the network-exposure dimension) |
 | `SG-NET-007` | Rendered-image/link data exfiltration | AST01 | **AST01** | unchanged (P2: exfil authored into the skill's own prose; the URL carries the data, so it is not an AST05 instruction fetch) |
+| `SG-NET-008` | Disabled TLS / certificate verification | AST01/AST06 | **AST01, AST06** | insecure behaviour authored into the skill's own code (AST01) that weakens the transport boundary (AST06); medium/warn since local self-signed use is legitimate |
 | `SG-REF-003` | Runtime instruction fetch (external brain) | AST05 | **AST05, AST01** | +AST01 — the fetched content is followed as instructions, so the injection dimension applies alongside the external-fetch dimension (AST05 primary) |
 | `SG-SSRF-001` | Cloud metadata / SSRF endpoint access | AST05 | **AST03, AST01** | AST05→AST03,AST01 (P5: reaching a cloud-credential endpoint beyond scope; not an external-instruction fetch) |
 | `SG-SEC-001` | Sensitive-path read | AST03 | **AST03** | unchanged (P5: `~/.ssh`, `~/.aws`, `.env` — the AST03 evidence list) |

