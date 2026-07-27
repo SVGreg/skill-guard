@@ -750,6 +750,32 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   in `testdata/malicious/SKILL.md`, asserted by
   `TestMaliciousFixtureTriggersVCSDependency` in `pkg/scan/scan_test.go`.
 
+### SG-DEP-011 — Fetches a binary/blob and marks it executable  (AST02/AST01, high) — **implemented** (`core-supply`)
+- **Threat:** download (or decode) an opaque binary and make it runnable in one breath —
+  `curl … -o /usr/local/bin/tool && chmod +x /usr/local/bin/tool`. That installs unreviewed,
+  unpinned native code which then runs with the agent's privileges — RCE delivery of an artifact no
+  registry, hash, or scan ever saw. Distinct from `curl | sh` (SG-NET-002, which pipes to an
+  *interpreter*) and from a package runner (SG-DEP-007, which runs a *package*).
+- **Precision is the pairing, decided by measurement.** A bare `chmod +x script.sh` on the skill's
+  own file is ordinary — **15 corpus hits across 10 skills, all benign** (skills chmod their own
+  scripts). But a *fetch* AND a *chmod +x* joined on one command line had **0 corpus hits**. So the
+  rule never matches `chmod` alone; every leaf requires the fetch↔chmod correlation on a single line.
+- **Signals (shipped):** three leaves — (1) `curl|wget … (&&|;|\|\||\|) … chmod <exec>`; (2) the
+  reverse ordering `chmod <exec> … (&&|;) … curl|wget`; (3) the no-network packed form
+  `base64 -d|--decode / xxd -r … (&&|;) … chmod <exec>`. The chmod portion matches both `+x`
+  (`[ugoa]*+…x`) and an **octal mode with an execute bit** (`[0-7]*[1357][0-7]*`, e.g. `chmod 0755`)
+  — a widening that was re-measured against the corpus and still drew 0 hits.
+- **FP carve-outs:** `chmod` with no fetch on the line never matches (the common benign case); a
+  fetch with no chmod never matches (SG-NET-001/002 own those); `/path/to/` placeholders suppressed.
+- **Confidence:** fetch→chmod and decode→chmod 0.85; the rarer chmod→fetch ordering 0.8. Severity
+  **high** — a fetch-and-exec of an opaque binary is a direct RCE path.
+- **Corpus:** **0 findings / 240**, before and after the octal widening.
+- **Fixtures:** `TestFetchChmodExecCovered` in `pkg/rules/rules_test.go` — 7 TP forms (both orders,
+  octal and `+x`, the base64/xxd packed form) + 7 benign rows (bare `chmod +x` on own scripts, octal
+  chmod on dirs, a fetch with no chmod, a chmod with no fetch). Bundle fixture:
+  `curl … -o /tmp/stage2 && chmod +x /tmp/stage2` in `testdata/malicious/setup.sh`, asserted by
+  `TestMaliciousFixtureTriggersFetchChmodExec` in `pkg/scan/scan_test.go`.
+
 ### SG-REF-001 — External reference inventory  (AST05, info) — always emitted
 - **Signals:** enumerate every external URL/remote ref in body + scripts + configs; classify (doc, dependency, fetch-target). Feeds the card `external_refs[]`; never a gate by itself.
 - **FP carve-outs:** n/a (informational).
@@ -853,7 +879,6 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 |---|---|---|
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-DEP-010` | Post-install / lifecycle hook that runs arbitrary code | sibling of `SG-CFG-001` — shipping a manifest that installs execution |
-| `SG-DEP-011` | Fetches a binary/blob and marks it executable | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
 | `SG-INJ-007` | Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write) | needs a new `escape_sequence` leaf primitive |
 | `SG-INJ-008` | Conditional / time-bomb instruction (behaves differently under a hidden trigger) | |

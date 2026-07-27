@@ -183,3 +183,36 @@ rules:
       - '(?i)/path/to/'
     rationale: A dependency pulled from a raw git URL or a bare archive URL bypasses the registry entirely — no version resolution, no integrity hash, no yank or malware scanning, and a branch reference re-resolves to whatever the repository holds at install time (AST02/AST07).
     fix: Depend on a published, version-pinned package from the default registry. If a VCS dependency is unavoidable, pin it to an immutable commit SHA and record the artifact hash.
+
+  - id: SG-DEP-011
+    title: Fetches a binary/blob and marks it executable
+    ast: [AST02, AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.85
+    targets: [body, scripts, configs]
+    match:
+      # Download an opaque binary/blob and make it runnable in one breath —
+      # `curl … -o /usr/local/bin/tool && chmod +x /usr/local/bin/tool`. This is
+      # RCE delivery of an unreviewed, unpinned artifact, distinct from
+      # `curl | sh` (SG-NET-002, which pipes to an interpreter) and from a
+      # package runner (SG-DEP-007). The precision is in the *pairing*: a bare
+      # `chmod +x script.sh` on the skill's own file is ordinary and common
+      # (15 corpus hits, all benign), but a fetch AND a chmod +x joined on one
+      # command line had 0 corpus hits.
+      any:
+        # fetch … then chmod +x, same line (&& / ; / || / |).
+        - regex: '(?i)\b(curl|wget)\b[^\n]{0,160}(&&|\|\||;|\|)[^\n]{0,60}\bchmod\s+([ugoa]*\+[rwxXst]*x|[0-7]*[1357][0-7]*)\b'
+          confidence: 0.85
+        # chmod +x … then fetch on the same line (rarer ordering).
+        - regex: '(?i)\bchmod\s+([ugoa]*\+[rwxXst]*x|[0-7]*[1357][0-7]*)\b[^\n]{0,60}(&&|\|\||;)[^\n]{0,60}\b(curl|wget)\b'
+          confidence: 0.8
+        # base64/xxd-decode a blob into a file, then chmod +x it — the packed
+        # form that avoids a network fetch entirely.
+        - regex: '(?i)\b(base64\s+-d|base64\s+--decode|xxd\s+-r)\b[^\n]{0,120}(&&|;)[^\n]{0,60}\bchmod\s+([ugoa]*\+[rwxXst]*x|[0-7]*[1357][0-7]*)\b'
+          confidence: 0.85
+    suppress:
+      - '(?i)/path/to/'
+    rationale: Downloading (or decoding) an opaque binary and marking it executable in one step installs unreviewed, unpinned native code that then runs with the agent's privileges — a direct RCE-delivery path that no registry, hash, or scan ever saw (AST02 supply chain / AST01 execution).
+    fix: Do not fetch-and-run binaries. Install tools from a package manager with a pinned version and a verified checksum, or vendor the reviewed binary into the bundle with a recorded hash.

