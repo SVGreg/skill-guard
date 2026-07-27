@@ -987,6 +987,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-INJ-007` | Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write) | needs a new `escape_sequence` leaf primitive |
 | `SG-INJ-008` | ~~Conditional / time-bomb instruction (behaves differently under a hidden trigger)~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
+| `SG-INJ-010` | Concealment / secrecy directive — skill prose tells the agent to hide an action from the user ("do not mention this to the user", "act silently and do not report", "keep this hidden") | next free `SG-INJ` id; standalone from `SG-INJ-008`, which only sees "without telling" when coupled to a time-bomb trigger |
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
