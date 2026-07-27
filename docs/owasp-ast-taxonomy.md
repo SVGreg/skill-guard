@@ -68,7 +68,9 @@ identity cloning/exfiltration; WebSocket C2; shadow features; `curl` to unknown
 endpoints; pipe-to-shell of remote payloads; zero-click exfiltration through a
 rendered markdown/HTML image or link whose URL interpolates conversation or
 secret data (EchoLeak, CVE-2025-32711); destructive operations authored in
-the skill.
+the skill; conditional / time-bomb instructions that gate a destructive or
+exfiltrating branch behind a future date, an invocation counter, or a
+"nobody is watching" / "only in production" trigger (SG-INJ-008).
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
 otherwise-legitimate skill → AST03. Deception at the *metadata* layer → AST04.

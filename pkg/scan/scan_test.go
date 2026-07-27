@@ -85,6 +85,21 @@ func TestMaliciousFixtureTriggersDisabledTLS(t *testing.T) {
 	t.Error("expected malicious fixture to trigger SG-NET-008")
 }
 
+// TestMaliciousFixtureTriggersTimeBomb asserts the SG-INJ-008 fixture (a
+// date-gated `rm -rf "$HOME"` logic bomb in testdata/malicious/setup.sh)
+// end-to-end. Its own test rather than a row in TestMaliciousFails' `want` map —
+// that map is a single line every rule PR appends to and conflicts on every
+// concurrently-open branch.
+func TestMaliciousFixtureTriggersTimeBomb(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-INJ-008" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-INJ-008")
+}
+
 // TestMaliciousFixtureTriggersRoleConfusion asserts the SG-INJ-009 bundle
 // fixture (a forged <|im_start|>system turn) end-to-end. Its own test rather
 // than a row in TestMaliciousFails' `want` map: that map is a single line every

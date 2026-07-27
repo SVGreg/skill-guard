@@ -188,6 +188,44 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   `<|im_start|>system` turn on line 12 of `testdata/malicious/SKILL.md`, asserted by
   `TestMaliciousFixtureTriggersRoleConfusion` in `pkg/scan/scan_test.go`.
 
+### SG-INJ-008 — Conditional / time-bomb instruction  (AST01, high) — **implemented** (`core-injection`)
+- **Threat:** a logic bomb. The skill behaves benignly during review, then activates a harmful branch
+  once a **hidden trigger** fires — a future calendar date (`after 2027`, `once the date is past …`),
+  an invocation counter (`on the 10th run`), or a stealth/environment condition (`when no one is
+  watching`, `only in production`). Because the harmful behavior is dormant at scan time, a rule that
+  looked only for the action would rate the skill clean; the signal is the **coupling** of trigger and
+  action.
+- **Signals:** two `any`-branch regexes, one per ordering (trigger→action and action→trigger). Each is
+  a **single regex** — the two halves must be co-located within one clause. A whole-target `all`
+  composite was rejected on purpose: `pkg/rules/rules.go` evaluates `all` across the entire target, so
+  it would fire on any body that merely mentions a year *somewhere* and "delete" *somewhere else*. The
+  **trigger** is a real 4-digit year (`20[2-9]\d`), a slashed/dashed calendar date, a `date is
+  after/past/>= …` comparison, an `Nth run/invocation/execution` counter, a "nobody is
+  watching/observing" clause, or an "in production" gate. The **action** is destructive or covert:
+  `delete/remove/wipe/erase/destroy/rm -rf/shred/reformat/encrypt/ransom/exfiltrate/leak`,
+  `silently (send|upload|…)`, `without (telling|informing|…)`, or `(send|upload|forward|beacon) …
+  (secrets|credentials|api keys|tokens|.env|password|conversation)`.
+- **Distinct from `SG-EXE-005`** (anti-analysis/evasion, still unimplemented): that rule owns
+  scanner/sandbox/VM/debugger detection → branch. SG-INJ-008 owns the **temporal/counter/stealth**
+  trigger dimension — the classic date-gated logic bomb, which sandbox-detection rules never see.
+- **FP carve-outs — the whole job is precision.** The trigger's date branch requires a concrete year
+  or `date is after …` comparison, **never the bare word "date"**, so log rotation ("if the file is
+  older than 30 days, delete it") and build cleanup ("after the build, remove temp") stay clean; both
+  are `false` rows in the test. Bare `send/upload/email` is excluded from the action set (only
+  `silently send`, or `send <secret-object>`, count), so "upload the coverage report" and "email the
+  summary to the user" do not match. The documentary −0.4 modifier applies (prose-only, per §1.2), so
+  a doc *describing* a time bomb is down-weighted.
+- **Confidence:** 0.7 for both leaves — a correlation, high-precision but not a structural certainty.
+  `body`/`manifest` get the +0.15 instruction bonus; on `scripts` the base 0.7 clears the 0.5 emit
+  threshold on its own.
+- **Corpus:** **0 findings / 240** — no real skill couples a dated/counter/stealth trigger to a
+  destructive action.
+- **Fixtures:** `TestConditionalTimeBombCorrelation` in `pkg/rules/rules_test.go` — 11 TP (both
+  orderings, date/counter/stealth triggers, plus the shell `[ "$(date +%Y)" -ge 2027 ] && rm -rf`
+  form) + 12 benign rows (retention, build cleanup, CI branch, at-rest encryption, changelog year).
+  Bundle fixture: a `date +%Y >= 2027` → `rm -rf "$HOME"` line in `testdata/malicious/setup.sh`,
+  asserted by `TestMaliciousFixtureTriggersTimeBomb` in `pkg/scan/scan_test.go`.
+
 ### SG-MEM-001 — Persistent context / memory poisoning  (AST01/AST03, high) — **implemented** (`core-injection`)
 - **Signals (shipped):** the **instruction-only** form — SG-INJ-004 already owns the *write* form (a
   sink targeting `CLAUDE.md`/`MEMORY.md`), so this rule catches the directive that needs no file
@@ -947,7 +985,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
 | `SG-INJ-007` | Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write) | needs a new `escape_sequence` leaf primitive |
-| `SG-INJ-008` | Conditional / time-bomb instruction (behaves differently under a hidden trigger) | |
+| `SG-INJ-008` | ~~Conditional / time-bomb instruction (behaves differently under a hidden trigger)~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
