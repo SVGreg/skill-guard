@@ -216,3 +216,31 @@ rules:
       - '(?i)/path/to/'
     rationale: Downloading (or decoding) an opaque binary and marking it executable in one step installs unreviewed, unpinned native code that then runs with the agent's privileges — a direct RCE-delivery path that no registry, hash, or scan ever saw (AST02 supply chain / AST01 execution).
     fix: Do not fetch-and-run binaries. Install tools from a package manager with a pinned version and a verified checksum, or vendor the reviewed binary into the bundle with a recorded hash.
+
+  - id: SG-DEP-010
+    title: Package manifest ships an install-lifecycle hook that runs a command
+    ast: [AST02, AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.85
+    targets: [configs, manifest, body]
+    match:
+      # The declarative sibling of SG-CFG-001 (agent-hook config): shipping a
+      # package.json whose `scripts` block wires an INSTALL-time lifecycle key to
+      # a command means `npm install` auto-runs that command with the user's
+      # privileges, before any code is reviewed or run. Scoped to the install/
+      # uninstall keys — the ones npm fires on install — and deliberately NOT
+      # `prepare`/`prepublish`, which are build-time and dominated by the benign
+      # `husky install` idiom. Corpus: 21 package.json files, 0 with any of these
+      # keys, so this is a clean high-signal match.
+      any:
+        - regex: '(?i)"(preinstall|install|postinstall|preuninstall|uninstall|postuninstall)"\s*:\s*"[^"]+"'
+          confidence: 0.85
+    suppress:
+      # A bare version range as the value is a dependency named "install", not a
+      # lifecycle command.
+      - '(?i)"(install|uninstall)"\s*:\s*"[\^~]?\d+\.\d+'
+      - '(?i)/path/to/'
+    rationale: A package.json that binds an install-lifecycle key (preinstall/install/postinstall/…/uninstall) to a command makes `npm install` execute that command automatically, with the user's privileges and before any review — installing code execution by shipping a manifest (AST02 supply chain / AST01 execution). Same shape as a bundled agent-hook config (SG-CFG-001).
+    fix: Do not ship install-lifecycle scripts in a skill bundle. If a build step is genuinely required, document it and let the user run it deliberately after review — never on `npm install`.

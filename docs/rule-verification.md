@@ -735,6 +735,31 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Corpus:** **0 findings / 240 skills**, verdicts unchanged (209/22/9).
 - **Fixtures:** TP `testdata/malicious/setup.sh` (`pip install … --index-url https://pkgs.internal-mirror.test/simple`). FP: `pip install -r requirements.txt`, `npm install --save-dev typescript`, and both canonical registries. See `TestIndexRedirectCoversDependencyConfusion` (8 TP, 6 benign).
 
+### SG-DEP-010 — Install-lifecycle hook that runs a command  (AST02/AST01, high) — **implemented** (`core-supply`)
+- **Threat:** the declarative sibling of `SG-CFG-001` (agent-hook config). A `package.json` whose
+  `scripts` block binds an **install-time lifecycle key** to a command makes `npm install`
+  auto-run that command — with the user's privileges, before any code is reviewed or run. Shipping
+  the manifest *is* the execution, exactly like shipping a `.claude/settings.json` hook.
+- **Signals (shipped):** a JSON key of `preinstall` / `install` / `postinstall` / `preuninstall` /
+  `uninstall` / `postuninstall` with a non-empty string command value.
+- **Scope, decided by measurement.** Deliberately **not** `prepare` / `prepublish` — those are
+  build-time keys dominated by the benign `husky install` idiom, and matching them would be a
+  false-positive magnet. The corpus has **21 `package.json` files and 0** with any install-lifecycle
+  key (the 164 "prepare" corpus hits are all the English word in prose), so the install/uninstall
+  subset is a clean, high-signal match.
+- **FP carve-outs:** a `suppress` drops a bare version range as the value (`"install": "^0.13.0"`) —
+  that is a dependency literally named `install`, not a lifecycle command; `/path/to/` placeholders.
+- **Confidence & severity:** 0.85, `high` — install-time auto-exec of an unreviewed command is a
+  direct RCE-on-install vector (matching `SG-CFG-001`'s severity). The 0.85 also clears the
+  documentary cliff on `configs`/`manifest` targets, which carry no instruction bonus.
+- **Corpus:** **0 findings / 240**, verdicts unchanged.
+- **Fixtures:** `TestInstallLifecycleHookCovered` in `pkg/rules/rules_test.go` — 5 TP forms + 6
+  benign rows (a dependency named `install`, the excluded build-time keys, ordinary scripts). Bundle
+  fixture: `testdata/malicious/package.json` with a `postinstall` hook, asserted by
+  `TestMaliciousFixtureTriggersInstallHook` in `pkg/scan/scan_test.go`. (A `setup.py` `cmdclass`
+  install-command override is the same threat in the Python ecosystem — a candidate extension, not
+  yet shipped.)
+
 ### SG-DEP-007 — Remote-package auto-execution via a package runner  (AST02/AST01, medium) — **implemented** (`core-supply`)
 - **Signals:** the fetch-**and-execute** runner idioms — `npx -y` / `bunx -y` (explicit
   auto-confirm), `pnpm dlx` / `yarn dlx` (the download-and-run subcommand), `uvx <tool>`, and
@@ -919,7 +944,6 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | ID | Threat | Family note |
 |---|---|---|
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
-| `SG-DEP-010` | Post-install / lifecycle hook that runs arbitrary code | sibling of `SG-CFG-001` — shipping a manifest that installs execution |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
 | `SG-INJ-007` | Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write) | needs a new `escape_sequence` leaf primitive |
 | `SG-INJ-008` | Conditional / time-bomb instruction (behaves differently under a hidden trigger) | |
