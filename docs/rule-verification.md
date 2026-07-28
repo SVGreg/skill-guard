@@ -601,10 +601,11 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
   carve-outs above.
 
 ### SG-EXE-002 — Destructive filesystem ops  (AST01, high) — **implemented** (`core-exec`)
-- **Signals:** `rm -rf` on broad/dynamic targets (`/`, `~`, `$VAR`, `*`), `shutil.rmtree`, recursive `chmod -R 777`/`chown -R`, `dd of=/dev/…`, `mkfs`, `> /dev/sda`, `find … -delete` broad.
-- **FP carve-outs:** `rm -rf ./build`, `rm -rf node_modules`, `rmtree(tmpdir)` — scoped to the skill's own workspace/temp is fine. Gate on **target breadth**: absolute root/home/wildcard/variable target elevates; project-relative subdir → low.
-- **Confidence:** `rm -rf /` or `$VAR` 0.9; `chmod -R 777 /` 0.85; scoped build dir 0.2.
-- **Fixtures:** TP: `rm -rf "$HOME"/*`. FP: `rm -rf ./dist`.
+- **Signals:** `rm -rf` on broad/dynamic targets (`/`, `~`, `$VAR`, `*`), `shutil.rmtree`, recursive `chmod -R 777`, `dd of=/dev/…`, `mkfs`. Plus the **non-`rm -rf` deletion forms** an attacker reaches for: `find … -delete` / `find … -exec rm` (recursive delete that never spells out `rm -rf`); Node `fs.rm`/`rmSync`/`rmdir` with `{recursive|force}` and `rimraf()`; Python `os.remove`/`os.unlink`/`os.removedirs` on a broad/dynamic path (`/`, `~`, `$`, `expanduser`, `environ`, `home`); PowerShell `Remove-Item -Recurse -Force` and Windows `del /q /s` / `rmdir /s`; secure-erase `shred`/`wipefs`; and overwriting a raw block device (`> /dev/sda|nvme0|hdX`).
+- **FP carve-outs:** `rm -rf ./build`, `rm -rf node_modules`, `rmtree(tmpdir)` — scoped to the skill's own workspace/temp is fine. Gate on **target breadth**: absolute root/home/wildcard/variable target elevates; project-relative subdir → low. For the new leaves the build-dir carve-out is **path-anchored** (a `dist`/`build`/`target`/`node_modules` token counts as benign only when quote/dot/slash-adjacent), so `fs.rmSync('node_modules', …)` and `Remove-Item -Recurse -Force ./build` are suppressed while a bare identifier arg `fs.rmSync(target, …)` — where `target` is a variable, not the Rust/Java `target/` dir — still fires. `os.remove(tmpfile)` with no broad-path token does not match.
+- **Confidence:** `rm -rf /` or `$VAR` 0.9; `dd of=/dev/…`/block-device overwrite 0.85; PowerShell/Windows recursive-force delete 0.8; `find -delete`/Node recursive/`shred`/`wipefs` 0.75; Python broad-path remove 0.7; scoped build dir suppressed.
+- **Corpus:** 0 → 0 findings / 240 — no benign skill performs a broad destructive op; the widening is forward-looking headroom.
+- **Fixtures:** `TestDestructiveFilesystemCoversVariants` in `pkg/rules/rules_test.go` — 15 TP (all new forms + the `rm -rf`/`rmtree`/`dd` baseline) + 8 benign rows (build/output cleanup, `os.remove(tmpfile)`, the bare-`target`-identifier case, prose). TP: `rm -rf "$HOME"/*`. FP: `rm -rf ./dist`.
 
 ### SG-EXE-003 — Privilege escalation  (AST01, high) — **implemented** (`core-exec`)
 - **Signals:** `sudo`, `su -`, `setuid/setcap`, `pkexec`, `chmod u+s`, `doas`, writing to `/etc/sudoers`, adding SSH keys to `authorized_keys`, `usermod -aG`.

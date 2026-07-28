@@ -122,6 +122,70 @@ func TestDynamicExecSinksCovered(t *testing.T) {
 	}
 }
 
+// TestDestructiveFilesystemCoversVariants is the rule-polish pass on SG-EXE-002.
+// The shipped rule saw `rm -rf`, `shutil.rmtree`, `chmod -R 777`, and `mkfs`/`dd`,
+// but a destructive wipe has many forms that never spell out `rm -rf`: `find …
+// -delete`/`-exec rm`, Node `fs.rmSync({recursive,force})`/`rimraf()`, Python
+// `os.remove`/`os.unlink` on a broad path, PowerShell `Remove-Item -Recurse
+// -Force` and Windows `del /q /s`, secure-erase (`shred`/`wipefs`), and
+// overwriting a raw block device (`> /dev/sda`). The benign rows keep the
+// widening honest — build/output-dir cleanup stays clean, and (the row that
+// forced the path-anchored suppress) a bare `fs.rmSync(target, …)` identifier is
+// not mistaken for the Rust/Java `target/` build dir.
+func TestDestructiveFilesystemCoversVariants(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EXE-002" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EXE-002 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Baseline — must not regress.
+		{"rm -rf /", true},
+		{"rm -rf $HOME", true},
+		{"shutil.rmtree(os.path.expanduser('~'))", true},
+		{"dd of=/dev/sda if=/dev/zero", true},
+
+		// The gap this polish closes.
+		{"find / -name '*.log' -delete", true},
+		{`find ~ -type f -exec rm -f {} \;`, true},
+		{"fs.rmSync(target, { recursive: true, force: true })", true},
+		{"rimraf(process.env.HOME)", true},
+		{"os.remove(os.path.expanduser('~/.bashrc'))", true},
+		{"os.unlink(os.environ['SECRET_PATH'])", true},
+		{`Remove-Item -Recurse -Force $HOME\Documents`, true},
+		{`del /q /s C:\Users`, true},
+		{"shred -uz /etc/passwd", true},
+		{"wipefs -a /dev/sdb", true},
+		{"cat /dev/zero > /dev/sda", true},
+
+		// Benign — must NOT match.
+		{"rm -rf ./dist", false},
+		{"find ./build -name '*.o' -delete", false},
+		{"fs.rmSync('node_modules', { recursive: true })", false},
+		{"os.remove(tmpfile)", false},
+		{"os.remove('output.txt')", false},
+		{"Remove-Item -Recurse -Force ./build", false},
+		{"shredder = Shredder()", false},
+		{"the find command locates files in a directory", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestAgentHookConfigCoversNonJSONFormats is the rule-polish pass on
 // SG-CFG-001. The shipped match required JSON quoting (`"PostToolUse":`), but
 // pkg/skill classifies *any* file under .claude/ as a config regardless of
