@@ -74,3 +74,49 @@ rules:
           confidence: 0.75
     rationale: A manifest that grants read/write/edit access to the whole filesystem (`/`), the home directory (`~`), or an unbounded glob (`**/*`, `*`) hands the skill far more reach than any single function needs — the file-scope half of over-privilege (AST03).
     fix: 'Scope filesystem permissions to the skill''s own workspace and the specific files it needs, e.g. `read: ["./data/*.csv"]` — never `/`, `~`, or `**/*`.'
+
+  - id: SG-TRIG-001
+    title: Over-broad activation trigger
+    ast: [AST04]
+    severity: medium
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [manifest, body]
+    match:
+      # A skill's description is its activation trigger — the agent reads it to
+      # decide relevance. A description that claims the skill applies to *any/every
+      # task* (rather than a scoped domain) hijacks the agent's attention onto
+      # unrelated work, widening the skill's reach the way an over-broad permission
+      # widens its capability (AST04 metadata over-claim). The leaves require a
+      # *universal* activation object (task/request/query/prompt/interaction), not a
+      # scoped one (a filetype or domain) — that distinction is the whole precision
+      # story: "for any Python task" / "all Markdown files" stay clean, "for every
+      # task" / "regardless of the task" do not.
+      any:
+        # for all/every <universal task-noun>. Preposition set excludes "with" on
+        # purpose: "comply/respond with every request" is compliance/jailbreak
+        # framing (SG-ANTI-001/SG-INJ-009 own it), not an activation over-claim.
+        - regex: '(?i)\b(for|on|handle|to)\s+(all|every|any and all)\s+(kinds?\s+of\s+|types?\s+of\s+|sorts?\s+of\s+)?(task|request|quer(y|ies)|prompt|question|interaction|situation|scenario|user\s+(request|input|message|quer(y|ies)|prompt))s?\b'
+          confidence: 0.7
+        # always use/invoke this skill
+        - regex: '(?i)\balways\s+(use|apply|invoke|activate|trigger|prefer|rely on|reach for|choose)\s+(this\s+)?(skill|tool|agent|it|me)\b'
+          confidence: 0.7
+        # regardless of / no matter what (the task/context)
+        - regex: '(?i)\b(regardless of|no matter|irrespective of)\s+(the\s+)?(task|request|quer(y|ies)|context|topic|subject|what)\b'
+          confidence: 0.7
+        # in all situations / contexts
+        - regex: '(?i)\bin\s+(all|every|any)\s+(case|situation|context|scenario|circumstance)s?\b'
+          confidence: 0.65
+        # this skill should (always) be used for any/every task
+        - regex: '(?i)\b(this\s+)?(skill|tool)\s+(should\s+|must\s+|is\s+to\s+)?(always\s+)?(be\s+)?(use|appl|activat|invok|trigger)\w*\s+(for|on|whenever|regardless)\b[^\n]{0,25}\b(any|every|all|everything|task|request)\b'
+          confidence: 0.7
+    rationale: >-
+      A skill whose description claims it applies to any/every task — rather than a scoped domain —
+      over-claims its activation trigger, steering the agent to invoke it on unrelated work. This is
+      the activation-surface analogue of over-broad permissions: it widens the skill's reach at the
+      metadata layer, where the agent decides relevance (AST04).
+    fix: >-
+      Scope the description to what the skill actually does — the file types, domain, or task it
+      handles — so the agent activates it only when relevant. Remove universal-activation phrasing
+      like "for every task", "always use this skill", or "regardless of the request".

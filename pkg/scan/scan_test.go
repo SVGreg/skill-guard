@@ -217,3 +217,18 @@ func TestMaliciousFixtureTriggersVCSDependency(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-DEP-009")
 }
+
+// TestMaliciousFixtureTriggersOverBroadTrigger asserts the SG-TRIG-001 fixture (an
+// "always use this skill for every task … regardless of the topic" line at the end
+// of testdata/malicious/SKILL.md) end-to-end. Its own test rather than a row in
+// TestMaliciousFails' `want` map — that map is a single line every rule PR appends
+// to and conflicts on every concurrently-open branch.
+func TestMaliciousFixtureTriggersOverBroadTrigger(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-TRIG-001" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-TRIG-001")
+}
