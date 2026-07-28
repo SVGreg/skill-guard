@@ -124,16 +124,15 @@ func TestDynamicExecSinksCovered(t *testing.T) {
 	}
 }
 
-// TestDestructiveFilesystemCoversVariants is the rule-polish pass on SG-EXE-002.
-// The shipped rule saw `rm -rf`, `shutil.rmtree`, `chmod -R 777`, and `mkfs`/`dd`,
-// but a destructive wipe has many forms that never spell out `rm -rf`: `find …
-// -delete`/`-exec rm`, Node `fs.rmSync({recursive,force})`/`rimraf()`, Python
-// `os.remove`/`os.unlink` on a broad path, PowerShell `Remove-Item -Recurse
-// -Force` and Windows `del /q /s`, secure-erase (`shred`/`wipefs`), and
-// overwriting a raw block device (`> /dev/sda`). The benign rows keep the
-// widening honest — build/output-dir cleanup stays clean, and (the row that
-// forced the path-anchored suppress) a bare `fs.rmSync(target, …)` identifier is
-// not mistaken for the Rust/Java `target/` build dir.
+// TestDestructiveFilesystemCoversVariants pins SG-EXE-002 after the precision
+// pass driven by the 777-skill evaluation: the rule must fire on a wipe of a
+// genuinely broad target (root, home, `$HOME`, a system dir, a drive root, a
+// block device) across all its command forms — but must NOT fire on the ordinary
+// cleanup that dominates real dev skills, where the target is a scoped path
+// (`/tmp/x`), a plain variable (`$OUTDIR`, `fs.rmSync(tmpDir, …)`), or a build
+// dir. The earlier `rm -rf (/|$var|*)` form matched any absolute path and any
+// variable and fired on ~92% of the corpus; the benign block below is the
+// regression guard for exactly that false-positive class.
 func TestDestructiveFilesystemCoversVariants(t *testing.T) {
 	packs, _ := Builtin()
 	var r *Rule
@@ -151,32 +150,45 @@ func TestDestructiveFilesystemCoversVariants(t *testing.T) {
 		text string
 		want bool
 	}{
-		// Baseline — must not regress.
+		// True positives — a broad/root/home/device target, every command form.
 		{"rm -rf /", true},
+		{"rm -rf /*", true},
+		{"rm -rf ~", true},
 		{"rm -rf $HOME", true},
+		{`rm -rf "$HOME"/*`, true}, // the malicious fixture
+		{"rm -rf /etc", true},
+		{"sudo rm -rf /", true},
 		{"shutil.rmtree(os.path.expanduser('~'))", true},
 		{"dd of=/dev/sda if=/dev/zero", true},
-
-		// The gap this polish closes.
 		{"find / -name '*.log' -delete", true},
 		{`find ~ -type f -exec rm -f {} \;`, true},
-		{"fs.rmSync(target, { recursive: true, force: true })", true},
+		{"fs.rmSync(os.homedir(), { recursive: true, force: true })", true},
+		{`fs.rmSync("/", { recursive: true })`, true},
 		{"rimraf(process.env.HOME)", true},
 		{"os.remove(os.path.expanduser('~/.bashrc'))", true},
-		{"os.unlink(os.environ['SECRET_PATH'])", true},
 		{`Remove-Item -Recurse -Force $HOME\Documents`, true},
 		{`del /q /s C:\Users`, true},
 		{"shred -uz /etc/passwd", true},
 		{"wipefs -a /dev/sdb", true},
 		{"cat /dev/zero > /dev/sda", true},
 
-		// Benign — must NOT match.
+		// Benign — the false-positive class the 777-skill eval exposed. All the
+		// destructive verbs, but a scoped/variable/build-dir target = cleanup.
+		{`rm -rf "$OUTDIR"`, false},
+		{`rm -rf "$VENV_DIR"`, false},
+		{`rm -rf "$CONFIG_DIR"`, false},
+		{"rm -rf /tmp/build", false},
+		{"rm -rf /var/folders/abc", false},
 		{"rm -rf ./dist", false},
-		{"find ./build -name '*.o' -delete", false},
+		{"rm -rf node_modules", false},
+		{"fs.rmSync(tmpDir, { recursive: true, force: true })", false},
+		{"fs.rmSync(dataDir, { recursive: true })", false},
 		{"fs.rmSync('node_modules', { recursive: true })", false},
 		{"os.remove(tmpfile)", false},
-		{"os.remove('output.txt')", false},
+		{`shutil.rmtree(self.versions_dir / "x")`, false},
+		{"Remove-Item -LiteralPath $d -Recurse -Force", false},
 		{"Remove-Item -Recurse -Force ./build", false},
+		{"find ./build -name '*.o' -delete", false},
 		{"shredder = Shredder()", false},
 		{"the find command locates files in a directory", false},
 	}
