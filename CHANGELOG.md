@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.11](https://github.com/SVGreg/skill-guard/compare/v0.1.10...v0.1.11) (2026-07-28)
+
+
+### Features
+
+* **rules:** add SG-DEP-010 — install-lifecycle hook runs a command (AST02/AST01) ([#76](https://github.com/SVGreg/skill-guard/issues/76)) ([21bf291](https://github.com/SVGreg/skill-guard/commit/21bf291775e2f30e5cfeccc924d339be834fea9d))
+* **rules:** add SG-DEP-011 — fetches a binary/blob and marks it executable (AST02/AST01) ([#75](https://github.com/SVGreg/skill-guard/issues/75)) ([a9dd4f7](https://github.com/SVGreg/skill-guard/commit/a9dd4f7594ccd638ff4da05fbfd8cc76f3b77ce1))
+* **rules:** add SG-INJ-008 — conditional / time-bomb instruction (AST01) ([#81](https://github.com/SVGreg/skill-guard/issues/81)) ([2a18b6a](https://github.com/SVGreg/skill-guard/commit/2a18b6a5fe6a2c79261e626a4219d1e781752605))
+* **rules:** add SG-INJ-010 — concealment / secrecy directive (AST01) ([#84](https://github.com/SVGreg/skill-guard/issues/84)) ([3639772](https://github.com/SVGreg/skill-guard/commit/3639772e2008fe15d1ac9816842696d2688b2c8b))
+* **rules:** add SG-NET-008 — disabled TLS / certificate verification (AST01/AST06) ([#74](https://github.com/SVGreg/skill-guard/issues/74)) ([976245c](https://github.com/SVGreg/skill-guard/commit/976245c7ee9da543da8ee006287e22f7975da9a5))
+* **rules:** add SG-TRIG-001 — over-broad activation trigger (AST04) ([#87](https://github.com/SVGreg/skill-guard/issues/87)) ([3de0c28](https://github.com/SVGreg/skill-guard/commit/3de0c28629ff08025b1c3186d0384e32479f6c8c))
+
+
+### Bug Fixes
+
+* **cmd:** quote filesystem paths in output to neutralize terminal injection ([#78](https://github.com/SVGreg/skill-guard/issues/78)) ([8bd5ff5](https://github.com/SVGreg/skill-guard/commit/8bd5ff576f28770e2f332d11cca08cfb334e1a1a))
+* **rules:** make the documentary/code-example penalties prose-only ([#79](https://github.com/SVGreg/skill-guard/issues/79)) ([90b79ad](https://github.com/SVGreg/skill-guard/commit/90b79ada87cdde0e44a3c27478d19dea3c43ab0e))
+* **rules:** widen SG-EXE-002 to cover non-rm-rf destructive ops ([#86](https://github.com/SVGreg/skill-guard/issues/86)) ([970e438](https://github.com/SVGreg/skill-guard/commit/970e438701ca6783bd353f604fb7f502c7a2e2c9))
+* **rules:** widen SG-NET-002 to cover non-pipe fetch-exec forms ([#80](https://github.com/SVGreg/skill-guard/issues/80)) ([3969663](https://github.com/SVGreg/skill-guard/commit/396966380ac959d9404adc019bb8cb69878efd37))
+* **skill:** classify extensionless perl/php scripts and label shebang language ([#85](https://github.com/SVGreg/skill-guard/issues/85)) ([75dea6f](https://github.com/SVGreg/skill-guard/commit/75dea6fa774d72c585ef15cdaf9ba4f68d3dd9d5))
+
 ## [0.1.10](https://github.com/SVGreg/skill-guard/compare/v0.1.9...v0.1.10) (2026-07-26)
 
 
