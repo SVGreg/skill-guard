@@ -84,43 +84,62 @@ rules:
     confidence: 0.6
     targets: [scripts, configs, body]
     match:
+      # Precision note (evaluation over 777 real skills): a destructive command
+      # whose target is a *scoped path* (`/tmp/x`), an *ordinary variable*
+      # (`$OUTDIR`, `fs.rmSync(tmpDir, …)`), or a *build dir* is benign cleanup and
+      # is the overwhelming real-world case. Every leaf therefore requires a
+      # genuinely **broad** target — filesystem root, the home directory, `$HOME`,
+      # a top-level system directory, a drive root, or `os.homedir()`/`expanduser`
+      # — never a bare variable or a named subpath. The earlier `rm -rf (/|$var|*)`
+      # form matched any absolute path and any variable, which fired on ~92% of the
+      # corpus (mostly `rm -rf "$VENV_DIR"` and `fs.rmSync(tmpDir,{recursive})`).
       any:
-        - regex: '(?i)\brm\s+-[a-z]*r[a-z]*f?\b[^\n]{0,20}(/|~|\$\w+|\*)'
+        # rm -rf targeting root / home / $HOME / a system dir / a drive root,
+        # optionally with a /* wildcard, then a shell boundary — never a subpath.
+        - regex: '(?i)\brm\s+(?:-[a-z-]+\s+)*-[a-z]*r[a-z]*f?[a-z]*\s+(?:-[a-z-]+\s+)*(?:sudo\s+)?["'']?(?:(?:/|~|\$\{?HOME\}?|%USERPROFILE%|[A-Za-z]:\\)(?:/\*?|\*)?|/(?:etc|usr|var|bin|sbin|lib|lib64|boot|sys|dev|proc|root|home|opt|Users|System|Applications)(?:/\*?)?)["'']?(?:\s|$|[;&|"''`])'
           confidence: 0.9
-        - regex: '(?i)\bshutil\.rmtree\s*\(\s*[^)]*(/|~|\$|home|expanduser)'
-          confidence: 0.7
         - regex: '(?i)\bchmod\s+-R\s+777\b'
           confidence: 0.7
         - regex: '(?i)\b(mkfs|dd\s+of=/dev/)'
           confidence: 0.85
-        # `find … -delete` / `find … -exec rm` — recursive deletion that never
-        # spells out `rm -rf`, so the first leaf misses it.
-        - regex: '(?i)\bfind\s+[^\n|;]{0,80}(-delete\b|-exec\s+rm\b|-execdir\s+rm\b)'
-          confidence: 0.75
-        # Node recursive removal: fs.rm/rmSync/rmdir with {recursive|force}, or rimraf().
-        - regex: '(?i)(\bfs\.(rm|rmSync|rmdir|rmdirSync)\s*\([^)]{0,80}(recursive|force)|(^|[^.\w])rimraf(\.sync)?\s*\()'
-          confidence: 0.75
-        # Python file removal on a broad/dynamic path (home, env, absolute, ~, $).
-        - regex: '(?i)\bos\.(remove|unlink|removedirs)\s*\([^)]{0,60}(/|~|\$|expanduser|environ|[Hh]ome)'
-          confidence: 0.7
-        # PowerShell `Remove-Item -Recurse -Force` and Windows `del /q /s` / `rmdir /s`.
-        - regex: '(?i)(Remove-Item\b[^\n]{0,60}-Recurse\b[^\n]{0,20}-Force\b|Remove-Item\b[^\n]{0,60}-Force\b[^\n]{0,20}-Recurse\b|\bdel\s+/[a-z]\b[^\n]{0,25}/[qs]\b|\brmdir\s+/s\b)'
+        # find rooted at exactly / or ~ or $HOME with -delete / -exec rm. A scoped
+        # `find /var/log/app … -delete` (log rotation) or `find ./build … -delete`
+        # is cleanup and does not match — the path token must be the root/home
+        # itself (optionally `/*`), then whitespace.
+        - regex: '(?i)\bfind\s+["'']?(/|~|\$\{?HOME\}?)(?:/\*)?["'']?\s[^\n|;]{0,80}(-delete\b|-exec(?:dir)?\s+rm\b)'
           confidence: 0.8
+        # shutil.rmtree of a literal root/home or expanduser/Path.home()/HOME env —
+        # not a variable and not a pathlib `dir / "x"` expression.
+        - regex: '(?i)\bshutil\.rmtree\s*\(\s*(["''](/|~)["'']|[^)]{0,60}(expanduser|Path\.home\(\)|environ\s*\[\s*["'']HOME|environ\.get\(\s*["'']HOME))'
+          confidence: 0.75
+        # Python single-file removal of the home directory (single-file, so lower
+        # confidence; still gated on an explicit home indicator, never bare `/`).
+        - regex: '(?i)\bos\.(remove|unlink|removedirs)\s*\([^)]{0,60}(expanduser|Path\.home\(\)|environ\s*\[\s*["'']HOME|environ\.get\(\s*["'']HOME)'
+          confidence: 0.6
+        # Node fs.rm*/rmdir of a literal root/home or os.homedir()/env.HOME with
+        # {recursive|force}, or rimraf() of the same — not `fs.rmSync(tmpDir, …)`.
+        - regex: '(?i)(\bfs\.(rm|rmSync|rmdir|rmdirSync)\s*\(\s*(["''](/|~)[^"'']*["'']|[^)]{0,60}(homedir\(\)|env\.HOME|process\.env\.HOME|USERPROFILE))[^)]{0,60}(recursive|force)|(^|[^.\w])rimraf(\.sync)?\s*\(\s*(["''](/|~)|[^)]{0,40}(homedir\(\)|env\.HOME|USERPROFILE)))'
+          confidence: 0.75
+        # PowerShell Remove-Item -Recurse -Force on $HOME / drive root / ~ (target
+        # in either position); a scoped `Remove-Item -LiteralPath $d …` does not match.
+        - regex: '(?i)Remove-Item\b(?:[^\n]{0,80}(\$HOME|\$env:USERPROFILE|~|[A-Za-z]:\\|/["''\s])[^\n]{0,40}(-Recurse\b[^\n]{0,20}-Force\b|-Force\b[^\n]{0,20}-Recurse\b)|[^\n]{0,80}(-Recurse\b[^\n]{0,20}-Force\b|-Force\b[^\n]{0,20}-Recurse\b)[^\n]{0,40}(\$HOME|\$env:USERPROFILE|~|[A-Za-z]:\\|/["''\s]))'
+          confidence: 0.8
+        # Windows del /q /s or rmdir /s targeting a drive root, a top-level system
+        # directory (C:\Users, C:\Windows), or the user profile — not a scoped path.
+        - regex: '(?i)\b(del\s+/[qsf]\b[^\n]{0,25}/[qsf]\b|rmdir\s+/s\b)[^\n]{0,30}([A-Za-z]:\\(?:Users|Windows|Program Files|ProgramData)?(?:\s|$|["''])|%USERPROFILE%|%HOMEPATH%)'
+          confidence: 0.75
         # Secure-erase / filesystem-signature wipe.
         - regex: '(?i)\b(shred\s+-[a-z]*|wipefs\b)'
           confidence: 0.75
         # Overwriting a raw block device destroys the disk.
         - regex: '(?i)>\s*/dev/(sd[a-z]|nvme\d|hd[a-z]|disk\d)'
           confidence: 0.85
-    suppress:
-      - '(?i)rm\s+-rf\s+\.?/?(dist|build|node_modules|tmp|target|\.cache)\b'
-      # For the new find/Remove-Item/fs.rm leaves, treat a build/output dir as
-      # benign only when it appears as a *path* (quote/dot/slash-anchored), so a
-      # bare identifier arg like `fs.rmSync(target, …)` is not mistaken for the
-      # Rust/Java `target/` build directory.
-      - '(?i)(find\s|Remove-Item|fs\.rm\w*\s*\()[^\n]{0,40}[''"./](dist|build|node_modules|tmp|target|coverage|out|\.next|\.cache|\.venv)\b'
-    rationale: Destructive filesystem operations on broad or dynamic targets can wipe user data (AST01).
-    fix: Scope deletions to the skill's own workspace; never target /, $HOME, or wildcards.
+    rationale: >-
+      Destructive filesystem operations aimed at the filesystem root, the home directory (`~`/`$HOME`),
+      a top-level system directory, or a raw block device can wipe user or system data (AST01). Deletion
+      of a scoped path, a build/output directory, or a variable-named workspace dir is ordinary cleanup
+      and is not flagged.
+    fix: Scope deletions to the skill's own workspace; never target `/`, `~`, `$HOME`, a system dir, or a block device.
 
   - id: SG-EXE-003
     title: Privilege escalation
