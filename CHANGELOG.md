@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.12](https://github.com/SVGreg/skill-guard/compare/v0.1.11...v0.1.12) (2026-07-28)
+
+
+### Features
+
+* **rules:** add SG-STEER-001 — behavioral steering / bias injection (AST01) ([#91](https://github.com/SVGreg/skill-guard/issues/91)) ([354aebe](https://github.com/SVGreg/skill-guard/commit/354aebe82e1a8a999d8e6392d7ffaf8d88744569))
+
+
+### Bug Fixes
+
+* **rules:** normalize URL authority in scanURLHost + rune-safe truncate ([#92](https://github.com/SVGreg/skill-guard/issues/92)) ([a265038](https://github.com/SVGreg/skill-guard/commit/a265038420afcca279ed08eae7bfc0dcf8ca909e))
+
 ## [0.1.11](https://github.com/SVGreg/skill-guard/compare/v0.1.10...v0.1.11) (2026-07-28)
 
 
