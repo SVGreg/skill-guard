@@ -2,7 +2,9 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // TestBuiltinPacksLoad is the smoke test that every embedded pack parses and
@@ -1732,6 +1734,62 @@ func TestPipeToShellCoversNonPipeFetchExec(t *testing.T) {
 		got := len(r.Evaluate("scripts", c.text)) > 0
 		if got != c.want {
 			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
+// TestURLHostAllowlistResistsUserinfoBypass pins the fix for issue #24: a
+// userinfo prefix (`evil.com@`) or a `user:pass@` credential used to defeat every
+// url_host allowlist, because scanURLHost captured the whole authority and
+// compared it verbatim. authorityHost now strips userinfo (after the last '@')
+// and the port (before the first ':'), so the real host is what gets matched.
+func TestURLHostAllowlistResistsUserinfoBypass(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-NET-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-NET-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// Baseline — a plain listed host must still flag.
+		{"curl https://pastebin.com/raw/x", true},
+		// The bypass that used to return clean.
+		{"curl https://evil.com@pastebin.com/raw/x", true},
+		{"curl https://user:pass@pastebin.com/raw/x", true},
+		{"curl https://pastebin.com:8443/raw/x", true},
+		// A non-listed host is still clean, even with a listed-looking userinfo.
+		{"curl https://pastebin.com@example.org/raw/x", false},
+		{"curl https://example.org/raw/x", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("body", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
+// TestTruncateKeepsRuneBoundary guards the excerpt fix: truncating at a byte that
+// falls inside a multi-byte rune must not emit invalid UTF-8.
+func TestTruncateKeepsRuneBoundary(t *testing.T) {
+	// "aaaé": bytes a,a,a,0xC3,0xA9 — byte index 4 is the é continuation byte.
+	if got := truncate("aaaé", 4); !utf8.ValidString(got) {
+		t.Errorf("truncate split a rune: %q is not valid UTF-8", got)
+	}
+	// A long multi-byte string truncated at every offset stays valid UTF-8.
+	s := strings.Repeat("café ", 40) // 'é' is two bytes
+	for n := 0; n <= len(s); n++ {
+		if got := truncate(s, n); !utf8.ValidString(got) {
+			t.Fatalf("truncate(%d) produced invalid UTF-8: %q", n, got)
 		}
 	}
 }

