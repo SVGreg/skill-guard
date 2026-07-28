@@ -420,3 +420,52 @@ rules:
       Never instruct the agent to conceal, downplay, or omit reporting what it did. A skill's actions
       must be transparent to the user; remove any directive to act silently or to withhold disclosure,
       and surface every side effect the skill causes.
+
+  - id: SG-STEER-001
+    title: Subtle behavioral steering / bias injection
+    ast: [AST01]
+    severity: medium
+    engine: static
+    layer: content
+    confidence: 0.75
+    targets: [body, manifest]
+    match:
+      # Bias injection: a skill directive that steers the *user* toward a
+      # commercial/undisclosed end, or covertly manipulates them, or injects
+      # promotion into every response (SkillSpector P4). The authority spec
+      # (rule-verification §2) calls this "T3-leaning" — intent/commercialness is
+      # semantic — so this ships only the *statically-unambiguous* subset: covert
+      # framing ("without the user knowing") and marketing-injection, not the bare
+      # "prefer X over Y" seed, which is a false-positive minefield ("prefer
+      # prepared statements over string concatenation") best left to the LLM engine.
+      any:
+        # Covert steering: a "subtly/secretly" adverb ahead of a steer verb + user.
+        - regex: '(?i)\b(subtly|covertly|secretly|quietly|discreetly|surreptitiously)\b[^\n]{0,30}\b(steer|guide|nudge|influence|push|direct|lead|manipulate|sway|coax)\b[^\n]{0,25}\b(the\s+)?(user|users|them|customer|reader|audience)\b'
+          confidence: 0.8
+        # Covert steering: a steer verb + user + a "without them knowing" clause.
+        - regex: '(?i)\b(steer|guide|nudge|influence|push|direct|lead|manipulate|sway|coax)\b[^\n]{0,25}\b(the\s+)?(user|users|them|customer|reader)\b[^\n]{0,40}\bwithout\b[^\n]{0,20}(them\s+)?(know|knowing|realiz|realis|notic|aware|suspect)'
+          confidence: 0.8
+        # Inject promotion/marketing/affiliate into every response.
+        - regex: '(?i)\b(append|add|insert|include|inject|slip|work|sneak)\b[^\n]{0,25}\b(promot\w+|marketing|advertis\w+|sponsor\w+|referral|affiliate|brand\s*\w*|our\s+product|the\s+product)\b[^\n]{0,35}\b(to|in|into)\b[^\n]{0,20}\b(every|each|all|your)\b[^\n]{0,15}(response|answer|repl(y|ies)|message|output)'
+          confidence: 0.75
+        # Suppress competitors / alternatives. Base 0.85 because the leaf's own
+        # "never/do not/avoid" is a docKeyword: the documentary -0.4 fires on the
+        # payload itself, so a lower base would never clear the emit threshold even
+        # with the +0.15 body bonus (same arithmetic as SG-ANTI-001/SG-MCP-001).
+        - regex: '(?i)\b(never|do not|don''?t|avoid)\b[^\n]{0,20}\b(mention|recommend|suggest|name|reference|acknowledge)\b[^\n]{0,25}\b(competitor|rival|alternative|other\s+(product|brand|tool|vendor|compan|option|service))'
+          confidence: 0.85
+    suppress:
+      # Technical/security best-practice preference is not bias injection — the
+      # authority spec's canonical FP. These objects are quality guidance, not a
+      # commercial or covert end.
+      - '(?i)\b(prefer|recommend|use|choose)\b[^\n]{0,20}\b(https?|tls|ssl|prepared statements?|parameteriz\w+|https over|encryption|least privilege|strong passwords?|2fa|mfa)\b'
+    rationale: >-
+      A skill that covertly steers the user toward a commercial or undisclosed end — "subtly nudge the
+      user toward BrandX without them noticing", inject promotional content into every response, or
+      suppress mention of competitors — manipulates the user through the agent without disclosure
+      (AST01 behavioral steering / bias injection). Unlike a jailbreak it needs no override verb; the
+      covert/commercial framing is the harm.
+    fix: >-
+      Keep the agent's guidance neutral and disclosed. Do not instruct it to covertly influence the
+      user, inject marketing into responses, or hide competing options — surface recommendations
+      transparently and let the user decide.

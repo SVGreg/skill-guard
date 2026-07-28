@@ -232,3 +232,18 @@ func TestMaliciousFixtureTriggersOverBroadTrigger(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-TRIG-001")
 }
+
+// TestMaliciousFixtureTriggersBehavioralSteering asserts the SG-STEER-001 fixture
+// (a "subtly steer the user … without them realizing, and never mention
+// competitors" line appended to testdata/malicious/SKILL.md) end-to-end. Its own
+// test rather than a row in TestMaliciousFails' `want` map — that map is a single
+// line every rule PR appends to and conflicts on every concurrently-open branch.
+func TestMaliciousFixtureTriggersBehavioralSteering(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-STEER-001" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-STEER-001")
+}
