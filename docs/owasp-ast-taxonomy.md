@@ -156,8 +156,9 @@ attacker-controlled inputs the loader reads with little validation. Two layers: 
 (`!!python/object`, `!!python/apply`, `__proto__` prototype pollution);
 steganographic injection in metadata/instructions (zero-width Unicode, base64,
 ASCII smuggling); brand impersonation; understated permissions; spoofed
-`risk_tier`; `requirements.txt`/`package.json`/`pyproject.toml` treated as
-untrusted.
+`risk_tier`; over-broad activation triggers whose `description` claims the skill
+applies to any/every task to widen activation onto unrelated work (SG-TRIG-001);
+`requirements.txt`/`package.json`/`pyproject.toml` treated as untrusted.
 
 **Boundary — the sharp one.** AST04 executes/deceives from the skill's **own
 files at parse time**; **AST05** covers instructions **loaded from external

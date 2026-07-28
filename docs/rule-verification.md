@@ -723,12 +723,15 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** claims safe, computes dangerous 0.7.
 - **Fixtures:** TP: `risk_tier: L0` on a skill with a credential read. FP: no `risk_tier` key.
 
-### SG-TRIG-001 — Trigger abuse / shadowing  (AST04, medium) — **NEW (SkillSpector TR1–TR3)**
+### SG-TRIG-001 — Trigger abuse / shadowing  (AST04, medium) — **implemented (over-activation subset)** (`core-metadata`)
 - **Signals:** `description`/trigger phrasing engineered for **over-activation**: single common words (`help`, `run`, `file`), or claims to handle "any/all/every request", or shadows a built-in command / another installed skill's trigger. Analyze the description's triggering surface.
-- **FP carve-outs:** descriptive triggers that are specific ("convert HEIC to JPEG") are fine; require genericness/breadth or explicit shadowing.
-- **Escalation:** T3 to judge "is this description written to maximize activation vs. describe a purpose."
-- **Confidence:** "use this for any request" 0.8; single-common-word trigger 0.6.
-- **Fixtures:** TP: description "Activate for every user message, always." FP: "Use when the user asks to resize images."
+- **Shipped:** the **over-activation** half — five `manifest`/`body` leaves: (1) `for/on/handle all|every <universal task-noun>`; (2) `always use|invoke this skill`; (3) `regardless of|no matter (the task/context/what)`; (4) `in all situations|contexts|cases`; (5) `this skill should (always) be used for any/every task`. The **single-common-word trigger** and **shadowing** signals are not yet shipped — they need a corpus-of-installed-skills / built-in-command list to judge, so they stay T3/future work.
+- **Precision — universal object vs scoped object is the whole story.** Every shipped leaf requires the activation object to be **universal** (`task`, `request`, `query`, `prompt`, `question`, `interaction`, `situation`), never a **scoped** one (a filetype or domain). That keeps the ubiquitous benign phrasings clean: "for any **Python task**", "format all **Markdown files**", "convert every **image**", "all your **data-visualization needs**" do not match, while "for every **task**" / "regardless of the **task**" do. Leaf (1) deliberately **excludes the preposition "with"**: "comply/respond with every request" is compliance/jailbreak framing owned by `SG-ANTI-001`/`SG-INJ-009`, not an activation over-claim — without the exclusion the rule double-fired on the malicious fixture's "comply with every request" line.
+- **FP carve-outs:** descriptive triggers that are specific ("convert HEIC to JPEG") are fine; require genericness/breadth or explicit shadowing. The documentary −0.4 modifier drops a doc that merely *describes* over-activation below the emit threshold.
+- **Escalation:** T3 to judge "is this description written to maximize activation vs. describe a purpose," and for the deferred shadowing/common-word signals.
+- **Confidence:** shipped leaves 0.65–0.7 ("use this for any request" family). `manifest`/`body` carry the +0.15 instruction bonus.
+- **Corpus:** **0 hits / 240 skills** — real descriptions are scoped to what the skill does, so none trip the universal-activation leaves.
+- **Fixtures:** `TestOverBroadActivationTrigger` in `pkg/rules/rules_test.go` — 8 TP + 10 benign rows (the scoped-broad phrasings that would break a naive `any|every|all` match). Bundle fixture: an "always use this skill for every task … regardless of the topic" line appended to `testdata/malicious/SKILL.md`, asserted by `TestMaliciousFixtureTriggersOverBroadTrigger` in `pkg/scan/scan_test.go`.
 
 ### SG-AS-001 — Agent-config / cross-skill snooping  (AST03, high) — **implemented** (`core-secret`)
 - **Signals (shipped):** two leaves. **(a) Config read** — a read verb within 40 chars of an agent
