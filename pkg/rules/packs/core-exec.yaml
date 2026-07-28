@@ -93,8 +93,32 @@ rules:
           confidence: 0.7
         - regex: '(?i)\b(mkfs|dd\s+of=/dev/)'
           confidence: 0.85
+        # `find … -delete` / `find … -exec rm` — recursive deletion that never
+        # spells out `rm -rf`, so the first leaf misses it.
+        - regex: '(?i)\bfind\s+[^\n|;]{0,80}(-delete\b|-exec\s+rm\b|-execdir\s+rm\b)'
+          confidence: 0.75
+        # Node recursive removal: fs.rm/rmSync/rmdir with {recursive|force}, or rimraf().
+        - regex: '(?i)(\bfs\.(rm|rmSync|rmdir|rmdirSync)\s*\([^)]{0,80}(recursive|force)|(^|[^.\w])rimraf(\.sync)?\s*\()'
+          confidence: 0.75
+        # Python file removal on a broad/dynamic path (home, env, absolute, ~, $).
+        - regex: '(?i)\bos\.(remove|unlink|removedirs)\s*\([^)]{0,60}(/|~|\$|expanduser|environ|[Hh]ome)'
+          confidence: 0.7
+        # PowerShell `Remove-Item -Recurse -Force` and Windows `del /q /s` / `rmdir /s`.
+        - regex: '(?i)(Remove-Item\b[^\n]{0,60}-Recurse\b[^\n]{0,20}-Force\b|Remove-Item\b[^\n]{0,60}-Force\b[^\n]{0,20}-Recurse\b|\bdel\s+/[a-z]\b[^\n]{0,25}/[qs]\b|\brmdir\s+/s\b)'
+          confidence: 0.8
+        # Secure-erase / filesystem-signature wipe.
+        - regex: '(?i)\b(shred\s+-[a-z]*|wipefs\b)'
+          confidence: 0.75
+        # Overwriting a raw block device destroys the disk.
+        - regex: '(?i)>\s*/dev/(sd[a-z]|nvme\d|hd[a-z]|disk\d)'
+          confidence: 0.85
     suppress:
       - '(?i)rm\s+-rf\s+\.?/?(dist|build|node_modules|tmp|target|\.cache)\b'
+      # For the new find/Remove-Item/fs.rm leaves, treat a build/output dir as
+      # benign only when it appears as a *path* (quote/dot/slash-anchored), so a
+      # bare identifier arg like `fs.rmSync(target, …)` is not mistaken for the
+      # Rust/Java `target/` build directory.
+      - '(?i)(find\s|Remove-Item|fs\.rm\w*\s*\()[^\n]{0,40}[''"./](dist|build|node_modules|tmp|target|coverage|out|\.next|\.cache|\.venv)\b'
     rationale: Destructive filesystem operations on broad or dynamic targets can wipe user data (AST01).
     fix: Scope deletions to the skill's own workspace; never target /, $HOME, or wildcards.
 
