@@ -28,6 +28,8 @@ Thumbs.db
 /evaluation/anthropic/
 /evaluation/clawhub/
 /evaluation/clawhub*/
+/evaluation/skillsmp/
+/evaluation/orgs/
 /evaluation/reports/
 
 # Maintenance-loop runtime state (per-machine; not shared)
