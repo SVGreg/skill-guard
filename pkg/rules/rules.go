@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
 )
@@ -324,12 +325,33 @@ func isEmojiZWJ(text string, off int) bool {
 	return isEmojiBase(prev) && isEmojiBase(next)
 }
 
-var urlHostRe = regexp.MustCompile(`https?://([^/\s"'` + "`" + `)\]<>:]+)`)
+// urlHostRe captures the whole authority after the scheme — userinfo, host, and
+// port together — because splitting it in the regex is what let a userinfo prefix
+// evade the allowlist. The authority is everything up to the first '/', space,
+// quote, or bracket; ':' and '@' stay inside the capture so authorityHost below
+// can strip them per the URL spec.
+var urlHostRe = regexp.MustCompile(`https?://([^/\s"'` + "`" + `)\]<>]+)`)
+
+// authorityHost extracts the real host from a captured URL authority. Per the URL
+// spec the host is the part after the LAST '@' (dropping any `user:pass@`
+// userinfo) and before the first ':' (dropping the port). Without this,
+// `https://evil.com@pastebin.com` captured the whole `evil.com@pastebin.com` and
+// never matched a `pastebin.com` allowlist — a one-character prefix defeated every
+// url_host rule (issue #24).
+func authorityHost(authority string) string {
+	if i := strings.LastIndexByte(authority, '@'); i >= 0 {
+		authority = authority[i+1:]
+	}
+	if i := strings.IndexByte(authority, ':'); i >= 0 {
+		authority = authority[:i]
+	}
+	return strings.ToLower(authority)
+}
 
 func scanURLHost(text string, hosts []string, conf float64) []match {
 	var ms []match
 	for _, loc := range urlHostRe.FindAllStringSubmatchIndex(text, -1) {
-		host := strings.ToLower(text[loc[2]:loc[3]])
+		host := authorityHost(text[loc[2]:loc[3]])
 		for _, h := range hosts {
 			h = strings.ToLower(h)
 			if host == h || strings.HasSuffix(host, "."+h) {
@@ -447,9 +469,17 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
+// truncate caps an excerpt at n bytes without splitting a multi-byte rune: byte
+// n may fall inside a UTF-8 sequence (common in non-English skills and in the
+// unicode-smuggling findings this scanner exists to surface), and a raw s[:n]
+// there yields invalid UTF-8 in the reported excerpt. Back off to the nearest
+// rune boundary at or before n.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n]
 }
