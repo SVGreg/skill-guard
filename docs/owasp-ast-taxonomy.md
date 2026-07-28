@@ -70,7 +70,9 @@ rendered markdown/HTML image or link whose URL interpolates conversation or
 secret data (EchoLeak, CVE-2025-32711); destructive operations authored in
 the skill; conditional / time-bomb instructions that gate a destructive or
 exfiltrating branch behind a future date, an invocation counter, or a
-"nobody is watching" / "only in production" trigger (SG-INJ-008).
+"nobody is watching" / "only in production" trigger (SG-INJ-008); concealment /
+secrecy directives that tell the agent to hide an action from the user
+("do not mention this to the user", "act silently and do not report") (SG-INJ-010).
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
 otherwise-legitimate skill → AST03. Deception at the *metadata* layer → AST04.
