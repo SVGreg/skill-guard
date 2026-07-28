@@ -27,6 +27,7 @@ Thumbs.db
 # Evaluation artifacts
 /evaluation/anthropic/
 /evaluation/clawhub/
+/evaluation/clawhub*/
 /evaluation/reports/
 
 # Maintenance-loop runtime state (per-machine; not shared)
