@@ -121,6 +121,42 @@ func TestCRLFFrontMatter(t *testing.T) {
 	}
 }
 
+// TestShebangClassifiesExtensionlessScripts pins the classify() fix: an
+// executable shipped without a script extension must be recognized as a `script`
+// (so it reaches the code-layer rules) and labeled with its real interpreter, not
+// a blanket "bash". Before the fix, `#!/usr/bin/perl` and `#!/usr/bin/php`
+// classified as `asset` (never scanned as scripts) and a python shebang was
+// mislabeled bash, hiding it from language-gated rules.
+func TestShebangClassifiesExtensionlessScripts(t *testing.T) {
+	cases := []struct {
+		name         string
+		content      string
+		wantRole     string
+		wantLanguage string
+	}{
+		{"perl-shebang", "#!/usr/bin/perl\nprint 1;\n", "script", "perl"},
+		{"php-shebang", "#!/usr/bin/php\n<?php echo 1;\n", "script", "php"},
+		{"env-python", "#!/usr/bin/env python3\nprint(1)\n", "script", "python"},
+		{"posix-sh", "#!/bin/sh\necho hi\n", "script", "bash"},
+		{"env-node", "#!/usr/bin/env node\nconsole.log(1)\n", "script", "javascript"},
+		{"ruby", "#!/usr/bin/ruby\nputs 1\n", "script", "ruby"},
+		{"no-shebang-text", "just a plain readme, no shebang\n", "asset", ""},
+		{"hash-but-not-shebang", "# a comment, not a shebang\n", "asset", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := File{Path: "helper", Content: []byte(c.content)}
+			classify(&f)
+			if f.Role != c.wantRole {
+				t.Errorf("Role = %q, want %q", f.Role, c.wantRole)
+			}
+			if f.Language != c.wantLanguage {
+				t.Errorf("Language = %q, want %q", f.Language, c.wantLanguage)
+			}
+		})
+	}
+}
+
 // TestNoFrontMatter: a SKILL.md with no front-matter is still loadable, with
 // the whole file as body and a zero offset.
 func TestNoFrontMatter(t *testing.T) {

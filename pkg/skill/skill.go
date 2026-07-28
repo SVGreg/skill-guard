@@ -289,23 +289,46 @@ func classify(f *File) {
 		f.Role = "config"
 	default:
 		f.Role = "asset"
-		if hasShebangScript(f.Content) {
+		if lang := shebangLanguage(f.Content); lang != "" {
 			f.Role = "script"
-			f.Language = "bash"
+			f.Language = lang
 		}
 	}
 }
 
-func hasShebangScript(content []byte) bool {
+// shebangLanguage returns the interpreter language named in a leading shebang
+// line, or "" if the file has none. It lets classify() recognize an executable
+// script shipped *without* a telltale extension — a common way to slip a payload
+// past extension-based classification, and the only reason a bundled `perl`/`php`
+// one-liner would otherwise land as an inert `asset` and skip every code-layer
+// rule. It covers the same interpreters as scriptExt so classification is
+// consistent whether or not the file carries an extension, and it reports the
+// actual language instead of assuming bash (a python shebang used to be labeled
+// bash, hiding it from language-gated rules). "sh" is checked last because it is
+// a substring of many interpreter names.
+func shebangLanguage(content []byte) string {
 	if !bytes.HasPrefix(content, []byte("#!")) {
-		return false
+		return ""
 	}
 	line := content
 	if i := bytes.IndexByte(content, '\n'); i >= 0 {
 		line = content[:i]
 	}
-	return bytes.Contains(line, []byte("sh")) || bytes.Contains(line, []byte("python")) ||
-		bytes.Contains(line, []byte("node")) || bytes.Contains(line, []byte("ruby"))
+	switch {
+	case bytes.Contains(line, []byte("python")):
+		return "python"
+	case bytes.Contains(line, []byte("node")):
+		return "javascript"
+	case bytes.Contains(line, []byte("ruby")):
+		return "ruby"
+	case bytes.Contains(line, []byte("perl")):
+		return "perl"
+	case bytes.Contains(line, []byte("php")):
+		return "php"
+	case bytes.Contains(line, []byte("sh")):
+		return "bash"
+	}
+	return ""
 }
 
 func gatherRefs(b *Bundle) []ExternalRef {
