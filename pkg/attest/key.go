@@ -122,7 +122,11 @@ func PubPath(keyPath string) string {
 	return keyPath + ".pub"
 }
 
-// SavePub writes the signer's public half to path at mode 0644.
+// SavePub writes the signer's public half to path. A newly created file gets
+// mode 0644; an existing file keeps its own mode, because os.WriteFile applies
+// its perm argument only on creation. That is harmless — the ".pub" carries no
+// secret — but it means the mode is not guaranteed, so callers must report the
+// mode they observe rather than the one requested here (see keygen).
 func SavePub(s *LocalSigner, path string) error {
 	pf := pubFile{
 		KeyID:     s.keyID,
@@ -136,7 +140,12 @@ func SavePub(s *LocalSigner, path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// LoadKey reads a signer from a key file.
+// LoadKey reads a signer from a key file. The declared algorithm is enforced:
+// Ed25519 is the only scheme this signer implements, so a key file naming any
+// other one is rejected instead of being silently loaded as Ed25519 and then
+// attested as "ed25519" — a claim that would not match the file it came from.
+// An empty algorithm is accepted for keys written before the field was
+// meaningful; those are Ed25519 by construction.
 func LoadKey(path string) (*LocalSigner, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -145,6 +154,9 @@ func LoadKey(path string) (*LocalSigner, error) {
 	var kf keyFile
 	if err := json.Unmarshal(data, &kf); err != nil {
 		return nil, fmt.Errorf("parse key: %w", err)
+	}
+	if alg := strings.ToLower(strings.TrimSpace(kf.Algorithm)); alg != "" && alg != "ed25519" {
+		return nil, fmt.Errorf("unsupported key algorithm %q (only ed25519 is supported)", kf.Algorithm)
 	}
 	seed, err := base64.StdEncoding.DecodeString(kf.PrivateKey)
 	if err != nil || len(seed) != ed25519.SeedSize {

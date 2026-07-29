@@ -64,3 +64,13 @@ func (e exitErr) Error() string { return e.msg }
 func fail(code int, format string, a ...any) error {
 	return exitErr{code: code, msg: fmt.Sprintf(format, a...)}
 }
+
+// fileMode returns path's permission bits, or def if they cannot be read. Used
+// to report the mode a file actually has instead of the one that was requested.
+func fileMode(path string, def os.FileMode) os.FileMode {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return def
+	}
+	return fi.Mode().Perm()
+}

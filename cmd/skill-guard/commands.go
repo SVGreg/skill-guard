@@ -279,8 +279,8 @@ func keygenCmd() *cobra.Command {
 		Short: "Generate a local Ed25519 signing key",
 		Long: `Generate an Ed25519 key pair for signing skills. Two files are written:
 
-  <name>.key   the PRIVATE key (mode 0600) — keep secret, never share/commit.
-  <name>.pub   the PUBLIC key (mode 0644) — safe to share, commit, or publish.
+  <name>.key   the PRIVATE key (forced to mode 0600) — keep secret, never share/commit.
+  <name>.pub   the PUBLIC key (mode 0644 when created) — safe to share, commit, or publish.
 
 The .key is self-contained (signing needs only it); the .pub is a convenience
 you hand to consumers so they can add you to their policy trust roster
@@ -314,7 +314,11 @@ EXIT CODES: 0 success · 4 internal error.`,
 				if err := attest.SavePub(signer, pubOut); err != nil {
 					return fail(4, "cannot write public key to %q: %v", pubOut, err)
 				}
-				fmt.Printf("wrote %q (mode 0644, public — safe to share)\n", pubOut)
+				// Report the mode observed, not the one requested: writing over
+				// an existing file keeps that file's mode (os.WriteFile only
+				// applies perm on create), so a hard-coded "0644" here could be
+				// a lie. Harmless for public material, but don't claim it.
+				fmt.Printf("wrote %q (mode %04o, public — safe to share)\n", pubOut, fileMode(pubOut, 0o644))
 			}
 			fmt.Println("  share the public key so verifiers can add it to their policy trust roster.")
 			return nil

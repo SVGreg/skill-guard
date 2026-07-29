@@ -2,6 +2,7 @@ package attest
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -170,6 +171,113 @@ func TestSaveKeyRefusesSymlink(t *testing.T) {
 	}
 	if len(data) != 0 {
 		t.Fatalf("key material written through symlink: %s", data)
+	}
+}
+
+// TestLoadKeyEnforcesAlgorithm covers the three cases the declared algorithm can
+// take: absent (pre-field keys, accepted), "ed25519" (accepted), and anything
+// else (rejected). Without the check a key file naming ecdsa-p256 was loaded as
+// Ed25519 and every attestation it produced claimed "ed25519".
+func TestLoadKeyEnforcesAlgorithm(t *testing.T) {
+	signer, err := GenerateKey("alg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	write := func(name, alg string) string {
+		path := filepath.Join(dir, name)
+		kf := map[string]string{
+			"keyid":       signer.KeyID(),
+			"private_key": base64.StdEncoding.EncodeToString(signer.priv.Seed()),
+			"public_key":  signer.PublicKeyBase64(),
+		}
+		if alg != "-" { // "-" means: omit the field entirely
+			kf["algorithm"] = alg
+		}
+		data, err := json.Marshal(kf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for _, tc := range []struct {
+		name, alg string
+		wantErr   bool
+	}{
+		{"declared.key", "ed25519", false},
+		{"cased.key", "Ed25519", false},
+		{"absent.key", "-", false},
+		{"empty.key", "", false},
+		{"wrong.key", "ecdsa-p256", true},
+		{"rsa.key", "rsa-pss-sha256", true},
+	} {
+		_, err := LoadKey(write(tc.name, tc.alg))
+		if tc.wantErr && err == nil {
+			t.Errorf("algorithm %q: loaded without error, want rejection", tc.alg)
+		}
+		if !tc.wantErr && err != nil {
+			t.Errorf("algorithm %q: %v", tc.alg, err)
+		}
+	}
+}
+
+// TestNormalizeEmptyFrontMatter covers the degenerate "---\n---\n" manifest.
+// fmBlockRe used to require a newline between the delimiters, so the block went
+// unrecognized and WriteUSFFields reported "has no front-matter block" for a
+// block that plainly exists.
+func TestNormalizeEmptyFrontMatter(t *testing.T) {
+	in := []byte("---\n---\n\nbody\n")
+	if got := string(NormalizeSkillMD(in)); got != string(in) {
+		t.Fatalf("empty front-matter normalized to %q, want it unchanged", got)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(path, in, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUSFFields(path, "sha256:abc", "ed25519:zzz"); err != nil {
+		t.Fatalf("WriteUSFFields on an empty front-matter block: %v", err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(out), "content_hash:") || !contains(string(out), "signature:") {
+		t.Fatalf("USF fields not written: %q", out)
+	}
+	// The whole point of normalization: injecting the fields must not move the
+	// Merkle leaf, so the normalized form has to round-trip back to the input.
+	if got := string(NormalizeSkillMD(out)); got != string(in) {
+		t.Fatalf("normalized %q, want %q", got, in)
+	}
+}
+
+// TestNormalizeIgnoresMidLineDelimiter guards the anchoring in fmBlockRe: a
+// "---" inside a front-matter value is not a closing delimiter.
+func TestNormalizeIgnoresMidLineDelimiter(t *testing.T) {
+	in := []byte("---\nname: a---b\ncontent_hash: \"sha256:abc\"\ndescription: y\n---\n\nbody\n")
+	got := string(NormalizeSkillMD(in))
+	if contains(got, "content_hash") {
+		t.Fatalf("close delimiter matched mid-line, leaving reserved lines: %q", got)
+	}
+	if !contains(got, "name: a---b") || !contains(got, "description: y") {
+		t.Fatalf("normalization mangled the front matter: %q", got)
+	}
+}
+
+// TestUSFStableWithReservedLineLast is the layout the old regex handled badly:
+// a reserved line at the end of the block left a stray blank line behind, so the
+// normalized form no longer matched the same manifest without the fields — and
+// the content hash it protects moved.
+func TestUSFStableWithReservedLineLast(t *testing.T) {
+	plain := []byte("---\nname: x\n---\n\nbody\n")
+	withFields := []byte("---\nname: x\ncontent_hash: \"sha256:abc\"\nsignature: \"ed25519:zzz\"\n---\n\nbody\n")
+	if string(NormalizeSkillMD(plain)) != string(NormalizeSkillMD(withFields)) {
+		t.Fatalf("normalized forms diverge: %q vs %q",
+			NormalizeSkillMD(plain), NormalizeSkillMD(withFields))
 	}
 }
 
