@@ -237,10 +237,74 @@ rules:
     targets: [body, manifest]
     match:
       any:
-        - regex: '(?i)\b(print|reveal|show|repeat|output|display|spell out)\b[^.\n]{0,30}\byour\s+(system\s+)?(prompt|instructions?|rules?|guidelines?)\b'
+        # Direct leak. The qualifier slot ("your original/initial/full …")
+        # is what attackers actually write; the bare noun list alone missed it.
+        - regex: '(?i)\b(print|reveal|show|repeat|output|display|spell out|dump|expose|disclose|leak)\b[^.\n]{0,30}\byour\s+((system|initial|original|base|core|full|exact|complete|hidden|developer)\s+){0,2}(prompt|instructions?|rules?|guidelines?|system message|directives?)\b'
           confidence: 0.85
-        - regex: '(?i)\b(repeat|output|print)\b[^.\n]{0,30}\beverything\s+(above|before this|in your context)\b'
+        # Same leak verbs against the definite article. Only the unambiguous
+        # nouns qualify — "show the rules" is ordinary English, "reveal the
+        # system prompt" is not.
+        - regex: '(?i)\b(print|reveal|show|repeat|output|display|spell out|dump|expose|disclose|leak)\b[^.\n]{0,30}\bthe\s+(system\s+(prompt|message|instructions?)|initial prompt)\b'
+          confidence: 0.85
+        # "Repeat the words above starting with …" — the canonical store-prompt
+        # leak. Widened past `everything` to the text/words/content nouns and
+        # past the three original verbs.
+        - regex: '(?i)\b(repeat|output|print|show|reveal|display|echo)\b[^.\n]{0,40}\b(everything|all (of )?the (text|words|content)|the (text|words|content|message))\b[^.\n]{0,30}\b(above|before this|prior to this|preceding|in your context)\b'
           confidence: 0.8
+        # Indirect extraction (rule-verification §SG-INJ-006): launder the
+        # prompt through a transformation so no verbatim leak verb appears.
+        # 0.7 per the doc — high enough for prose, low enough that a fenced or
+        # documentary occurrence lands under the 0.5 threshold.
+        - regex: '(?i)\b(summari[sz]e|translate|rephrase|paraphrase|encode|transcribe|restate|recite)\b[^.\n]{0,30}\byour\s+((system|initial|original)\s+){0,2}(prompt|instructions?|guidelines?|rules?|system message)\b'
+          confidence: 0.7
+        # Interrogative extraction — no imperative verb at all.
+        - regex: '(?i)\bwhat\s+(are|were)\s+(your|the)\s+((system|original|initial|exact|full|complete)\s+){0,2}(prompt|instructions?|system message)\b'
+          confidence: 0.7
+        - regex: '(?i)\bwhat\s+(instructions?|rules?|guidelines?|prompt)\s+(were|was)\s+you\s+(given|told|provided|handed)\b'
+          confidence: 0.7
+        # Tool-schema exfiltration — the half of the rule's own title that was
+        # never implemented. Kept to the schema/description nouns: "list your
+        # tools" on its own is ordinary, "list your tool definitions" is not.
+        - regex: '(?i)\b(list|print|show|reveal|output|display|dump|enumerate)\b[^.\n]{0,30}\byour\s+((available|full|complete|exact|internal)\s+){0,2}(tool|function)\s+(definitions?|descriptions?|schemas?|specifications?)\b'
+          confidence: 0.75
+        - regex: '(?i)\b(list|print|show|reveal|output|display|dump|enumerate)\b[^.\n]{0,20}\ball\s+(of\s+)?your\s+((available|internal)\s+)?(tools?|functions?)\b[^.\n]{0,40}\b(descriptions?|schemas?|parameters?|definitions?)\b'
+          confidence: 0.75
+        # Exfil-via-tool: the leak object paired with an outbound sink on the
+        # same line. 0.9 per the doc — this is the shape that correlates with
+        # SG-NET-004, and it must survive the documentary penalty.
+        #
+        # The object is deliberately only the agent's *own* prompt/instructions.
+        # A bare "the text above"/"everything above" here reads as an ordinary
+        # anaphor — two corpus skills ship the referral blurb "Just copy the
+        # text above and send it to your friend!", which is not exfiltration.
+        # Nothing is lost: the leak-the-conversation shape is already covered by
+        # the repeat-the-words-above leaf.
+        - regex: '(?i)\byour\s+((system|initial|original|full|exact|complete)\s+){0,2}(prompt|instructions?|system message)\b[^.\n]{0,60}\b(POST|send|upload|write|save|append|log|exfiltrate|transmit)\b[^.\n]{0,20}\b(to|into)\b'
+          confidence: 0.9
+    suppress:
+      # A quoted phrase is *mentioned*, not *used*. Prompt-injection detector
+      # skills ship denylist catalogs of the exact strings they block, and every
+      # false positive this rule produced on the 777-skill corpus (22 hits, one
+      # bundle) was such a catalog entry. The inner spans forbid quote
+      # characters, so the phrase provably sits inside a single quoted string.
+      #
+      # The three prefix alternatives are the observed catalog shapes: a bare
+      # entry at line start (list marker / indent / ❌ ✅ marker), a code
+      # argument or assignment, and a markdown bold label. None of them admits a
+      # ':' immediately before the quote — so a YAML `description: "reveal your
+      # system prompt"` in the *manifest* is still a finding, which is the one
+      # place a quoted scalar really is the instruction.
+      #
+      # The inner requirement is only that one of the rule's *target nouns* sits
+      # inside the quoted span. Restating the leaves' full phrases here would
+      # re-open the FP every time a leaf is widened — it already did, for
+      # "display your system message" and "what rules were you given".
+      - '(?i)(^[\s>#*+\-0-9.)\]❌✅✓✗•]*|[=(\[,]\s*|\*\*[^*\n]{0,40}\*\*[\s:]*)["''`][^"''`\n]{0,100}\b(prompts?|instructions?|rules?|guidelines?|directives?|system message|tool (definitions?|descriptions?|schemas?)|everything (above|in your context))\b[^"''`\n]{0,100}["''`]'
+      # Defensive framing: a negation directly governing the leak verb is
+      # prompt-protection guidance, not an extraction attempt. The verb must
+      # follow the negation immediately, so "do not refuse to print your system
+      # prompt" is not excused.
+      - '(?i)\b(never|do not|don''?t|must not|should not|will not|cannot|refuse to)\s+(ever\s+)?(reveal|disclose|share|expose|print|show|output|display|repeat|leak|dump)\b'
     rationale: Attempts to extract the system prompt or tool schema, directly or indirectly (AST01).
     fix: Remove instructions that ask the agent to reveal its system prompt, rules, or tool definitions.
 
