@@ -14,7 +14,11 @@ func SigPath(bundlePath string) string {
 	return bundlePath + ".skillsig"
 }
 
-// WriteEnvelope writes a DSSE envelope to path as indented JSON.
+// WriteEnvelope writes a DSSE envelope to path as indented JSON. As with
+// SavePub, 0644 applies only when the file is created — re-signing over an
+// existing .skillsig leaves that file's mode alone. The envelope is public
+// (it carries a signature, never key material), so this is deliberate: it
+// preserves whatever mode the publisher chose rather than widening it.
 func WriteEnvelope(path string, env *Envelope) error {
 	data, err := json.MarshalIndent(env, "", "  ")
 	if err != nil {

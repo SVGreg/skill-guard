@@ -93,7 +93,17 @@ func interiorHash(l, r [32]byte) [32]byte {
 }
 
 var (
-	fmBlockRe    = regexp.MustCompile(`(?s)\A(\x{FEFF}?---\r?\n)(.*?)(\r?\n---\r?\n?)`)
+	// fmBlockRe splits SKILL.md into (opening delimiter)(front-matter body)
+	// (closing delimiter), leaving the rest as the tail. The closing delimiter
+	// is anchored at a line start with (?m)^ rather than by requiring a
+	// preceding newline, so an *empty* block ("---\n---\n") matches too: the
+	// old form demanded at least one newline between the delimiters, and
+	// WriteUSFFields then rejected such a manifest with the misleading "has no
+	// front-matter block". Anchoring keeps a mid-line "---" (e.g. "a---b")
+	// from being mistaken for the close. The body capture therefore *includes*
+	// its trailing newline, which is also why a reserved line sitting last in
+	// the block is now stripped cleanly instead of leaving a blank line behind.
+	fmBlockRe    = regexp.MustCompile(`(?sm)\A(\x{FEFF}?---\r?\n)(.*?)(^---\r?\n?)`)
 	reservedLine = regexp.MustCompile(`(?im)^(content_hash|signature):.*\r?\n?`)
 )
 
