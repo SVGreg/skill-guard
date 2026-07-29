@@ -57,7 +57,7 @@ enforces them.
 4a. **Informative PR labels.** Every automated PR carries `automated` **plus a type label** that
     says what it is / where it came from — exactly one of:
     - `rule-implement` — a new detection shipped by `sg-rule-implement` / `sg-issue-implement`
-    - `rule-polish` — coverage widening by `sg-rule-polish`
+    - `rule-polish` — coverage widening and/or corpus false-positive reduction by `sg-rule-polish`
     - `research` — a backlog/threat entry from `sg-threat-research`
     - `code-review` — a fix from `sg-code-review`
     - `triage` — a backlog PR from `sg-issue-triage`

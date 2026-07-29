@@ -51,6 +51,7 @@ evaluation/
     fetch_orgs.sh          clone vendor repos (skills.rest set) -> orgs/
     run_scans.sh           scan every bundle in parallel -> reports/<RAW_DIR>/*.json
     aggregate.py           roll raw JSON up into stats.json + REPORT.md
+    rule_findings.py       every corpus hit for one rule, for FP auditing
   reports/
     raw/<source>__<slug>.json           combined-run scan results (one per bundle)
     raw_clawhub200/<source>__<slug>.json standalone clawhub-200 run
@@ -82,6 +83,11 @@ RAW_DIR="raw_clawhub" REPORT_NAME="REPORT_clawhub.md" \
   STATS_NAME="stats_clawhub.json" \
   REPORT_TITLE="skill-guard — ClawHub Security Evaluation" \
   python3 evaluation/scripts/aggregate.py
+
+# 3c. audit one rule's precision — every hit it produced, to judge TP vs FP
+#     (these are real, unlabeled skills, so each hit is an FP candidate until read)
+evaluation/scripts/rule_findings.py SG-INJ-001            # summary + sample
+evaluation/scripts/rule_findings.py SG-INJ-001 --all      # every hit
 ```
 
 > **Growing / consolidating a source.** Each fetcher writes only the entries it

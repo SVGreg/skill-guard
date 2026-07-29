@@ -1,12 +1,18 @@
 ---
 name: sg-rule-polish
-description: Polish one existing skill-guard detection rule — pick the least-recently-tuned rule, generate realistic real-world attack test cases for its threat class, verify the rule catches them, and widen the rule's match tree if it misses. Opens a PR. Use when asked to polish, harden, tune, or improve coverage of an existing rule, or when the maintenance loop selects rule polishing.
+description: Polish one existing skill-guard detection rule — pick the least-recently-tuned rule, audit its real false positives against the evaluation corpus, generate realistic real-world attack test cases for its threat class, then widen the match tree where it misses and narrow it where it over-matches. Opens a PR. Use when asked to polish, harden, tune, improve coverage of, or reduce false positives on an existing rule, or when the maintenance loop selects rule polishing.
 ---
 
 # Polish one detection rule
 
-Goal: make one existing rule catch real-world variants it currently misses, **without** losing
-true positives or adding false positives. One rule, one PR.
+Goal: improve one existing rule on **both** axes — catch real-world variants it currently misses
+(recall), and stop firing on benign content it should never have flagged (precision) — without
+losing true positives. One rule, one PR.
+
+Precision is not a secondary concern here. A rule can ship with false positives **from day one**:
+it was written against synthetic fixtures, and the corpus was only ever checked for *regressions*
+after a change, never audited for what the rule was already getting wrong. So every polish cycle
+starts by looking at what the rule actually does to 777 real skills — before touching anything.
 
 Rules are data: `pkg/rules/packs/*.yaml`, compiled via `//go:embed`. Regex is Go **RE2** — no
 lookaround/backreferences (`(?<`, `(?=`, `(?!`) — they won't compile. Read `docs/rule-verification.md`
@@ -33,9 +39,70 @@ a specific rule, use that instead.
 - Open the rule's YAML block: its `match` tree, `confidence`, `suppress` list, `targets`.
 - Read its section in `docs/rule-verification.md` (Signals / FP carve-outs / Fixtures).
 - Note what it already matches and, importantly, its documented **false-positive carve-outs** —
-  new test cases must respect these.
+  new test cases must respect these, and step 3 will tell you whether they actually hold in the wild.
+- Check whether a previous cycle already recorded an FP audit for this rule (the "Corpus precision"
+  note step 8 writes). If so, that is your baseline: look for what changed, not the same ground.
 
-## 3. Generate realistic attack cases
+## 3. Audit its real false positives on the corpus
+
+The `evaluation/` corpus is ~777 **real, unlabeled** skills. Almost none of them are attacks, so
+essentially every hit the rule produces there is a false-positive candidate until you read it. This
+step is what catches an FP the rule has carried since the day it shipped.
+
+Make sure the raw reports reflect current `main` (they are git-ignored, so they may be stale or
+absent). Regenerate only if needed — a full run is ~9 minutes:
+
+```sh
+go build -o skill-guard ./cmd/skill-guard
+CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh 12
+python3 evaluation/scripts/aggregate.py
+```
+
+Then pull every hit for your rule:
+
+```sh
+evaluation/scripts/rule_findings.py <RULE-ID>            # summary + a sample
+evaluation/scripts/rule_findings.py <RULE-ID> --all      # every hit, to judge exhaustively
+```
+
+Read the output for three things:
+
+- **Repeated excerpts.** The tool tallies them because a repeat is almost always *one* systematic
+  cause, not N independent mistakes — fix the cause and the whole cluster goes.
+- **Concentration.** 50 hits in 2 bundles is a different problem from 50 hits across 50 authors.
+  Heavy concentration in security-tooling skills (denylists, jailbreak catalogs, `safe-exec`-style
+  docs) is the known benign-but-flagged class: those files genuinely contain attack strings.
+- **Target file type.** Hits on `.md` prose vs `.py`/`.sh` code often need different fixes — the
+  confidence modifiers already treat those registers differently (`docs/rule-verification.md §1.2`).
+
+Now judge each hit — **true positive**, **false positive**, or **ambiguous** — and write the tally
+into your working notes. Be honest about ambiguity: skill-guard's stated reading is "capability and
+pattern, not confirmed intent", so a skill that really does ship a pipe-to-shell installer is a
+true positive even if its author meant well. A false positive is a match on something that is *not*
+the pattern — a license phrase, a variable name, prose describing the attack rather than
+committing it.
+
+If the rule has **zero** corpus hits, say so and move on: there is no precision evidence either way,
+and widening in step 6 must then be extra conservative since nothing will catch over-matching.
+
+### Propose the narrowing
+
+For each FP cluster, pick the **narrowest** mechanism that kills it without touching true positives:
+
+| FP shape | Mechanism |
+|---|---|
+| One recurring benign phrase (an MIT-license clause; a delete scoped to a variable) | `suppress:` regex on that line |
+| Match is real code but in the wrong register (prose *about* an attack) | rely on / adjust the documentary modifier; check the target list |
+| Leaf is too generic (a bare command name; a vague "applies to everything" phrase) | tighten the regex — require an argument, a flag, a command position |
+| Right pattern, wrong file kind | narrow `targets:` |
+| Signal is genuinely weak on its own | drop its `confidence` below the 0.5 emit threshold, or pair it in an `all:` composite |
+
+Prefer `suppress` and tighter leaves over lowering severity — severity drives the verdict contract,
+and muting a real signal to fix a display problem is the wrong trade. If an FP cannot be fixed
+without losing true positives, **say so explicitly and leave it**, with the reasoning in the PR.
+A known, documented FP beats a silent recall loss.
+
+## 4. Generate realistic attack cases
 
 Write 5–10 **new** payloads that a real attacker/skill might use for this rule's threat class, as
 close to observed real-world threats as possible — paraphrases, spacing/casing variants, and
@@ -48,10 +115,15 @@ plausible obfuscations the current pattern may not reach. Draw on:
 Also include **negative** cases: benign near-misses that must NOT match, mirroring the rule's
 carve-outs (e.g. documentation phrasing). This is what keeps polishing from causing false positives.
 
+**Seed the negatives from step 3.** Every false positive you confirmed on the corpus is a
+real-world negative case, already proven to occur in the wild — use the actual excerpt, not an
+invented paraphrase. These are worth more than any negative you could make up, and turning them
+into tests is what stops the FP coming back.
+
 Keep the literal payload strings inside fenced code blocks in your working notes so they stay inert
 and don't trip the scanner on this skill itself.
 
-## 4. Add the cases as tests
+## 5. Add the cases as tests
 
 Two harnesses (see `pkg/rules/rules_test.go` and `pkg/scan/scan_test.go`):
 
@@ -64,13 +136,16 @@ Two harnesses (see `pkg/rules/rules_test.go` and `pkg/scan/scan_test.go`):
   to `testdata/malicious/SKILL.md` and assert the rule ID appears in the scan findings, following
   `TestMaliciousFails` in `pkg/scan/scan_test.go`.
 
+Confirmed corpus false positives go in as `{excerpt, false}` rows in the same table, so the
+recall and precision cases are pinned by one test and can't drift apart.
+
 Run them:
 
 ```sh
 go test ./pkg/rules/ ./pkg/scan/ -run <YourTest> -v
 ```
 
-## 5. Widen the rule if it misses
+## 6. Tune the match tree — widen where it misses, narrow where it over-matches
 
 If a realistic payload slips through, extend the rule's `match` tree in the pack YAML:
 
@@ -81,33 +156,65 @@ If a realistic payload slips through, extend the rule's `match` tree in the pack
 - Keep RE2-compatible (no lookaround). Confirm it compiles: `go test ./pkg/rules/` runs
   `TestBuiltinPacksLoad`, which fails on a bad pattern.
 
+If step 3 found false positives, apply the narrowing you proposed there in the **same** edit, so
+the widening and the tightening are measured together rather than one masking the other.
+
+A cycle where the rule already catches everything and the only change is an FP fix is a **complete,
+successful polish** — precision work needs no widening to justify it. Equally, if the rule is clean
+on both axes, make no change: record the audit result, update `state.json`, and skip the PR. Do not
+invent a widening to have something to ship.
+
 Re-run the tests until every `want:true` matches and every `want:false` doesn't.
 
-## 6. Guard against regressions
+## 7. Guard against regressions
 
 - `go test ./...` — full suite green.
 - Exit-code smoke: `go run ./cmd/skill-guard scan testdata/malicious` → exit 1;
   `... scan testdata/benign` → exit 0.
-- **If you changed a pack**, regenerate the evaluation and check for lost true positives:
+- **If you changed a pack**, re-run the corpus and measure the change on **both** axes. You already
+  have the step-3 numbers as your before; save them first so the comparison is real:
   ```sh
+  cp evaluation/reports/stats.json /tmp/stats_before.json
   go build -o skill-guard ./cmd/skill-guard
-  evaluation/scripts/run_scans.sh 8 && python3 evaluation/scripts/aggregate.py
+  CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh 12
+  python3 evaluation/scripts/aggregate.py
+  evaluation/scripts/rule_findings.py <RULE-ID> --all      # what survives
   ```
+  Then state, for this rule: hits before → after, which FP clusters are gone, and **which true
+  positives are still caught**. A drop in the count is only good if you can name what left.
   Compare against `evaluation/reports/CROSS_VERIFICATION.md` — a "fix" must not silently drop
   detections. (Note: `evaluation/` is git-ignored; regeneration is a local sanity check, not part
   of the PR.)
+- Check the **other** rules' counts too: a shared leaf, a `suppress` line, or a target change can
+  move a rule you weren't touching. Any non-zero delta outside your rule is either explained or
+  reverted.
 - Dogfood: `go run ./cmd/skill-guard scan .claude/skills/sg-rule-polish` still passes.
 
-## 7. Open the PR
+## 8. Open the PR
 
 ```sh
 git checkout main && git pull --ff-only && git checkout -b polish/<rule-id>-<slug>
 git add pkg/rules/ testdata/ docs/rule-verification.md
-git commit -m "fix(rules): widen <RULE-ID> to cover <what>"
+git commit -m "fix(rules): <widen|narrow> <RULE-ID> — <what>"
 git push -u origin HEAD
 gh pr create --label automated --label rule-polish \
   --title "fix(rules): polish <RULE-ID> — <short>" \
-  --body "Automated rule-polish cycle. New real-world cases + match widening for <RULE-ID>; no lost true positives (cross-verified). Bot-generated; needs review."
+  --body "..."
 ```
 
+The PR body must report **both axes with numbers**, since that is the evidence a reviewer needs:
+
+- **Precision:** corpus hits before → after, each FP cluster you removed (with a real excerpt) and
+  the mechanism used, plus any FP you deliberately left and why.
+- **Recall:** the new real-world payloads now caught, and confirmation that previously-caught true
+  positives still are — named, not just counted.
+- Note that these are **real, unlabeled** skills, so the FP judgments are your reading of them; a
+  reviewer may disagree with a specific call and the PR should make that easy to check.
+
+Also record the audit in `docs/rule-verification.md` under the rule's section — the FP carve-outs
+there are what the *next* polish cycle reads in step 2, so an unrecorded audit gets repeated.
+
 Update `state.json` → set `rule_last_polished["<RULE-ID>"]` to now. Report the PR link.
+
+If the audit found the rule clean on both axes, there is no PR: record the result in the cycle log
+and `state.json` so the next cycle picks a different rule, and report that outcome instead.
