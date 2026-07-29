@@ -51,6 +51,15 @@ func loadBundleFriendly(path string) (*skill.Bundle, error) {
 	case strings.Contains(err.Error(), "no SKILL.md found"):
 		return nil, fail(3, "%q has no SKILL.md at its root\n"+
 			"  a skill bundle must contain a SKILL.md file (the manifest with name/description front-matter).", path)
+	case strings.Contains(err.Error(), "exceeds total size cap"):
+		return nil, fail(3, "%v\n"+
+			"  skill-guard bounds how much it will load from one bundle so a hostile\n"+
+			"  or accidentally huge skill cannot exhaust memory during a batch scan.\n"+
+			"  drop large binaries/vendored trees from the bundle, or scan a subdirectory.", err)
+	case strings.Contains(err.Error(), "exceeds size cap"):
+		return nil, fail(3, "%v\n"+
+			"  individual files are capped so a single huge blob cannot exhaust memory.\n"+
+			"  a skill bundle should not ship files that large — remove it or scan a subdirectory.", err)
 	case strings.Contains(err.Error(), "symlink"):
 		return nil, fail(3, "%q involves a symlink, which skill-guard refuses to follow for safety.\n"+
 			"  replace the symlink with a regular file or directory.", path)
