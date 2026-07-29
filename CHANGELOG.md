@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.13](https://github.com/SVGreg/skill-guard/compare/v0.1.12...v0.1.13) (2026-07-29)
+
+
+### Features
+
+* **eval:** add SkillsMP + vendor-org corpus fetchers; consolidate clawhub ([#94](https://github.com/SVGreg/skill-guard/issues/94)) ([3c8b54c](https://github.com/SVGreg/skill-guard/commit/3c8b54c026958bf414479d8528f30b35f15a84cf))
+* **eval:** interactive HTML report generator (report_html.py) ([#96](https://github.com/SVGreg/skill-guard/issues/96)) ([7a9c1aa](https://github.com/SVGreg/skill-guard/commit/7a9c1aaba63caf3c2446fce9b767d6e9f4c0903c))
+
+
+### Bug Fixes
+
+* **attest:** enforce key algorithm, accept empty front-matter, report real .pub mode ([#98](https://github.com/SVGreg/skill-guard/issues/98)) ([5d6cc1f](https://github.com/SVGreg/skill-guard/commit/5d6cc1f071d52f74486786a5c1a0cefa485ef688))
+* **rules:** SG-EXE-002 — only flag broad-target wipes, not variable cleanup ([#97](https://github.com/SVGreg/skill-guard/issues/97)) ([036e0df](https://github.com/SVGreg/skill-guard/commit/036e0dfa6e02d07b9c1ed95451651dfbbd9ca2d1))
+* **scan:** scan bundled reference docs — payload in references/*.md no longer passes ([#99](https://github.com/SVGreg/skill-guard/issues/99)) ([e1b8b78](https://github.com/SVGreg/skill-guard/commit/e1b8b78b04878be6609de1c68d8dae556de74821))
+* **skill:** cap total bytes loaded per bundle, not just per file ([#100](https://github.com/SVGreg/skill-guard/issues/100)) ([b3f113b](https://github.com/SVGreg/skill-guard/commit/b3f113bac34a878042a2c0403e63382d849c2546))
+
 ## [0.1.12](https://github.com/SVGreg/skill-guard/compare/v0.1.11...v0.1.12) (2026-07-28)
 
 
