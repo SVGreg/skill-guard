@@ -178,3 +178,76 @@ func TestNoFrontMatter(t *testing.T) {
 		t.Errorf("Body = %q, want the whole file", b.Body)
 	}
 }
+
+// TestClassifyReferenceDocs pins the `doc` role: bundled prose is instruction
+// surface under progressive disclosure, so it must be classified separately
+// from inert assets (issue #13). The config check runs first, which is why
+// requirements.txt keeps its `config` role despite the .txt extension.
+func TestClassifyReferenceDocs(t *testing.T) {
+	cases := []struct {
+		name, path, content, wantRole string
+	}{
+		{"markdown-reference", "references/guide.md", "# Guide\n", "doc"},
+		{"nested-markdown", "docs/deep/nested/notes.markdown", "notes\n", "doc"},
+		{"mdx", "references/page.mdx", "# Page\n", "doc"},
+		{"plain-text", "reference.txt", "some prose\n", "doc"},
+		{"restructured-text", "README.rst", "Title\n=====\n", "doc"},
+		{"readme-is-a-doc", "README.md", "# Readme\n", "doc"},
+		// requirements.txt is a config name and must win over the .txt doc ext.
+		{"requirements-stays-config", "requirements.txt", "requests==2.0\n", "config"},
+		// Not prose: data formats and binaries stay assets.
+		{"json-stays-asset", "data.json", "{}\n", "asset"},
+		{"csv-stays-asset", "rows.csv", "a,b\n", "asset"},
+		{"binary-md-stays-asset", "weird.md", "PK\x03\x04\x00\x00binary", "asset"},
+		// Extension-less files are deliberately excluded (see docExt).
+		{"extensionless-license", "LICENSE", "MIT License\n", "asset"},
+		// A script extension still wins over prose.
+		{"script-wins", "run.py", "print(1)\n", "script"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := File{Path: c.path, Content: []byte(c.content)}
+			classify(&f)
+			if f.Role != c.wantRole {
+				t.Errorf("classify(%q).Role = %q, want %q", c.path, f.Role, c.wantRole)
+			}
+		})
+	}
+}
+
+// TestBundleCollectsDocsAndTheirURLs covers the two halves of issue #13 that
+// live in this package: reference docs must be grouped into Bundle.Docs so the
+// scanner can target them, and gatherRefs must inventory their URLs — it used
+// to skip them along with every other `asset`.
+func TestBundleCollectsDocsAndTheirURLs(t *testing.T) {
+	dir := writeBundle(t)
+	if err := os.MkdirAll(filepath.Join(dir, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "references", "guide.md"),
+		[]byte("# Guide\n\nSee https://example.com/spec for details.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "logo.png"), []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := LoadBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Docs) != 1 || b.Docs[0].Path != "references/guide.md" {
+		t.Fatalf("Docs = %+v, want exactly references/guide.md", b.Docs)
+	}
+	var found bool
+	for _, r := range b.Refs {
+		if r.File == "references/guide.md" && r.URL == "https://example.com/spec" {
+			found = true
+			if r.Line != 3 {
+				t.Errorf("ref line = %d, want 3", r.Line)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("URL inside a reference doc not inventoried; refs = %+v", b.Refs)
+	}
+}

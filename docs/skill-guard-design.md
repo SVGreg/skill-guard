@@ -526,6 +526,7 @@ rules:
     confidence: 0.9
     languages: ["*"]
     targets: [body, scripts]        # body | scripts | configs | manifest | refs
+                                    # `refs` = bundled reference docs; implied by `body`
     match:
       any:
         - unicode_category: [Cf]

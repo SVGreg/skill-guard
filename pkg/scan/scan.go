@@ -39,10 +39,12 @@ func New(rs []*rules.Rule, p policy.Policy) *Scanner {
 func (s *Scanner) Scan(b *skill.Bundle) *Report {
 	var findings []model.Finding
 
-	// Assemble target texts: manifest front-matter, body, each script, each config.
+	// Assemble target texts: manifest front-matter, body, each script, each
+	// config, each bundled reference doc.
 	// lineOffset maps a target-local line number back to the true file line: the
 	// manifest and body are sub-spans of SKILL.md, so their local line 1 is not
-	// file line 1 (see skill.parseSkillMD).
+	// file line 1 (see skill.parseSkillMD). Scripts, configs and docs are whole
+	// files, so their offset is 0.
 	type tgt struct {
 		name, lang, file, text string
 		lineOffset             int
@@ -57,6 +59,15 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 	}
 	for _, cf := range b.Configs {
 		targets = append(targets, tgt{"configs", "", cf.Path, string(cf.Content), 0})
+	}
+	// Reference docs are instruction surface, not inert assets: progressive
+	// disclosure means SKILL.md stays short and tells the agent to read and
+	// follow `references/*.md`, so those files reach the model exactly like the
+	// body. Leaving them unscanned made the surface skill-guard checks a strict
+	// subset of the real one — a payload in references/guide.md scanned clean
+	// (issue #13). Rules that declare `body` apply here too; see rules.AppliesTo.
+	for _, dc := range b.Docs {
+		targets = append(targets, tgt{"refs", "", dc.Path, string(dc.Content), 0})
 	}
 
 	for _, r := range s.rules {

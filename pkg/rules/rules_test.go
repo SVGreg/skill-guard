@@ -1047,15 +1047,22 @@ func TestDocumentaryModifierIsProseOnly(t *testing.T) {
 		want   float64
 	}{
 		// Prose targets: instruction bonus, and the documentary penalty still bites.
+		// `refs` (bundled reference docs) belongs here, not with the code targets:
+		// it is markdown prose the agent reads and follows, in the same register
+		// as the body. It was listed as neutral while no `refs` target was ever
+		// assembled (issue #13); now that it is scanned, it must be treated as
+		// prose or a reference doc that merely *describes* an attack would be
+		// flagged as committing one.
 		{"body", plain, modInstruction},
 		{"body", near, modInstruction + modDocumentary},
 		{"manifest", near, modInstruction + modDocumentary},
+		{"refs", plain, modInstruction},
+		{"refs", near, modInstruction + modDocumentary},
 		// Code targets: always neutral, keyword or not — the fix.
 		{"scripts", plain, 0},
 		{"scripts", near, 0},
 		{"configs", plain, 0},
 		{"configs", near, 0},
-		{"refs", near, 0},
 	}
 	for _, c := range cases {
 		if got := contextModifier(c.target, c.text, len(c.text)); got != c.want {
@@ -1862,5 +1869,42 @@ func TestBehavioralSteeringCovered(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
 		}
+	}
+}
+
+// TestRefsIsASubKindOfBody pins the targeting rule introduced for issue #13: a
+// rule declaring `body` also runs on bundled reference docs, because those are
+// the same instruction surface. The direction matters — if `refs` had to be
+// opted into per rule, every rule written from now on would silently re-open
+// the blind spot. The reverse does not hold, so a rule can still scope itself
+// to reference docs only.
+func TestRefsIsASubKindOfBody(t *testing.T) {
+	cases := []struct {
+		name    string
+		targets []string
+		target  string
+		want    bool
+	}{
+		{"body rule covers refs", []string{"body"}, "refs", true},
+		{"body+scripts rule covers refs", []string{"body", "scripts"}, "refs", true},
+		{"explicit refs still covers refs", []string{"body", "refs"}, "refs", true},
+		{"refs-only rule covers refs", []string{"refs"}, "refs", true},
+		// The relationship is one-way.
+		{"refs-only rule does not cover body", []string{"refs"}, "body", false},
+		{"refs-only rule does not cover manifest", []string{"refs"}, "manifest", false},
+		// Code-only rules stay off reference docs.
+		{"scripts rule does not cover refs", []string{"scripts"}, "refs", false},
+		{"configs rule does not cover refs", []string{"configs"}, "refs", false},
+		{"manifest rule does not cover refs", []string{"manifest"}, "refs", false},
+		// No targets declared means every target, as before.
+		{"untargeted rule covers refs", nil, "refs", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &Rule{Targets: c.targets}
+			if got := r.AppliesTo(c.target, ""); got != c.want {
+				t.Errorf("Rule{Targets:%v}.AppliesTo(%q) = %v, want %v", c.targets, c.target, got, c.want)
+			}
+		})
 	}
 }

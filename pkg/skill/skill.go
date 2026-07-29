@@ -23,7 +23,7 @@ type File struct {
 	SHA256    string      `json:"sha256"` // "sha256:<hex>" of raw content
 	Size      int64       `json:"size"`
 	MediaType string      `json:"media_type,omitempty"`
-	Role      string      `json:"role,omitempty"` // manifest | script | config | asset
+	Role      string      `json:"role,omitempty"` // manifest | script | config | doc | asset
 	Language  string      `json:"language,omitempty"`
 	Content   []byte      `json:"-"`
 }
@@ -65,6 +65,7 @@ type Bundle struct {
 	Files          []File        `json:"files"`
 	Scripts        []Script      `json:"-"`
 	Configs        []File        `json:"-"`
+	Docs           []File        `json:"-"` // bundled prose read by the agent (progressive disclosure)
 	Refs           []ExternalRef `json:"refs,omitempty"`
 	SingleFile     bool          `json:"single_file"` // stdin / single SKILL.md mode
 }
@@ -172,6 +173,8 @@ func loadDir(root string) (*Bundle, error) {
 			b.Scripts = append(b.Scripts, Script{File: f})
 		case "config":
 			b.Configs = append(b.Configs, f)
+		case "doc":
+			b.Docs = append(b.Docs, f)
 		}
 	}
 	b.Refs = gatherRefs(b)
@@ -275,6 +278,22 @@ var configNames = map[string]bool{
 	"settings.json": true, "mcp.json": true, "Makefile": true,
 }
 
+// docExt marks prose formats — bundled reference material the agent is told to
+// read and follow. Progressive disclosure is the documented Agent Skills
+// pattern: SKILL.md stays short and points at `references/*.md`, so these files
+// reach the model exactly like the body does and must be scanned like it.
+//
+// Deliberately prose only. Extension-less files are *not* included even though
+// some carry text: across the 777-bundle evaluation corpus every one of the 49
+// such files is packaging metadata or license text (LICENSE, WHEEL, RECORD,
+// METADATA, Dockerfile) — none is instruction surface, so admitting them buys
+// no detection and costs false positives. Data formats (.json, .yaml, .csv)
+// stay out too: the ones that matter are already the `config` role.
+var docExt = map[string]bool{
+	".md": true, ".markdown": true, ".mdx": true,
+	".txt": true, ".rst": true, ".text": true,
+}
+
 func classify(f *File) {
 	base := filepath.Base(f.Path)
 	ext := strings.ToLower(filepath.Ext(f.Path))
@@ -287,6 +306,14 @@ func classify(f *File) {
 		f.Language = scriptExt[ext]
 	case configNames[base] || strings.Contains(f.Path, ".claude/") || strings.Contains(f.Path, ".git/hooks/"):
 		f.Role = "config"
+	case docExt[ext] && !looksBinary(f.Content):
+		// Checked after config so requirements.txt stays a config despite ".txt".
+		f.Role = "doc"
+		if ext == ".md" || ext == ".markdown" || ext == ".mdx" {
+			f.MediaType = "text/markdown"
+		} else {
+			f.MediaType = "text/plain"
+		}
 	default:
 		f.Role = "asset"
 		if lang := shebangLanguage(f.Content); lang != "" {
@@ -329,6 +356,18 @@ func shebangLanguage(content []byte) string {
 		return "bash"
 	}
 	return ""
+}
+
+// looksBinary reports whether content is not plausibly text. A NUL byte is the
+// standard heuristic (git uses it too) and only the head is inspected, which is
+// enough to keep a mislabeled binary out of the `doc` role without paying a
+// full scan for it.
+func looksBinary(content []byte) bool {
+	head := content
+	if len(head) > 8000 {
+		head = head[:8000]
+	}
+	return bytes.IndexByte(head, 0) >= 0
 }
 
 func gatherRefs(b *Bundle) []ExternalRef {

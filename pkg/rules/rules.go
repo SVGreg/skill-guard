@@ -72,8 +72,19 @@ type Rule struct {
 
 // AppliesTo reports whether the rule should run against a target of the given
 // name ("body","scripts","configs","manifest","refs") and language.
+//
+// `refs` — the bundled reference docs a skill points at under progressive
+// disclosure — is a **sub-kind of `body`**: a rule declaring `body` runs on
+// them too. That direction is deliberate and is the fix for the blind spot in
+// issue #13. Reference files are the same instruction surface as the SKILL.md
+// body (the agent is told to read and follow them), so any rule that cares
+// about the body cares about them; requiring each rule to opt in by listing
+// `refs` would silently re-open the hole for every rule written from now on.
+// The reverse does not hold: `targets: [refs]` alone still means reference
+// docs only, so a rule can be scoped to them when that is what it wants.
 func (r *Rule) AppliesTo(target, language string) bool {
-	if len(r.Targets) > 0 && !contains(r.Targets, target) {
+	if len(r.Targets) > 0 && !contains(r.Targets, target) &&
+		!(target == "refs" && contains(r.Targets, "body")) {
 		return false
 	}
 	if len(r.Languages) > 0 && !contains(r.Languages, "*") && language != "" && !contains(r.Languages, language) {
@@ -108,7 +119,7 @@ func (r *Rule) Evaluate(target, text string) []model.Finding {
 		conf := m.confidence
 		if !m.structural {
 			conf += contextModifier(target, text, m.start)
-		} else if target == "manifest" || target == "body" {
+		} else if isProseTarget(target) {
 			conf += modInstruction
 		}
 		if conf < 0 {
@@ -367,6 +378,16 @@ func scanURLHost(text string, hosts []string, conf float64) []match {
 
 var docKeywords = regexp.MustCompile(`(?i)\b(example|e\.g\.|for instance|do not|don't|never|detect|flag|insecure|avoid)\b`)
 
+// isProseTarget reports whether a target is narrative instruction surface — the
+// register the confidence modifiers were calibrated for. `refs` joins manifest
+// and body because a bundled reference doc is markdown prose the agent reads and
+// follows exactly like the body: it earns the same +0.15 instruction bonus, and
+// it pays the same documentary/code-fence penalties, which is what keeps a
+// reference doc that merely *describes* an attack from being flagged.
+func isProseTarget(target string) bool {
+	return target == "manifest" || target == "body" || target == "refs"
+}
+
 func contextModifier(target, text string, pos int) float64 {
 	// The documentary and code-example penalties model *prose* registers: a
 	// fenced example or a "never run …" sentence in narrative text that
@@ -381,7 +402,7 @@ func contextModifier(target, text string, pos int) float64 {
 	// confidences. Structural leaves are exempt from these penalties everywhere
 	// for the same reason ("an invisible char in 'documentation' is still an
 	// invisible char"); scripts/configs are exempt here on the same logic.
-	if target != "manifest" && target != "body" {
+	if !isProseTarget(target) {
 		return 0
 	}
 	delta := modInstruction

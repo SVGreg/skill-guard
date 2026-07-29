@@ -39,7 +39,7 @@ The CLI (`cmd/skill-guard`) is a thin cobra wrapper; all logic lives in `pkg/*`.
 in one direction through the scan pipeline:
 
 ```
-skill.LoadBundle(path)      →  parse SKILL.md front-matter + body + scripts/configs into an inert Bundle
+skill.LoadBundle(path)      →  parse SKILL.md front-matter + body + scripts/configs/docs into an inert Bundle
 rules.Builtin()             →  load + compile embedded YAML rule packs
 scan.New(rules, policy)     →  evaluate every rule × every target → dedup → verdict, risk score, skill-card
 report.*                    →  render text / json / skill-card
@@ -80,6 +80,19 @@ through an `ast_references` map so tooling never hard-codes the taxonomy.
 section there — never by picking a number in a backlog row or an issue. `docs/planned-rules.md`
 tracks status/priority for ids defined in the authority docs; it once invented its own meanings for
 thirteen ids, which silently blocked its two highest-priority rows (see its ID-reconciliation table).
+
+### Scan targets (and why `refs` is special)
+
+A rule runs against *targets*: `manifest`, `body`, `scripts`, `configs`, `refs`. The first two are
+sub-spans of `SKILL.md`; the rest are whole files, grouped by the `Role` that `pkg/skill.classify`
+assigns (`script`/`config`/`doc`, else inert `asset`).
+
+`refs` — bundled prose (`.md`, `.markdown`, `.mdx`, `.txt`, `.rst`, `.text`) — is a **sub-kind of
+`body`**: a rule declaring `body` runs on reference docs too, and they carry the same prose
+confidence modifiers. Progressive disclosure is the documented Agent Skills pattern, so a
+`references/*.md` reaches the model exactly like the body does; requiring each rule to opt in by
+listing `refs` would silently re-open the blind spot for every rule written afterwards (issue #13).
+Extension-less files and data formats are deliberately *not* docs — see the `docExt` comment.
 
 ### Confidence, context modifiers, verdict, risk
 
