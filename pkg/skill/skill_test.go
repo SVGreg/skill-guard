@@ -1,6 +1,7 @@
 package skill
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,5 +250,73 @@ func TestBundleCollectsDocsAndTheirURLs(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("URL inside a reference doc not inventoried; refs = %+v", b.Refs)
+	}
+}
+
+// TestBundleEnforcesTotalSizeCap covers issue #14: maxFileSize bounds each file
+// but nothing bounded their sum, so a bundle of N files just under the per-file
+// cap consumed ~N × 16 MiB with no ceiling — every File.Content is retained for
+// the life of the scan, and scanning untrusted bundles is the whole point.
+func TestBundleEnforcesTotalSizeCap(t *testing.T) {
+	orig := maxBundleSize
+	defer func() { maxBundleSize = orig }()
+	maxBundleSize = 4096
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(miniSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 1024)
+	for i := range chunk {
+		chunk[i] = 'a'
+	}
+	// Individually every file is far below maxFileSize; only the sum trips.
+	for i := 0; i < 8; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("pad%02d.bin", i)), chunk, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := LoadBundle(dir)
+	if err == nil {
+		t.Fatal("bundle over the total cap was accepted; want rejection")
+	}
+	if !strings.Contains(err.Error(), "total size cap") {
+		t.Errorf("error %q does not mention the total size cap", err)
+	}
+}
+
+// TestBundleUnderTotalSizeCapLoads is the other half: the cap must not reject a
+// bundle that fits, and must be a sum rather than a count.
+func TestBundleUnderTotalSizeCapLoads(t *testing.T) {
+	orig := maxBundleSize
+	defer func() { maxBundleSize = orig }()
+	maxBundleSize = 4096
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(miniSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 512)
+	for i := range chunk {
+		chunk[i] = 'a'
+	}
+	for i := 0; i < 4; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("pad%02d.bin", i)), chunk, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := LoadBundle(dir); err != nil {
+		t.Fatalf("bundle under the total cap was rejected: %v", err)
+	}
+}
+
+// TestRealCorpusBundlesFitTheCap pins the sizing argument behind maxBundleSize:
+// the default must sit far above any plausible real skill. The largest bundle in
+// the evaluation corpus is 23.3 MiB, so a 256 MiB ceiling leaves ~11x headroom.
+func TestRealCorpusBundlesFitTheCap(t *testing.T) {
+	const largestObservedBundle = 24 << 20 // 23.3 MiB, evaluation corpus (n=777)
+	if maxBundleSize < 4*largestObservedBundle {
+		t.Errorf("maxBundleSize = %d MiB, too close to the largest real bundle (%d MiB); "+
+			"legitimate skills would start failing to load", maxBundleSize>>20, largestObservedBundle>>20)
 	}
 }

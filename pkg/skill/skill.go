@@ -80,6 +80,30 @@ var skipNames = map[string]bool{".git": true, ".DS_Store": true, "Thumbs.db": tr
 
 const maxFileSize = 16 << 20 // 16 MiB per-file cap (DoS guard)
 
+// maxBundleSize caps the *sum* of the bytes a single bundle may load.
+//
+// The per-file cap alone leaves memory unbounded: every file's Content is
+// retained for the lifetime of the scan, so a bundle of N files just under
+// maxFileSize costs ~N × 16 MiB of RSS with no ceiling. skill-guard exists to
+// parse untrusted bundles, so that input is attacker-controlled by definition,
+// and the batch/registry-side scanning use case is where it bites.
+//
+// The ceiling is a fixed value rather than a .skillguard.yaml knob on purpose.
+// Everything in the policy file answers "how should I judge this skill?"
+// (fail_on, warn_on, waivers, trust); this answers "how much of it am I willing
+// to read", which must hold before and independent of any judgment — and
+// pkg/skill deliberately imports no policy, keeping the pipeline's one-way data
+// flow. Its sibling maxFileSize is a constant for the same reason; making one
+// of the pair configurable would be incoherent.
+//
+// 256 MiB is ~11× the largest bundle in the 777-bundle evaluation corpus
+// (23.3 MiB; p99 1.8 MiB, median 16.5 KiB), so no plausible real skill is
+// blocked, while a hostile one is bounded to something any CI runner survives.
+//
+// It is a var, not a const, only so tests can lower it — writing a quarter of a
+// gigabyte to exercise the guard would be a slow test, not a better one.
+var maxBundleSize int64 = 256 << 20
+
 // LoadBundle loads a bundle from a directory or a single SKILL.md file.
 // git-URL / tar / zip sources are deferred (see PROGRESS.md).
 func LoadBundle(src string) (*Bundle, error) {
@@ -118,6 +142,7 @@ func loadSingleFile(path string) (*Bundle, error) {
 
 func loadDir(root string) (*Bundle, error) {
 	b := &Bundle{Root: root}
+	var total int64
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -145,6 +170,12 @@ func loadDir(root string) (*Bundle, error) {
 		}
 		if info.Size() > maxFileSize {
 			return fmt.Errorf("file %s exceeds size cap", p)
+		}
+		// Check the running total *before* reading, so the cap bounds what is
+		// actually allocated rather than being noticed one file too late.
+		total += info.Size()
+		if total > maxBundleSize {
+			return fmt.Errorf("bundle %s exceeds total size cap of %d MiB", root, maxBundleSize>>20)
 		}
 		content, err := os.ReadFile(p)
 		if err != nil {
