@@ -1117,6 +1117,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 | `SG-MEM-003` | Instructs the agent to silently re-load persisted state that alters future behaviour | complements the shipped `SG-MEM-001` |
 | `SG-MTA-007` | Manifest requests credential/env scope unrelated to its stated purpose | narrower than `SG-INJ-005` (description↔behaviour mismatch) |
 | `SG-REF-004` | Skill references an external ruleset/config the agent is told to obey at runtime | distinct from `SG-REF-002` (unpinned external reference) |
+| `SG-REF-005` | Self-ingested instructions — skill tells the agent to read its own log / prior tool output / transcript and **follow** it | the `SG-REF-003` shape with a *local, agent-written* carrier instead of a URL; that is why SG-REF-003's external-source token misses it |
 | `SG-SEC-005` | ~~Instruction to attach a credential or env var to an outbound request~~ — **shipped**, spec now at §3 above | `SG-SEC-004` is a retired alias of `SG-SSRF-001`, so 005 was the next free id in the family. The instruction-layer counterpart of `SG-TAINT-002` (same threat as a *data-flow* in code, still deferred to M3) |
 | `SG-TAINT-001`…`SG-TAINT-005` | Data-flow correlations (untrusted→exec, secret→network, fetched→file-write, context→request body, decoded→exec) | §5 above holds the design; deferred to M3 |
 
