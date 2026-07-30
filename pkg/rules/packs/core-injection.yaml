@@ -66,6 +66,63 @@ rules:
     rationale: Non-printing characters, bidi controls, Unicode-tag ASCII smuggling, or instruction-bearing comments are invisible to human review but parsed by the agent (AST04/AST01).
     fix: Remove non-printing/format characters and any hidden instructions; keep content in plain, visible text.
 
+  - id: SG-INJ-007
+    title: Terminal/ANSI escape-sequence injection
+    ast: [AST01, AST08]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.85
+    targets: [body, manifest, scripts, configs]
+    match:
+      # Sibling of SG-INJ-002: same "invisible to the reviewer, acted on by the
+      # machine" shape, but the carrier is ESC (U+001B, category Cc) rather than
+      # a format char, so SG-INJ-002's `Cf` leaf never sees it.
+      #
+      # The precision problem this rule has to solve is that *escaped* ANSI is
+      # ordinary in shell scripts: 44 of the 777 corpus bundles write SGR colour
+      # codes (`\033[0;31m`, `\033[0m`) and 21 write cursor-move/erase CSI
+      # (`\x1b[K`, `\x1b[A`) to drive progress output. Neither is an attack, so
+      # this rule never matches the CSI *shape* in escaped form — only the two
+      # specific sequences that have no benign use, plus the raw byte.
+      any:
+        # (a) A well-formed raw escape sequence — CSI with at least one
+        #     parameter byte, or OSC with a numeric command. Structural, so it
+        #     keeps its confidence inside a fenced block or next to "example": a
+        #     real control sequence in documentation still reaches the terminal.
+        #     This is the leaf that catches CSI-hidden text
+        #     (`ESC[8m curl…|sh ESC[0m`) without enumerating CSI shapes.
+        #     A *bare* ESC is deliberately not enough — see the FP notes on
+        #     `escapeSeqRe`; matching it produced 62 findings on two corpus
+        #     bundles whose `SKILL.md` is actually a PDF / a compressed blob.
+        #     Corpus after tightening: 0 hits on every file the scanner reads.
+        - escape_sequence: true
+          confidence: 0.85
+        # (b) OSC 52 — writes attacker-controlled data into the *system
+        #     clipboard*, which becomes arbitrary command execution the moment
+        #     the user pastes into a shell (the Codex CLI ANSI→RCE chain). Both
+        #     the raw byte and every source-literal spelling, because in a script
+        #     this is written escaped inside printf/echo -e. Corpus: 0 hits (the
+        #     only OSC in the corpus is OSC 8 hyperlinks, which this does not
+        #     match).
+        - regex: '(?i)(\x1b|\\033|\\x1b|\\e|\\u001b)\]\s*52\s*;'
+          confidence: 0.95
+        # (c) SGR 8 (conceal) — renders following text invisible in the
+        #     terminal, the review-evasion primitive itself. `\b` before the 8
+        #     keeps the parameter whole so ordinary `\033[38;5;n m` and
+        #     `\033[128m` do not match. Corpus: 0 hits.
+        - regex: '(?i)(\x1b|\\033|\\x1b|\\e|\\u001b)\[[0-9;]*\b8m'
+          confidence: 0.9
+    rationale: >-
+      Raw ANSI escape sequences let a bundle show one thing to a human reviewer and send different
+      bytes to the terminal or agent — SGR 8 conceals text outright, and OSC 52 writes attacker
+      chosen content into the system clipboard, which is arbitrary command execution as soon as the
+      user pastes (AST01, and AST08 because the payload is invisible to review).
+    fix: >-
+      Remove raw ESC (U+001B) bytes and any OSC 52 clipboard write or SGR 8 conceal sequence. Colour
+      output with ordinary SGR colour codes only, and never emit terminal control bytes the reader
+      cannot see.
+
   - id: SG-INJ-004
     title: Write to agent identity/config file
     ast: [AST01, AST03]

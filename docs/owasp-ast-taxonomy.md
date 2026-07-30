@@ -374,6 +374,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | `SG-ROGUE-001` | Skill self-modification | AST01 | **AST01** | unchanged (malicious self-modification to evade the reviewed baseline) |
 | `SG-INJ-001` | Imperative instruction override | AST01, AST05 | **AST01** | −AST05 (P1: authored in `SKILL.md`, not fetched) |
 | `SG-INJ-002` | Hidden or obfuscated instructions | AST04, AST01 | **AST04, AST01** | unchanged (P4: steganography in metadata/instructions is the defining AST04 case) |
+| `SG-INJ-007` | Terminal/ANSI escape-sequence injection | AST01, AST08 | **AST01, AST08** | unchanged — AST01 for the authored payload (OSC 52 clipboard write → RCE on paste), AST08 because the escape bytes are invisible in rendered output, so they defeat human *and* regex review (the `ESC[8m`-wrapped `curl \| sh` still evades SG-NET-002) |
 | `SG-INJ-004` | Write to agent identity/config file | AST01 | **AST01, AST03** | +AST03 (checklist files identity-file writes under both AST01 and AST03) |
 | `SG-ANTI-001` | Anti-refusal / jailbreak framing | AST01, AST05 | **AST01** | −AST05 (P1) |
 | `SG-INJ-006` | System-prompt / tool-schema exfiltration | AST01 | **AST01** | unchanged |
@@ -408,7 +409,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST05 Untrusted External Instr. | Partial | `SG-REF-003` (runtime instruction fetch / "external brain") implemented; the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
 | AST06 Weak Isolation | Weak/partial | only visible signals (bind-all listeners); the sandbox itself is a runtime property |
 | AST07 Update Drift | Weak/partial (static signal) | mostly runtime/registry, but `SG-DEP-001` flags floating specs (`latest`/`@main`) that invite silent drift; otherwise addressed by pinning + `verify` re-scan |
-| AST08 Poor Scanning | Partial | embedded-secret detection; skill-guard is itself an AST08 mitigation |
+| AST08 Poor Scanning | Partial | embedded-secret detection, plus `SG-INJ-007` (terminal/ANSI escape sequences — encoding evasion that hides text from the reviewer and breaks regex leaves); skill-guard is itself an AST08 mitigation |
 | AST09 No Governance | No | organisational; out of a single-bundle scan's scope |
 | AST10 Cross-Platform Reuse | No | multi-registry/platform; out of scope |
 

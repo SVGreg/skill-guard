@@ -38,6 +38,7 @@ type Condition struct {
 	unicodeCategory []string
 	bidiControl     bool
 	tagBlock        bool
+	escapeSequence  bool
 	urlHost         []string
 
 	confidence *float64 // per-pattern override
@@ -50,7 +51,8 @@ func (c Condition) isLeaf() bool {
 // structural leaves must not receive the documentary/code-example penalty
 // (an invisible char in "documentation" is still an invisible char).
 func (c Condition) structural() bool {
-	return c.unicodeCategory != nil || c.bidiControl || c.tagBlock || c.urlHost != nil
+	return c.unicodeCategory != nil || c.bidiControl || c.tagBlock ||
+		c.escapeSequence || c.urlHost != nil
 }
 
 // Rule is a compiled rule ready to evaluate.
@@ -236,6 +238,8 @@ func (r *Rule) evalLeaf(c Condition, text string) []match {
 		return scanRunes(text, isBidiControl, conf)
 	case c.tagBlock:
 		return scanTagBlock(text, conf)
+	case c.escapeSequence:
+		return scanEscapeSequence(text, conf)
 	case c.urlHost != nil:
 		return scanURLHost(text, c.urlHost, conf)
 	}
@@ -278,6 +282,56 @@ func scanRunes(text string, pred func(rune) bool, conf float64) []match {
 
 func isBidiControl(r rune) bool {
 	return (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069)
+}
+
+// escapeSeqRe matches a *well-formed* ANSI escape sequence (SG-INJ-007): CSI
+// with at least one parameter byte, or OSC with a numeric command and its `;`.
+// A bundle is text a human reviews and an agent reads, so a real terminal
+// control sequence in it renders one thing to the reviewer and sends something
+// else to the terminal.
+//
+// The shape requirements are all false-positive work, each one measured against
+// the 777-bundle evaluation corpus:
+//
+//   - **A bare ESC byte is not enough.** The first cut matched ESC alone and
+//     produced 62 findings across 2 bundles — both files named `SKILL.md` that
+//     are not markdown at all (one is a Google-Docs PDF, one a compressed blob),
+//     where the ESC bytes are random binary. ESC on its own also *does* nothing:
+//     a terminal needs the introducer, so requiring one costs no detection.
+//   - **CSI needs ≥1 parameter byte.** Random binary still produced `ESC[i`
+//     (valid CSI grammar, zero parameters, meaningless final). Every sequence
+//     that hides or moves text carries a parameter (`[8m`, `[2J`, `[1A`); a
+//     zero-parameter CSI conceals nothing.
+//   - **DCS/SOS/PM/APC (`ESC P/X/^/_`) are excluded entirely.** They can swallow
+//     text, but no documented skill attack uses them, and they matched binary
+//     noise in 8 corpus PNGs even when a terminator was required. Dropping the
+//     branch removes an FP surface for no measured loss.
+//   - **The whole Cc category is excluded** — it would match every newline and
+//     tab, which is why SG-INJ-002 lists only Cf.
+//   - **The C1 range U+0080–U+009F is excluded.** 8-bit CSI (U+009B) / OSC
+//     (U+009D) look like an evasion path, but a UTF-8 terminal does not decode
+//     `C2 9B` as CSI, so the bypass does not work — while the range collides
+//     with real data: two corpus SKILL.md files carry U+0081/U+008F/U+0094/U+009C
+//     as mojibake (double-encoded box-drawing and SJIS text).
+//
+// Final measurement: **0 hits across every corpus file the scanner reads**
+// (binary files included — the first pass missed them because grep skips binary
+// by default, which is how the 62 slipped through).
+var escapeSeqRe = regexp.MustCompile(`\x1b(?:\[[0-9;?<>=]+[ -/]*[@-~]|\][0-9]{1,4};)`)
+
+// scanEscapeSequence finds well-formed ANSI escape sequences. Matches are
+// structural (exempt from the documentary penalty): a real control sequence
+// inside a fenced "example" block still reaches the terminal.
+//
+// The excerpt renders the ESC byte as the literal text "ESC" so a finding can
+// never re-emit the payload into the reviewer's own terminal.
+func scanEscapeSequence(text string, conf float64) []match {
+	var ms []match
+	for _, loc := range escapeSeqRe.FindAllStringIndex(text, -1) {
+		s, e := loc[0], loc[1]
+		ms = append(ms, match{s, e, lineNum(text, s), "ESC" + text[s+1:e], conf, true})
+	}
+	return ms
 }
 
 // scanTagBlock finds Unicode Tag chars (U+E0000–E007F) used for ASCII

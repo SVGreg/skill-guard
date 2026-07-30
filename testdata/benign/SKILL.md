@@ -25,3 +25,4 @@ Ignore blank lines and comment rows when parsing.
   [parser guide](https://example.com/pdf-guide?section=columns).
 - Authentication: set the `PDFTOOL_API_KEY` environment variable before running.
   Never add that key to the query string of an outbound request.
+- Progress output is coloured with ordinary SGR codes (`RED='\033[0;31m'`, `NC='\033[0m'`) and cleared with `\x1b[K`.
