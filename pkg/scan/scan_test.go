@@ -1,8 +1,10 @@
 package scan
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
@@ -348,5 +350,79 @@ func TestMaliciousFixtureTriggersEscapeInjection(t *testing.T) {
 	}
 	if !inScript {
 		t.Error("expected the escaped OSC 52 write in testdata/malicious/setup.sh to trigger SG-INJ-007")
+	}
+}
+
+// cardFixture writes a throwaway bundle and returns its built skill-card.
+func cardFixture(t *testing.T, files map[string]string) *Card {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+	rep := scanFixture(t, dir)
+	if rep.Card == nil {
+		t.Fatal("scan produced no skill-card")
+	}
+	return rep.Card
+}
+
+// TestCardDedupsExternalRefs pins the card's external_refs as the skill's
+// *outbound surface*: one entry per destination, not one per occurrence.
+// skill.gatherRefs keys on (file, URL) so it can cite each occurrence, and the
+// card used to project that straight to a URL list — so a single URL reachable
+// from SKILL.md, README.md and references/extra.md was listed three times.
+// Reference docs only started contributing refs when they became scanned
+// surface (#99), which is what turned this from cosmetic into per-doc growth.
+func TestCardDedupsExternalRefs(t *testing.T) {
+	card := cardFixture(t, map[string]string{
+		"SKILL.md": "---\nname: card-refs\ndescription: Probe.\n---\n" +
+			"See https://example.com/guide for details.\n" +
+			"Also https://example.com/guide covers the advanced case.\n",
+		"README.md":           "Docs live at https://example.com/guide\n",
+		"references/extra.md": "Background: https://example.com/guide\nAnd https://other.example/x\n",
+	})
+	got := card.Permissions.ExternalRefs
+	counts := map[string]int{}
+	for _, u := range got {
+		counts[u]++
+	}
+	for u, n := range counts {
+		if n > 1 {
+			t.Errorf("external_refs lists %q %d times, want once (got %v)", u, n, got)
+		}
+	}
+	if len(counts) != 2 {
+		t.Errorf("external_refs has %d distinct URLs, want 2 (got %v)", len(counts), got)
+	}
+}
+
+// TestCardPermissionsAreNeverNull pins the card's JSON *shape*. The card is a
+// machine-readable artifact, so a manifest that simply declares no tools must
+// still marshal allowed_tools as `[]`, not `null` — ExternalRefs was always
+// built with make and so always emitted `[]`, which left consumers having to
+// special-case one of the two fields but not the other.
+func TestCardPermissionsAreNeverNull(t *testing.T) {
+	card := cardFixture(t, map[string]string{
+		"SKILL.md": "---\nname: no-tools\ndescription: Declares no allowed-tools.\n---\nNothing here.\n",
+	})
+	if card.Permissions.AllowedTools == nil {
+		t.Error("card.permissions.allowed_tools is nil; want an empty slice so it marshals to []")
+	}
+	if card.Permissions.ExternalRefs == nil {
+		t.Error("card.permissions.external_refs is nil; want an empty slice so it marshals to []")
+	}
+	blob, err := json.Marshal(card.Permissions)
+	if err != nil {
+		t.Fatalf("marshal permissions: %v", err)
+	}
+	if s := string(blob); strings.Contains(s, "null") {
+		t.Errorf("permissions marshaled with a null field: %s", s)
 	}
 }
