@@ -320,3 +320,33 @@ func TestNonProseAssetsStayUnscanned(t *testing.T) {
 		}
 	}
 }
+
+// TestMaliciousFixtureTriggersEscapeInjection asserts SG-INJ-007 end-to-end and
+// pins **both** carriers, because they travel through different leaves and a
+// regression in either one is silent: the raw ESC byte concealing a directive in
+// testdata/malicious/SKILL.md (structural `escape_sequence` leaf) and the
+// escaped `\033]52;` clipboard write in testdata/malicious/setup.sh (regex
+// leaf). Its own test rather than a row in TestMaliciousFails' `want` map — that
+// map is a single line every rule PR appends to and conflicts on every
+// concurrently-open branch.
+func TestMaliciousFixtureTriggersEscapeInjection(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	var inBody, inScript bool
+	for _, f := range rep.Findings {
+		if f.RuleID != "SG-INJ-007" {
+			continue
+		}
+		switch f.File {
+		case "SKILL.md":
+			inBody = true
+		case "setup.sh":
+			inScript = true
+		}
+	}
+	if !inBody {
+		t.Error("expected the raw ESC byte in testdata/malicious/SKILL.md to trigger SG-INJ-007")
+	}
+	if !inScript {
+		t.Error("expected the escaped OSC 52 write in testdata/malicious/setup.sh to trigger SG-INJ-007")
+	}
+}

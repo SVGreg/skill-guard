@@ -49,6 +49,7 @@ type condDTO struct {
 	UnicodeCategory []string  `yaml:"unicode_category"`
 	BidiControl     bool      `yaml:"bidi_control"`
 	TagBlock        bool      `yaml:"tag_block"`
+	EscapeSequence  bool      `yaml:"escape_sequence"`
 	URLHost         []string  `yaml:"url_host"`
 	Confidence      *float64  `yaml:"confidence"`
 }
@@ -112,6 +113,7 @@ func compileCond(cd condDTO) (Condition, error) {
 		unicodeCategory: cd.UnicodeCategory,
 		bidiControl:     cd.BidiControl,
 		tagBlock:        cd.TagBlock,
+		escapeSequence:  cd.EscapeSequence,
 		urlHost:         cd.URLHost,
 		confidence:      cd.Confidence,
 	}

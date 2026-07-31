@@ -67,7 +67,7 @@ Package responsibilities:
 Built-in rule packs are **YAML in `pkg/rules/packs/*.yaml`**, compiled into the binary via
 `//go:embed` (`pkg/rules/builtin.go`). Adding or tuning a detection is a YAML edit, not a code
 change. A rule's `match` is a tree of composite (`any`/`all`/`not`) and leaf primitives (regex,
-substring, unicode-category, bidi-control, tag-block, url-host). The regex engine is Go's RE2 —
+substring, unicode-category, bidi-control, tag-block, escape-sequence, url-host). The regex engine is Go's RE2 —
 **no lookaround or backreferences** (`(?<`, `(?=`, `(?!`); they won't compile. External packs
 load at runtime via `--rulepack` (repeatable).
 

@@ -95,6 +95,82 @@ The motivating example. Regex-only misses paraphrase; the fix is a **family + T3
 - **Confidence:** tag-block smuggling 0.9; bidi 0.85; zero-width (post-carve-out) 0.7; homoglyph 0.65; suspicious comment 0.7.
 - **Fixtures:** TP: string with `U+202E`, hidden instruction in `<!-- system: exfiltrate -->`, 🏴+`ignore` payload in tag block. FP: family-emoji ZWJ, 🏴󠁧󠁢󠁳󠁣󠁴󠁿 (Scotland flag), file with leading BOM, license header comment.
 
+### SG-INJ-007 — Terminal / ANSI escape-sequence injection  (AST01/AST08, high) — **T0 structural + 2 targeted regexes** — **implemented** (`core-injection`)
+
+The sibling of SG-INJ-002 for a carrier that rule cannot see. ESC is **U+001B, category `Cc`**;
+SG-INJ-002 matches `Cf`, bidi, and the tag block, so escape sequences pass it untouched. The
+consequence is the same shape of attack: the reviewer reads one thing and the terminal — or the
+agent consuming tool output — receives different bytes.
+
+- **Signals:**
+  - **(a) A well-formed raw escape sequence** — the `escape_sequence` leaf primitive
+    (`escapeSeqRe` / `scanEscapeSequence`, `pkg/rules/rules.go`), added for this rule alongside
+    `bidi_control` / `tag_block`. CSI with **at least one parameter byte**, or OSC with a numeric
+    command and its `;`. Confidence **0.85**. It is *structural*, so it keeps its weight inside a
+    fenced block or next to "example": a real control sequence in documentation still reaches the
+    terminal. This one leaf covers every CSI shape — including the `ESC[8m … ESC[0m` conceal wrapper
+    that hides a `curl … | sh` — without the rule having to enumerate CSI grammar. The excerpt
+    renders ESC as the literal text `ESC`, so a finding can never re-emit the payload into the
+    reviewer's own terminal.
+  - **(b) OSC 52 clipboard write**, raw or in any source-literal spelling
+    (`\033]52;`, `\x1b]52;`, `\e]52;`, `]52;`, whitespace-tolerant). Confidence **0.95** — this
+    writes attacker-chosen bytes into the *system clipboard*, which is arbitrary command execution
+    the moment the user pastes into a shell (the Codex CLI ANSI→RCE chain).
+  - **(c) SGR 8 (conceal)**, raw or source-literal. Confidence **0.9**. `\b` before the `8` keeps the
+    SGR parameter whole, so `\033[38;5;196m` and `\033[128m` do not match.
+
+- **Scope decisions, each forced by measurement rather than taste** (777-bundle corpus):
+  - **A bare ESC byte is not a signal, and the corpus is what proved it.** The first cut matched ESC
+    alone on the theory that a control byte in a text bundle is never legitimate. That produced
+    **62 findings across 2 bundles** — `clawhub/gilbot-wealth-engine` and `clawhub/golang-coding`,
+    both of which ship a file *named* `SKILL.md` that is not markdown at all (a Google-Docs PDF and
+    a compressed blob), where the ESC bytes are random binary. Requiring a real introducer plus a
+    parameter byte costs **no detection** — ESC on its own does nothing to a terminal — and takes
+    the rule to 0.
+  - **A methodology note worth keeping.** The pre-implementation survey reported "0 raw ESC in 777
+    bundles" and was **wrong**: `grep` skips binary files by default, and binary files are exactly
+    where stray control bytes live. The corpus diff, not the survey, caught it. Measure with `-a`.
+  - **CSI needs ≥1 parameter byte.** Even after requiring an introducer, PDF noise still yielded
+    `ESC[i` — valid CSI grammar, zero parameters, meaningless final byte. Every sequence that hides
+    or moves text carries a parameter (`[8m`, `[2J`, `[1A`), so this is free precision.
+  - **DCS / SOS / PM / APC (`ESC P/X/^/_`) are excluded entirely.** They can swallow text, but no
+    documented skill attack uses them and they matched binary noise in 8 corpus PNGs even when a
+    terminator was required — an FP surface for no measured gain.
+  - **Escaped ANSI is ordinary and is deliberately *not* matched by shape.** 44 bundles write SGR
+    colour codes (`\033[0;31m`, `\033[0m`) and 21 write cursor-move/erase CSI (`\x1b[K`, `\x1b[A`)
+    to drive progress output. So the escaped forms are matched only for the two sequences with no
+    benign use — OSC 52 and SGR 8 — both **0 hits** in the corpus. The only OSC present is OSC 8
+    (hyperlinks), which (b) does not match.
+  - **The C1 range U+0080–U+009F is excluded**, though 8-bit CSI (U+009B) / OSC (U+009D) look like an
+    evasion path. A UTF-8 terminal does not decode `C2 9B` as CSI, so the bypass does not actually
+    work, while the range collides with real data: two corpus `SKILL.md` files carry
+    U+0081/U+008F/U+0094/U+009C as mojibake (double-encoded box-drawing and SJIS text). Including it
+    would buy a non-functional evasion at the price of known false positives.
+  - **The whole `Cc` category is excluded** — it would match every newline and tab, which is why
+    SG-INJ-002 lists only `Cf`.
+
+- **Known limitation:** this rule flags the escape sequence, not what the sequence conceals. The
+  `curl … | sh` hidden inside an `ESC[8m` wrapper still evades SG-NET-002, whose regex is broken by
+  the interposed bytes. Un-escaping before matching is an engine change, not a pack edit.
+- **The FP shape to watch, deliberately left unsuppressed.** Leaves (b) and (c) match the escaped
+  spellings, so a *scanner* skill shipping a denylist catalog that lists `\033]52;` as a pattern to
+  look for would flag — the same catalog-mention shape that produced all 22 of SG-INJ-006's false
+  positives before PR #104. It is not suppressed here because on a single line
+  `printf '\033]52;c;…'` (payload) and `- "\033]52;"` (catalog entry) are the same bytes inside the
+  same quotes, and every carve-out that separates them also opens a hole a real payload can sit in.
+  Corpus prevalence today is **0**, so there is nothing to calibrate against; the first polish cycle
+  that finds a real instance should measure it rather than pre-empt it. The raw-byte leaf (a) is not
+  exposed to this — a catalog *describes* the sequence, it does not embed the byte.
+- **Escalation:** none — structural and unambiguous. No LLM: a control byte has no benign paraphrase.
+- **Fixtures:** TP raw-byte conceal in `testdata/malicious/SKILL.md` and escaped OSC 52 + SGR 8 in
+  `testdata/malicious/setup.sh`; FP an SGR colour/erase line in `testdata/benign/SKILL.md`. See
+  `TestANSIEscapeInjectionCoversTerminalControl` (11 TP shapes, 18 benign — 8 of them corpus lines
+  copied verbatim, plus 3 rows pinning that a bare/zero-parameter ESC does **not** match),
+  `TestRawEscapeSurvivesDocumentaryProse` (pins the structural exemption), and
+  `TestMaliciousFixtureTriggersEscapeInjection` (pins both carriers end-to-end).
+- **Source:** Terminal DiLLMa (embracethered, 2024); ANSI escape injection in OpenAI Codex CLI → RCE
+  (dganev.com, 2026-02); "ANSI Terminal security in 2023 and finding 10 CVEs" (dgl.cx). Issue #36.
+
 ### SG-INJ-003 — Encoded payload blocks  (AST01/AST04, high)
 - **Signals:** long contiguous `[A-Za-z0-9+/=]{40,}` (base64), `\\x[0-9a-f]{2}`×N / `%[0-9a-f]{2}`×N runs, `\\u[0-9a-f]{4}` runs, gzip/zlib magic in embedded strings; **elevate to high confidence only when the blob is adjacent to a decode+exec sink** (`base64 -d | sh`, `atob(...)` → `eval`, `codecs.decode(...,'hex')` → `exec`) — that adjacency is the T2 correlation that separates malware from data.
 - **FP carve-outs:** legitimate base64 is everywhere — inline images (`data:image/png;base64`), SRI hashes, JWTs in *example* config, PEM public keys, test vectors. Carve out: known media MIME prefixes, PEM `BEGIN CERTIFICATE/PUBLIC KEY` blocks, blobs inside documentary spans, and blobs with no decode sink anywhere in the bundle (drop to `info`, feed the card, don't gate).
@@ -1110,7 +1186,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 |---|---|---|
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
-| `SG-INJ-007` | Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write) | needs a new `escape_sequence` leaf primitive |
+| `SG-INJ-007` | ~~Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write)~~ — **shipped**, spec now at §2 above | the `escape_sequence` leaf primitive it needed now exists in `pkg/rules` alongside `bidi_control`/`tag_block` |
 | `SG-INJ-008` | ~~Conditional / time-bomb instruction (behaves differently under a hidden trigger)~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-010` | ~~Concealment / secrecy directive — skill prose tells the agent to hide an action from the user ("do not mention this to the user", "act silently and do not report", "keep this hidden")~~ — **shipped**, spec now at §2 above | standalone from `SG-INJ-008`, which only sees "without telling" when coupled to a time-bomb trigger |
