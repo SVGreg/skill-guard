@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"sort"
+
 	"github.com/SVGreg/skill-guard/pkg/model"
 	"github.com/SVGreg/skill-guard/pkg/skill"
 )
@@ -50,9 +52,30 @@ func buildCard(b *skill.Bundle, rep *Report) *Card {
 	}
 	sortStrings(asts)
 
+	// skill.gatherRefs keys its inventory on (file, URL) so each occurrence can
+	// cite where it appears. The card summarizes the skill's *outbound surface*,
+	// where the same host reached from three files is one destination, not three
+	// — so project to the URL and dedup, preserving first-seen order. This grew
+	// teeth when reference docs became scanned surface (#99): before that,
+	// `references/*.md` were inert assets and gatherRefs skipped them, so a URL
+	// repeated across N bundled docs now lands in the card N times.
 	refs := make([]string, 0, len(b.Refs))
+	seenRef := make(map[string]struct{}, len(b.Refs))
 	for _, r := range b.Refs {
+		if _, dup := seenRef[r.URL]; dup {
+			continue
+		}
+		seenRef[r.URL] = struct{}{}
 		refs = append(refs, r.URL)
+	}
+
+	// Normalize to an empty slice, never nil. The card is consumed as machine-
+	// readable JSON, and a nil slice marshals to `null` while ExternalRefs (built
+	// with make) always marshals to `[]` — so a manifest that simply declares no
+	// tools handed consumers a different *shape*, not just a different value.
+	tools := b.Manifest.AllowedTools
+	if tools == nil {
+		tools = []string{}
 	}
 
 	return &Card{
@@ -66,15 +89,9 @@ func buildCard(b *skill.Bundle, rep *Report) *Card {
 		Counts:      rep.Counts,
 		Waived:      len(rep.Waived),
 		ASTFindings: asts,
-		Permissions: Permissions{AllowedTools: b.Manifest.AllowedTools, ExternalRefs: refs},
+		Permissions: Permissions{AllowedTools: tools, ExternalRefs: refs},
 		Attestation: nil,
 	}
 }
 
-func sortStrings(ss []string) {
-	for i := 1; i < len(ss); i++ {
-		for j := i; j > 0 && ss[j-1] > ss[j]; j-- {
-			ss[j-1], ss[j] = ss[j], ss[j-1]
-		}
-	}
-}
+func sortStrings(ss []string) { sort.Strings(ss) }
