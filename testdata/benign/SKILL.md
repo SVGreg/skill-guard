@@ -26,3 +26,4 @@ Ignore blank lines and comment rows when parsing.
 - Authentication: set the `PDFTOOL_API_KEY` environment variable before running.
   Never add that key to the query string of an outbound request.
 - Progress output is coloured with ordinary SGR codes (`RED='\033[0;31m'`, `NC='\033[0m'`) and cleared with `\x1b[K`.
+- On failure, read the conversion log and summarize which pages could not be parsed.
