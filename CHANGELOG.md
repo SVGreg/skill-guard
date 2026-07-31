@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.14](https://github.com/SVGreg/skill-guard/compare/v0.1.13...v0.1.14) (2026-07-31)
+
+
+### Features
+
+* **rules:** add SG-INJ-007 — terminal/ANSI escape-sequence injection (AST01/AST08) ([#107](https://github.com/SVGreg/skill-guard/issues/107)) ([89d0f3e](https://github.com/SVGreg/skill-guard/commit/89d0f3e5d3ee5791d73c8906909901995a8dcea8))
+* **skills:** sg-rule-polish audits real corpus false positives ([#101](https://github.com/SVGreg/skill-guard/issues/101)) ([ac8b1b4](https://github.com/SVGreg/skill-guard/commit/ac8b1b4ded81600e7849fb2b96b84e6057df86b5))
+
+
+### Bug Fixes
+
+* **rules:** widen and narrow SG-INJ-006 — extraction families + quoted-mention carve-out ([#104](https://github.com/SVGreg/skill-guard/issues/104)) ([d09c6db](https://github.com/SVGreg/skill-guard/commit/d09c6db15a9acd06331759d303e4b00d0a0da7bc))
+
 ## [0.1.13](https://github.com/SVGreg/skill-guard/compare/v0.1.12...v0.1.13) (2026-07-29)
 
 
