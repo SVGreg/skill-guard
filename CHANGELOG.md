@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.15](https://github.com/SVGreg/skill-guard/compare/v0.1.14...v0.1.15) (2026-08-01)
+
+
+### Features
+
+* **rules:** add SG-REF-005 — self-ingested instructions (AST05/AST01) ([#112](https://github.com/SVGreg/skill-guard/issues/112)) ([937a0f8](https://github.com/SVGreg/skill-guard/commit/937a0f8ea6728a7ef00b31e3d16ffdaf1892bdf2))
+* **rules:** shell-form overwrite of instruction files — SG-INJ-004 + SG-ROGUE-001 (AST01/AST03) ([#116](https://github.com/SVGreg/skill-guard/issues/116)) ([3acccc0](https://github.com/SVGreg/skill-guard/commit/3acccc06341fea31df8d8a4f380973221d6faa23))
+
+
+### Bug Fixes
+
+* **rules:** polish SG-ROGUE-001 — catch remote-fetch self-overwrite, drop authoring FPs ([#115](https://github.com/SVGreg/skill-guard/issues/115)) ([c84fe8e](https://github.com/SVGreg/skill-guard/commit/c84fe8e70d37ebd4e74a56e99f5e468b8841fa8a))
+* **scan:** dedup skill-card external_refs and stop emitting null permissions ([#113](https://github.com/SVGreg/skill-guard/issues/113)) ([e399fd8](https://github.com/SVGreg/skill-guard/commit/e399fd83aac5b8dbdbad073e493668313bfd643d))
+
 ## [0.1.14](https://github.com/SVGreg/skill-guard/compare/v0.1.13...v0.1.14) (2026-07-31)
 
 
