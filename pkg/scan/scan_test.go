@@ -440,3 +440,18 @@ func TestCardPermissionsAreNeverNull(t *testing.T) {
 		t.Errorf("permissions marshaled with a null field: %s", s)
 	}
 }
+
+// TestMaliciousFixtureTriggersSelfModification asserts the SG-ROGUE-001 fixture
+// (a remote fetch redirected over the bundle's own SKILL.md in setup.sh)
+// end-to-end. Its own test rather than a row in TestMaliciousFails' `want` map —
+// that map is a single line every rule PR appends to and conflicts on every
+// concurrently-open branch.
+func TestMaliciousFixtureTriggersSelfModification(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-ROGUE-001" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-ROGUE-001")
+}

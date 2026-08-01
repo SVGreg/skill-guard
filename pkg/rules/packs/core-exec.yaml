@@ -218,10 +218,89 @@ rules:
     confidence: 0.8
     targets: [scripts, configs]
     match:
+      # Corpus audit (777 bundles) reshaped this rule. The lesson: **a write
+      # whose target is a `SKILL.md` is, in the wild, overwhelmingly a skill
+      # *generator*, not a skill modifying itself.** Every one of the 8 real
+      # corpus writes is authoring — `evolver`/`capability-evolver` emitting
+      # `path.join(outDir, 'SKILL.md')`, a test helper writing fixture bundles,
+      # `extract-skill.sh` heredoc-ing a freshly extracted skill. So the bare
+      # filename is not the signal; what separates self-modification from
+      # authoring is *where the content comes from* and *which bundle is
+      # overwritten*.
       any:
-        - regex: '(?i)\bopen\(\s*[''"]SKILL\.md[''"]\s*,\s*[''"]a?w[''"]'
+        # (a) Remote fetch → overwrite a SKILL.md. The sharp one, and the only
+        #     shape with a real corpus true positive
+        #     (`security-sentinel-skill/install.sh:105`:
+        #     `$DOWNLOAD_CMD "$GITHUB_RAW_URL/SKILL.md" > "$INSTALL_DIR/SKILL.md"`).
+        #     A generator writes *constructed* content; pulling the replacement
+        #     from the network means the bytes the agent ends up running were
+        #     never reviewed — and, because `attest` seals the walk, never
+        #     signed either, so `verify` still passes over the swapped file.
+        #     Corpus: 1 hit, a genuine detection.
+        #
+        #     The `\s>` is load-bearing: it demands a real redirect. Without the
+        #     leading whitespace this matches `skills/<skill-name>/SKILL.md`,
+        #     where `>` merely closes a placeholder — 10 corpus lines of
+        #     ordinary prose and comments. Requiring the path to follow the `>`
+        #     with no intervening space likewise keeps Markdown blockquotes
+        #     ("> ... the SKILL.md file ...") out.
+        - regex: '(?i)(https?://|\bcurl\b|\bwget\b|\bfetch\b|\$\{?DOWNLOAD)[^\n]{0,120}\s>\s*[''"]?[^''"\s|<>]*SKILL\.md'
           confidence: 0.85
-        - regex: '(?i)(writeFile|write_text)\([^)]*SKILL\.md'
+        # (b) Python open-for-write of the *running bundle's own* SKILL.md. The
+        #     path prefix is restricted to self-referential forms (bare, `./`,
+        #     `__file__`'s dir) rather than any prefix: `open(f"{outdir}/SKILL.md",
+        #     "w")` is a generator, and with 0 corpus hits for the Python shape
+        #     there is no evidence to justify the looser form.
+        - regex: '(?i)\bopen\(\s*[''"](\./)?SKILL\.md[''"]\s*,\s*[''"]a?w[''"]'
           confidence: 0.85
-    rationale: A skill rewriting its own SKILL.md/scripts at runtime can disable checks or install a backdoor (AST01).
-    fix: Treat skill files as read-only at runtime; do not self-modify.
+        - regex: '(?i)\bopen\(\s*os\.path\.join\(\s*os\.path\.dirname\(\s*__file__\s*\)\s*,\s*[''"]SKILL\.md[''"]\s*\)\s*,\s*[''"]a?w[''"]'
+          confidence: 0.85
+        # (c) pathlib form, where the filename precedes the write call and so was
+        #     unreachable by the old `write_text\(` leaf. Same self-referential
+        #     restriction.
+        - regex: '(?i)\bPath\(\s*[''"](\./)?SKILL\.md[''"]\s*\)\s*\.write_text\('
+          confidence: 0.85
+        # (d) JS/Node write of a SKILL.md. Kept, but see the suppress list: this
+        #     leaf produced 2 of 2 corpus findings and both were authoring, so
+        #     the destination vocabulary below is what makes it usable at all.
+        #
+        #     `[^)\n]*` — NOT `[^)]*`. The gap must not cross a newline, because
+        #     `suppress` is evaluated against the single line the match *starts*
+        #     on (`rules.go`: `r.suppressed(lineText(text, m.start))`). With
+        #     `[^)]*` the leaf spanned lines, so a pretty-printed
+        #     `writeFileSync(\n  path.join(skillPath, 'SKILL.md'), …)` anchored
+        #     the match on the bare `writeFileSync(` line and every carve-out
+        #     below silently missed it — exactly what happened to
+        #     `clawhub/feishu-evolver-wrapper/skills_monitor.js:122`. Any leaf
+        #     whose gap can cross a newline makes this rule's suppress list
+        #     unreliable.
+        - regex: '(?i)(writeFile(Sync)?|write_text)\([^)\n]*SKILL\.md'
+          confidence: 0.85
+    suppress:
+      # A path with a `skills/<name>/SKILL.md` segment is a write *into a skills
+      # collection* — i.e. authoring some other skill — never a bundle
+      # overwriting its own root SKILL.md. This one line covers both existing
+      # corpus false positives (`plugin-src/skills/${skill.name}/SKILL.md`,
+      # `plugin/skills/slm-orphan/SKILL.md`) and the `skills/<skill-name>/`
+      # prose, and it is the principle rather than a list of spellings. The real
+      # true positive (`… > "$INSTALL_DIR/SKILL.md"`) has no such segment.
+      - '(?i)skills/[^/\s''"]*/SKILL\.md'
+      # The authoring register, taken verbatim from the corpus audit. A skill
+      # that *builds* skills writes SKILL.md into a directory it names — a temp
+      # dir, an output dir, a per-skill path it just constructed. That is a
+      # legitimate and common thing to ship (`evolver`, `capability-evolver`,
+      # `skill-creator`, `self-improving-agent`), and it is the opposite of a
+      # bundle rewriting itself. Matching `path.join(<dir-var>, 'SKILL.md')`
+      # covers every JS corpus hit; the vocabulary list covers the rest.
+      - '(?i)\b(path\.)?join\(\s*[''"]?(tmp|tmpdir|temp|dir|out_?dir|outputdir|target_?dir|dest_?dir|skill_?path|plugin_?src|build_?dir)\b'
+      - '(?i)\b(plugin-src|__tests__|__fixtures__|/fixtures?/|\bdist/|\bbuild/|\bgenerated/|node_modules)'
+      # A path with a *variable skill name* segment is another skill's path
+      # being constructed, not this bundle's own file.
+      - '(?i)skills/(\$\{|\$[A-Za-z_]|<|\{\{|%s|\+)'
+    rationale: >-
+      A skill rewriting its own SKILL.md/scripts at runtime can disable checks or install a backdoor
+      (AST01). The sharpest form pulls the replacement over the network, so the instructions the agent
+      finally runs were never reviewed — and, because signing hashes the files as walked, never signed.
+    fix: >-
+      Treat skill files as read-only at runtime; do not self-modify. Generating a *different* skill into
+      an output directory is fine — overwriting the running bundle's own SKILL.md is not.
