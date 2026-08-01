@@ -867,11 +867,21 @@ agent consuming tool output — receives different bytes.
   `SessionStart`). FP: `testdata/benign/.claude/settings.json` (permissions only). See
   `TestAgentHookConfigRequiresEventAndCommand`.
 
-### SG-ROGUE-001 — Self-modification  (AST01, high) — **NEW (SkillSpector RA1)** — **implemented** (`core-exec`)
+### SG-ROGUE-001 — Self-modification  (AST01, high) — **NEW (SkillSpector RA1)** — **implemented** (`core-exec`) — **polished 2026-08-01**
 - **Signals:** code that rewrites its own SKILL.md/scripts/config at runtime, disables its own checks, or fetches-and-replaces its own files. Correlate write-sink whose target is a path inside the skill bundle itself.
-- **FP carve-outs:** build steps that generate artifacts into a `dist/`; self-update with signature check and disclosure.
-- **Confidence:** runtime self-rewrite of instructions 0.85.
-- **Fixtures:** TP: `open('SKILL.md','w').write(fetch(url))`. FP: codegen writing to `generated/`.
+- **Confidence:** runtime self-rewrite of instructions 0.85 on every leaf.
+
+**Corpus precision audit (2026-08-01, first polish — 777 bundles).** Before: **2 findings, both false positives** (precision 0%), and the rule reached only two exact spellings — `open('SKILL.md','w')` and `writeFile(…SKILL.md…)`. Ten of twelve realistic self-modification shapes scanned clean, including every shell form, `writeFileSync` (the common Node spelling), `open('./SKILL.md','w')` (the `./` prefix alone defeated it) and `Path('SKILL.md').write_text(…)` (filename precedes the call). After: **2 findings, 1 true positive + 1 that the newline fix below removed → 1 finding, a genuine detection.**
+
+- **The audit's central finding — authoring dominates the wild.** A write whose target is a `SKILL.md` is, across 777 real skills, *overwhelmingly a skill **generator***: `evolver`/`capability-evolver` emitting `path.join(outDir, 'SKILL.md')`, a test helper writing fixture bundles, `extract-skill.sh` heredoc-ing a freshly extracted skill. **All 8 real writes were authoring.** So the bare filename is not the signal — what separates self-modification from authoring is *where the replacement content comes from* and *which bundle is overwritten*.
+- **The one real detection.** `clawhub/security-sentinel-skill/install.sh:105` — `$DOWNLOAD_CMD "$GITHUB_RAW_URL/SKILL.md" > "$INSTALL_DIR/SKILL.md"` fetches its own `SKILL.md` from a mutable remote and overwrites the installed copy, so the bytes `attest` sealed are not the instructions the agent runs and `verify` still passes. This is the issue #105 headline shape and it was previously invisible.
+- **FP carve-outs (all measured, not assumed):**
+  - **`skills/<name>/SKILL.md` path segment ⇒ authoring.** One suppress line, stated as a principle rather than a list of spellings, kills both original false positives (`plugin-src/skills/${skill.name}/SKILL.md`, `plugin/skills/slm-orphan/SKILL.md`) *and* the ten corpus lines of prose where `>` merely closes a placeholder (`Create \`skills/<skill-name>/SKILL.md\``). The true positive has no such segment.
+  - **`join(<dir-var>, 'SKILL.md')` ⇒ authoring** — `dir`, `outDir`, `skillPath`, `tmp`, `dest`, … the destination is a directory the tool names.
+  - Build/test artifact paths (`dist/`, `build/`, `generated/`, `__tests__`, `node_modules`).
+  - **Deliberately NOT matched: the local `cat > "$SKILL_PATH/SKILL.md" << TEMPLATE` heredoc and bare `tee`/`>` forms.** Issue #105 guessed this was "probably medium"; measurement says otherwise — **3 of 3 corpus occurrences are `extract-skill.sh` generating a new skill**, so shipping it would trade one real detection for three false positives on legitimate skill-builder bundles. Revisit only with a signal that distinguishes the running bundle's own path from a constructed one.
+- **A leaf's gap must not cross a newline when the rule has a `suppress` list.** `rules.go` evaluates suppress against the single line the match *starts* on (`r.suppressed(lineText(text, m.start))`). Leaf (d) originally used `[^)]*`, which spans lines, so a pretty-printed `writeFileSync(\n  path.join(skillPath, 'SKILL.md'), …)` anchored on the bare `writeFileSync(` line and **every carve-out silently missed it** — that is exactly how `clawhub/feishu-evolver-wrapper/skills_monitor.js:122` survived the first cut. Now `[^)\n]*`. Three other shipped leaves still use a newline-crossing gap (`SG-INJ-004`, `SG-EXE-001`, `SG-EXE-002`); the general fix is an engine change and is filed in the engine backlog.
+- **Fixtures:** `TestSelfModificationCoversShellAndNodeForms` (11 TP + 11 benign, the benign rows verbatim corpus excerpts) and `TestSelfModificationSuppressSurvivesPrettyPrinting` in `pkg/rules/rules_test.go`; bundle fixture in `testdata/malicious/setup.sh` asserted by `TestMaliciousFixtureTriggersSelfModification`.
 
 ### SG-EXE-005 — Anti-analysis / evasion  (AST01/AST08, high)
 - **Signals:** sandbox/VM/debugger detection then branch (`if os.environ.get('CI')`, checks for `SKILLGUARD`/scanner env, `ptrace`, timing checks), scanner-name string checks, behavior that differs when observed, deliberate obfuscation *combined* with the above.

