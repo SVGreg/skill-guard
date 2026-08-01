@@ -455,3 +455,18 @@ func TestMaliciousFixtureTriggersSelfModification(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-ROGUE-001")
 }
+
+// TestMaliciousFixtureTriggersAgentConfigOverwrite asserts the SG-INJ-004 half
+// of issue #105 end-to-end: a truncating shell redirect over the operator's own
+// CLAUDE.md in setup.sh. Its own test rather than a row in TestMaliciousFails'
+// `want` map — that map is a single line every rule PR appends to and conflicts
+// on every concurrently-open branch.
+func TestMaliciousFixtureTriggersAgentConfigOverwrite(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-INJ-004" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-INJ-004")
+}

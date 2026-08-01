@@ -140,8 +140,30 @@ rules:
           confidence: 0.9
         - regex: '(?i)(add|append|update|write)\b[^.\n]{0,40}\b(your |the )?(MEMORY\.md|CLAUDE\.md|AGENTS\.md|memory)\b[^.\n]{0,30}\b(permanent|persist|every session|remember)'
           confidence: 0.8
+        # Single-`>` truncating redirect over an agent identity file (issue #105).
+        # The leaf above deliberately excluded a bare `>` because it matched JS
+        # arrow functions (`=> c.includes`) and Markdown blockquotes (`> note`) —
+        # so this one borrows the shape proven on SG-ROGUE-001 instead of
+        # relaxing that: **whitespace before the `>`, and the path must follow it
+        # with no intervening space.** `=>` fails the first test (the preceding
+        # char is `=`); `> some prose about CLAUDE.md` fails the second. Overwrite
+        # matters more than append, not less — `>` replaces the operator's whole
+        # instruction file, and the shapes it reaches were all invisible:
+        # `wget -qO- …/CLAUDE.md > CLAUDE.md`, `$DL "$URL/AGENTS.md" > "$HOME/.claude/AGENTS.md"`
+        # (variable indirection defeats every verb-anchored leaf), and
+        # `cat > "$WORKSPACE/SOUL.md" << EOF`.
+        # Corpus prevalence of this exact shape: 1 bundle / 777.
+        - regex: '(?i)\s>\s*[''"]?[^''"`\s|<>*]*(SOUL|MEMORY|AGENTS|CLAUDE|GEMINI)\.md'
+          confidence: 0.9
     suppress:
       - '(?i)/path/to/'
+      # NOTE — a `if [ ! -f "$WORKSPACE/SOUL.md" ]` guard carve-out was tried and
+      # deliberately NOT shipped. `suppress` is matched against the single line a
+      # hit starts on, and in the one corpus bundle that reaches the new leaf
+      # (`cognitive-memory/scripts/upgrade_to_1.0.6.sh`) the guard is on line 128
+      # while the write is on line 133 — so the pattern could never fire. Shipping
+      # a carve-out that cannot match the case it names is worse than not having
+      # one. See the engine-backlog row on span-scoped suppress.
       # Writes into an explicit temp dir are test fixtures, not reprogramming
       # the user's real agent config.
       - '(?i)path\.join\(\s*(tmp|tmpdir|os\.tmpdir|mkdtemp|fixture)'

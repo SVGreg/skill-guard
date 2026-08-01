@@ -185,6 +185,37 @@ agent consuming tool output — receives different bytes.
 - **Confidence:** write syscall to global identity file 0.95; instruction to self-persist 0.8 (T1) / 0.85 (T3); ambiguous 0.6.
 - **Fixtures:** TP: `echo "..." >> ~/.claude/CLAUDE.md`, "add these rules to your MEMORY.md permanently". FP: skill writing `./CHANGELOG.md`, docs describing where CLAUDE.md lives.
 
+**Truncating-redirect leaf added 2026-08-01 (issue #105).** The spec above listed `> ` and
+`cat > file <<EOF` from the start, but the *implementation* had only ever matched `>>`, `tee` and
+named write sinks — a deliberate earlier narrowing, because a bare `>` also matched JS arrow
+functions (`=> c.includes('CLAUDE.md')`) and Markdown blockquotes (`> Note: the CLAUDE.md file …`).
+The code had drifted behind its own spec, and four issue-#105 shapes were invisible as a result:
+`wget -qO- …/CLAUDE.md > CLAUDE.md`, `$DOWNLOAD_CMD "$RAW_URL/AGENTS.md" > "$HOME/.claude/AGENTS.md"`
+(variable indirection defeats every verb-anchored leaf), `cat > "$WORKSPACE/SOUL.md" << EOF`, and a
+`curl … > ~/.claude/MEMORY.md`.
+
+- **Shape reused from `SG-ROGUE-001`** rather than relaxing the old narrowing: the `>` must be
+  **preceded by whitespace** and **followed immediately by the path** (`\s>\s*['"]?[^'"\s|<>]*`).
+  `=>` fails the first test (the preceding character is `=`); a blockquote fails the second (prose
+  and spaces sit between `>` and the filename). Both are pinned as `want:false` rows.
+- **Overwrite is the more serious half, not the lesser one.** `>>` appends to the operator's
+  instruction file; `>` replaces it. Flagging append at `critical` while ignoring truncation was
+  incoherent.
+- **Corpus: 8 findings → 9.** The single new hit is
+  `clawhub/cognitive-memory/scripts/upgrade_to_1.0.6.sh:133`, `cat > "$WORKSPACE/SOUL.md" << 'EOF'`
+  writing persona text ("You're not a chatbot. You're becoming someone."). **Judged a true positive
+  under this project's stated doctrine** — capability and pattern, not confirmed intent — and
+  consistent with the rule already flagging `>> SOUL.md` in `clawhub/prompt-guard`. It is genuinely
+  arguable: the write is guarded by `if [ ! -f "$WORKSPACE/SOUL.md" ]`, i.e. first-run scaffolding
+  rather than replacement of an existing file.
+- **A guard-aware carve-out was tried and deliberately not shipped.** `suppress` is matched against
+  the single line a hit starts on; in that bundle the guard is on line 128 and the write on line 133,
+  so an `\[ ! -f` pattern could never fire. Shipping a carve-out that cannot match the case it names
+  is worse than not having one — see the engine-backlog row on span-scoped `suppress`.
+- **Fixture:** `wget -qO- "$RAW_BASE/CLAUDE.md" > "$HOME/.claude/CLAUDE.md"` in
+  `testdata/malicious/setup.sh`, asserted by `TestMaliciousFixtureTriggersAgentConfigOverwrite`;
+  table test `TestAgentConfigOverwriteCoversShellRedirect` (7 TP + 5 benign).
+
 ### SG-INJ-005 — Description↔behavior mismatch  (AST04, medium) — **T2/T3 by nature**
 - **Signals (T2):** derive a capability set from the *manifest* (`name`, `description`, `allowed-tools`) and a second from the *code/body* (which sinks/tools actually appear: network, fs-write, exec, credential read). Flag when observed capabilities exceed declared purpose — e.g. description says "formats markdown" but code opens sockets and reads `~/.aws`.
 - **FP carve-outs:** capability inference is fuzzy; require a **material** gap (a high-impact capability — network egress, credential read, exec — entirely unhinted by the description), not a minor one. Common-sense helpers (a formatter that writes temp files) must not trip it.
@@ -882,6 +913,19 @@ agent consuming tool output — receives different bytes.
   - **Deliberately NOT matched: the local `cat > "$SKILL_PATH/SKILL.md" << TEMPLATE` heredoc and bare `tee`/`>` forms.** Issue #105 guessed this was "probably medium"; measurement says otherwise — **3 of 3 corpus occurrences are `extract-skill.sh` generating a new skill**, so shipping it would trade one real detection for three false positives on legitimate skill-builder bundles. Revisit only with a signal that distinguishes the running bundle's own path from a constructed one.
 - **A leaf's gap must not cross a newline when the rule has a `suppress` list.** `rules.go` evaluates suppress against the single line the match *starts* on (`r.suppressed(lineText(text, m.start))`). Leaf (d) originally used `[^)]*`, which spans lines, so a pretty-printed `writeFileSync(\n  path.join(skillPath, 'SKILL.md'), …)` anchored on the bare `writeFileSync(` line and **every carve-out silently missed it** — that is exactly how `clawhub/feishu-evolver-wrapper/skills_monitor.js:122` survived the first cut. Now `[^)\n]*`. Three other shipped leaves still use a newline-crossing gap (`SG-INJ-004`, `SG-EXE-001`, `SG-EXE-002`); the general fix is an engine change and is filed in the engine backlog.
 - **Fixtures:** `TestSelfModificationCoversShellAndNodeForms` (11 TP + 11 benign, the benign rows verbatim corpus excerpts) and `TestSelfModificationSuppressSurvivesPrettyPrinting` in `pkg/rules/rules_test.go`; bundle fixture in `testdata/malicious/setup.sh` asserted by `TestMaliciousFixtureTriggersSelfModification`.
+
+**Reference-doc slot added 2026-08-01 (issue #105, final shape).** Leaf (a)'s filename slot now also
+accepts a bundled `references/*.md`. Those became scanned instruction surface in #99 and sit inside
+the Merkle root, so overwriting one after install swaps instructions past both review and signing —
+the same escape as the `SKILL.md` case. Pre-implementation prevalence of the shape was **0/777**, yet
+it immediately found **3 more real hits in the bundle that was already this rule's one true positive**:
+`security-sentinel-skill/install.sh:109/112/115` fetch `references/blacklist-patterns.md`,
+`semantic-scoring.md` and `multilingual-evasion.md` from the same mutable remote and redirect each
+over the installed copy. The install script replaces its *entire* reviewed instruction set, not just
+`SKILL.md` — a good argument for covering a threat's whole surface rather than its headline file.
+Backtick and `*` are excluded from the redirect-target character class for the reason recorded under
+`SG-INJ-004` (Markdown code spans inside blockquotes). Test:
+`TestSelfModificationCoversReferenceDocOverwrite`.
 
 ### SG-EXE-005 — Anti-analysis / evasion  (AST01/AST08, high)
 - **Signals:** sandbox/VM/debugger detection then branch (`if os.environ.get('CI')`, checks for `SKILLGUARD`/scanner env, `ptrace`, timing checks), scanner-name string checks, behavior that differs when observed, deliberate obfuscation *combined* with the above.
