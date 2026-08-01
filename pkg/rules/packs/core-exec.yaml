@@ -244,7 +244,12 @@ rules:
         #     ordinary prose and comments. Requiring the path to follow the `>`
         #     with no intervening space likewise keeps Markdown blockquotes
         #     ("> ... the SKILL.md file ...") out.
-        - regex: '(?i)(https?://|\bcurl\b|\bwget\b|\bfetch\b|\$\{?DOWNLOAD)[^\n]{0,120}\s>\s*[''"]?[^''"\s|<>]*SKILL\.md'
+        #     The filename slot also accepts a bundled `references/*.md`. Those
+        #     became scanned instruction surface in #99 and are inside the Merkle
+        #     root, so overwriting one after install swaps instructions past both
+        #     review and signing — the same escape as the SKILL.md case, and the
+        #     last shape issue #105 listed. Corpus prevalence: 0/777.
+        - regex: '(?i)(https?://|\bcurl\b|\bwget\b|\bfetch\b|\$\{?DOWNLOAD)[^\n]{0,120}\s>\s*[''"]?[^''"`\s|<>*]*(SKILL\.md|references?/[^''"`\s|<>*]*\.md)'
           confidence: 0.85
         # (b) Python open-for-write of the *running bundle's own* SKILL.md. The
         #     path prefix is restricted to self-referential forms (bare, `./`,
