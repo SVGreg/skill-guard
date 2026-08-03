@@ -1338,6 +1338,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 |---|---|---|
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
+| `SG-EVA-002` | Encrypted / password-protected payload container — the payload ships (or is fetched) inside a password-protected zip/7z, a GPG blob, or an `openssl enc` blob, with the passphrase supplied in the bundle's own prose or script | the sibling of `SG-EVA-001`: 001 hides the payload by **location** (a path the walker skips), 002 hides it in plain sight by **encoding** (a container no reader can open). Pure pattern rule — unlike 001 it needs no engine change |
 | `SG-INJ-007` | ~~Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write)~~ — **shipped**, spec now at §2 above | the `escape_sequence` leaf primitive it needed now exists in `pkg/rules` alongside `bidi_control`/`tag_block` |
 | `SG-INJ-008` | ~~Conditional / time-bomb instruction (behaves differently under a hidden trigger)~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |
