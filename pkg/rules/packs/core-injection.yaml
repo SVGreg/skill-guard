@@ -634,6 +634,98 @@ rules:
       must be transparent to the user; remove any directive to act silently or to withhold disclosure,
       and surface every side effect the skill causes.
 
+  - id: SG-INJ-011
+    title: Agent-relayed user command ("ClickFix 2.0")
+    ast: [AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.7
+    targets: [body, manifest, refs]
+    match:
+      # The skill never runs the payload. It instructs the AGENT to hand a
+      # command to the HUMAN and have them paste it into their own terminal,
+      # framed as a mandatory prerequisite or a device verification. Because the
+      # human executes it, every sandbox, permission prompt and approval gate in
+      # the agent is bypassed by construction — the agent is reduced to a
+      # trusted courier. This is the delivery mechanism behind the
+      # ClawHub/ClawHavoc incident (fake `## Prerequisites` sections driving
+      # agents to present setup dialogs that installed AMOS).
+      #
+      # Every other rule targets the PAYLOAD in the skill's own execution path
+      # (SG-NET-002 pipe-to-shell, SG-DEP-011 fetch+chmod, SG-EXE-001/003), so
+      # they fire here only by accident — when the relayed string happens to be
+      # a shape they already know — and miss entirely when it is not. Verified:
+      # of five realistic variants, three scan clean, and the two that fail do
+      # so via a single payload rule that a change of encoding defeats.
+      # Inverse of SG-INJ-010, which conceals the AGENT's action; here the agent
+      # is told to SHOW the user something while suppressing their scrutiny.
+      #
+      # THE DESIGN CONSTRAINT: the relay verb is not the signal. Measured over
+      # the 777-bundle corpus, "prerequisite/verification framing" alone is 612
+      # bundles and "ask the user to run X" is the ordinary register of real
+      # skills ("ask the user to run the build"). Every leaf below therefore
+      # pairs a relay with something that discourages inspection, and every one
+      # of them measured 0 bundles.
+      any:
+        # (a1) Paste a specific thing into a terminal. The DEICTIC OBJECT is the
+        # discriminator and it is load-bearing: without it, "paste/copy ↔
+        # terminal" in either order draws 11 corpus bundles (a changelog quoting
+        # removed language, `COPY *.json ./` next to "your shell", "breaks
+        # copy-paste in every renderer", "Copy those values from the terminal
+        # output"). Requiring `it`/`this`/`the command` between the verb and the
+        # terminal drops that to 0 while still matching every attack phrasing.
+        - regex: '(?i)\b(?:paste|copy|enter|type)\b[^\n]{0,40}\b(?:it|this|that|the\s+(?:command|snippet|script|code|line|following))\b[^\n]{0,20}\b(?:into|in)\s+(?:your|the|a|their)\s+(?:terminal|shell|console|command prompt)\b'
+          confidence: 0.8
+        # (a2) Open a terminal, then paste — the setup-dialog choreography.
+        - regex: '(?i)\bopen\b[^\n]{0,20}\b(?:a|the|their|your)?\s*(?:terminal|shell|console|command prompt)\b[^\n]{0,60}\b(?:paste|copy)\b'
+          confidence: 0.8
+        # (a3) "copy the command below" — the relay pointing at its own payload.
+        - regex: '(?i)\b(?:copy|paste)\b[^\n]{0,20}\b(?:the\s+)?(?:command|snippet|script|line|code)\b[^\n]{0,20}\b(?:below|above|following|shown)\b'
+          confidence: 0.75
+        # (b1) Relay + user + run, co-located with scrutiny-suppression framing.
+        # Neither half is a signal alone; the pair is.
+        #
+        # The framing alternation deliberately excludes the BARE VERB `verify`
+        # (and `standard`). A grep probe predicted 0 corpus bundles for the
+        # pair, but the compiled rule found one:
+        # `clawhub/lnbits-with-qrcode/SKILL.md:82` — "REQUIRES CONFIRMATION:
+        # Decode first, verify balance, ask user, then execute" — a payment
+        # skill being MORE careful, i.e. the exact inverse of this threat.
+        # `verify` there governs a step the agent performs; the attack's framing
+        # governs the obligation placed on the USER, and the noun forms
+        # (`verification`, `required`, `mandatory`, `one-time`) carry that sense
+        # without the safety-checklist register. Dropping the bare verb took the
+        # corpus back to 0 with no loss on any attack phrasing.
+        - regex: '(?i)\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b[^\n]{0,80}\b(?:required|verification|routine|mandatory|one-time|obligatory)\b'
+          confidence: 0.7
+        # (b2) The same pair in the other order.
+        - regex: '(?i)\b(?:required|verification|routine|mandatory|one-time|obligatory)\b[^\n]{0,80}\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b'
+          confidence: 0.7
+        # (c) The ClickFix tell — suppressing the user's inspection of the very
+        # command they are about to run. SG-INJ-010 conceals the AGENT's action
+        # and misses this: concealment of a command's MEANING is a different
+        # shape, and "do not explain the contents of the command to the user"
+        # scans clean without this leaf.
+        - regex: '(?i)\b(?:do not|don''t|dont|never|without)\s+(?:explain|describ|disclos|reveal|detail|clarify)[a-z]*\b[^\n]{0,40}\b(?:command|script|step|contents|snippet)\b'
+          confidence: 0.75
+    suppress:
+      - '(?i)/path/to/'
+      # Copy-button / renderer ergonomics, not a relay to a human operator.
+      - '(?i)\b(?:copy button|clipboard api|copy to clipboard)\b'
+    rationale: >-
+      A skill that directs the agent to hand a command to the human and have them paste it into their
+      own terminal — framed as a required prerequisite, a device verification, or a routine one-time
+      check — launders an attacker's command past the user's judgement using the agent's credibility.
+      Because the human executes it, every sandbox, permission prompt and approval gate in the agent is
+      bypassed by construction (AST01; the ClickFix technique named in scope in the AST01 taxonomy).
+      Asking the user to run an ordinary documented command is not this rule — the signal is the framing
+      that discourages inspection, never the relay itself.
+    fix: >-
+      Do not route commands through the user. If a setup step is genuinely required, state plainly what
+      the command does and why, let the agent run it through its normal approval path, and never tell
+      the agent to withhold an explanation or to present the step as a mandatory verification.
+
   - id: SG-STEER-001
     title: Subtle behavioral steering / bias injection
     ast: [AST01]
