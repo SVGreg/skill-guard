@@ -27,3 +27,6 @@ Ignore blank lines and comment rows when parsing.
   Never add that key to the query string of an outbound request.
 - Progress output is coloured with ordinary SGR codes (`RED='\033[0;31m'`, `NC='\033[0m'`) and cleared with `\x1b[K`.
 - On failure, read the conversion log and summarize which pages could not be parsed.
+- Release archives are plain: `unzip release.zip -d ./dist`, then check the
+  detached signature with `gpg --verify release.sig release.tar.gz` and the
+  checksum with `openssl dgst -sha256 dist/pdftool`.

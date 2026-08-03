@@ -244,3 +244,93 @@ rules:
       - '(?i)/path/to/'
     rationale: A package.json that binds an install-lifecycle key (preinstall/install/postinstall/…/uninstall) to a command makes `npm install` execute that command automatically, with the user's privileges and before any review — installing code execution by shipping a manifest (AST02 supply chain / AST01 execution). Same shape as a bundled agent-hook config (SG-CFG-001).
     fix: Do not ship install-lifecycle scripts in a skill bundle. If a build step is genuinely required, document it and let the user run it deliberately after review — never on `npm install`.
+
+  - id: SG-EVA-002
+    title: Encrypted / password-protected payload container
+    ast: [AST08, AST02]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.8
+    targets: [body, scripts, configs]
+    match:
+      # The payload ships (or is fetched) inside a container nothing in the
+      # review path can open — a password-protected zip/7z, a symmetric GPG
+      # blob, an `openssl enc` blob — and the skill hands the passphrase to the
+      # agent in its own prose or setup script. Only the agent, at run time,
+      # ever materialises the plaintext, and it then runs it.
+      #
+      # Sibling of SG-EVA-001: 001 hides the payload by *location* (a directory
+      # the walker skips), 002 hides it in plain sight by *encoding*. Unlike
+      # 001 this needs no engine change.
+      #
+      # SG-DEP-011 is the near miss and structurally cannot cover this: every
+      # one of its leaves joins the fetch AND the `chmod +x` on one command
+      # line, while the archive shape splits them across lines with a
+      # decryption step in between (verified: the full chain scanned clean).
+      #
+      # Precision note: an inline archive passphrase is essentially never
+      # legitimate in a skill bundle. Each command leaf below measured **0 hits
+      # across the 777-bundle evaluation corpus**, so — unlike SG-DEP-011,
+      # whose precision had to come from a join — the flag can be the signal by
+      # itself. The corpus also shows why the openssl leaf is scoped to `enc`:
+      # bare `openssl` would inherit 14 `openssl dgst` hits (hashing, not
+      # decryption).
+      any:
+        # (a) Password-protected zip extraction, inline literal password.
+        # `-P` is unzip's password flag (`-p` is pipe-to-stdout), so only the
+        # command name is case-folded. The trailing class rejects another flag
+        # and rejects `$VAR`, which leaf (b) takes at a lower confidence.
+        - regex: '(?i:\bunzip\b)[^\n]{0,60}\s-P\s*["'']?[^-\s"''$]'
+          confidence: 0.85
+        # (b) Same flag, passphrase supplied by a variable — still an encrypted
+        # container, but the secret may be prompted rather than shipped.
+        - regex: '(?i:\bunzip\b)[^\n]{0,60}\s-P\s*["'']?\$'
+          confidence: 0.7
+        # (c) 7-Zip with an inline password: `7z x -p"openclaw" payload.7z`.
+        - regex: '(?i:\b7z[ar]?\b)[^\n]{0,60}\s-p\s*["'']?[^-\s"''$]'
+          confidence: 0.85
+        # (d) Creating an encrypted archive — the exfil-packing direction of the
+        # same primitive (`zip -P pw out.zip ~/.ssh`). `\bzip\b` does not match
+        # inside `unzip`/`gzip`/`bzip2`, so this does not double-fire on (a).
+        - regex: '(?i:\bzip\b)[^\n]{0,60}\s-(?:P\s*["'']?[^-\s"''$]|e\s)'
+          confidence: 0.75
+        # (e) Symmetric GPG decryption with the passphrase supplied inline.
+        - regex: '(?i)\bgpg\b[^\n]{0,80}--(?:batch-)?passphrase(?:-file|-fd)?[\s=]'
+          confidence: 0.85
+        # (f) GPG decryption without an inline secret — weaker, the passphrase
+        # may be prompted, but a skill bundle opening a GPG blob at all is the
+        # same opaque-container shape.
+        - regex: '(?i)\bgpg\b[^\n]{0,60}(?:--decrypt\b|\s-d\b)'
+          confidence: 0.7
+        # (g) `openssl enc` with a decrypt or key flag. Scoped to `enc` on
+        # purpose — see the corpus note above.
+        - regex: '(?i)\bopenssl\s+enc\b[^\n]{0,100}(?:\s-d\b|\s-pass\b|\s-k\b|\s-K\b|\s-kfile\b)'
+          confidence: 0.85
+        # (h) The documentation giveaway: the skill hands the extraction
+        # passphrase to the agent in prose ("extract using pass: `openclaw`").
+        # Measured 0/777, where the looser `extract … password` shape without
+        # the using/with hinge measured 5 — all benign ("0% pass rate",
+        # "pass flags after `--`", `reader.decrypt("password")`).
+        - regex: '(?i)\b(?:extract|unzip|unpack|decompress)[a-z]*\b[^\n]{0,30}\b(?:us(?:e|ing)|with)\b[^\n]{0,20}\b(?:pass|password|passphrase)\b'
+          confidence: 0.7
+        # (i) Same idea, reversed: the passphrase named first, then what it opens.
+        - regex: '(?i)\b(?:password|passphrase|pass)\b[^\n]{0,40}\b(?:to|for)\b[^\n]{0,20}\b(?:extract|unzip|unpack|decrypt)[a-z]*\b'
+          confidence: 0.7
+        # (j) An archive noun tied to a passphrase.
+        - regex: '(?i)\b(?:archive|zip file|zipfile|\.zip\b|\.7z\b|\.rar\b|tarball)\b[^\n]{0,40}\b(?:password|passphrase)\b'
+          confidence: 0.7
+    suppress:
+      # Signature checking is not decryption — the whole point of the carve-out.
+      - '(?i)\bgpg\b[^\n]{0,60}--verify'
+      - '(?i)\bopenssl\s+dgst\b'
+      # Placeholders in documentation, not a shipped secret.
+      - '(?i)<pass(word|phrase)?>|\byour[_-]?password\b|\bplaceholder\b'
+      - '(?i)/path/to/'
+    rationale: >-
+      Sealing the payload in a container no scanner and no reviewer can open — a password-protected zip/7z,
+      a symmetric GPG blob, an `openssl enc` blob — while handing the passphrase to the agent defeats the
+      review path by construction, because only the agent, at run time, ever sees the plaintext it then
+      runs (AST08 poor scanning, AST02 supply chain). The sibling of SG-EVA-001, which hides the payload by
+      location rather than by encoding.
+    fix: Ship the payload in the clear so it can be reviewed and hashed. If an artifact genuinely must be encrypted at rest, do not put the passphrase in the bundle, and record the plaintext artifact's checksum so a reviewer can verify what will actually run.

