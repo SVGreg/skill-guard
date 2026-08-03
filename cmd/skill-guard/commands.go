@@ -79,7 +79,7 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 			}
 			pol, err := policy.Load(policyPath)
 			if err != nil {
-				return fail(3, "cannot read policy %q: %v\n  expected a .skillguard.yaml file (see 'skill-guard scan --help').", policyPath, err)
+				return fail(3, "cannot use policy %q: %v\n  expected a valid .skillguard.yaml file (see 'skill-guard scan --help').", policyPath, err)
 			}
 			if failOn != "" {
 				pol.FailOn = failOn
@@ -247,7 +247,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 			}
 			pol, err := policy.Load(policyPath)
 			if err != nil {
-				return fail(3, "cannot read policy %q: %v\n  expected a .skillguard.yaml file with a trust roster.", policyPath, err)
+				return fail(3, "cannot use policy %q: %v\n  expected a valid .skillguard.yaml file with a trust roster.", policyPath, err)
 			}
 			sigPath := attest.SigPath(args[0])
 			env, err := attest.ReadEnvelope(sigPath)
