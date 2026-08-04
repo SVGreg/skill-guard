@@ -446,7 +446,7 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   silently" comment in `testdata/malicious/setup.sh`, asserted by
   `TestMaliciousFixtureTriggersConcealment` in `pkg/scan/scan_test.go`.
 
-### SG-INJ-011 — Agent-relayed user command ("ClickFix 2.0")  (AST01, high) — **planned**
+### SG-INJ-011 — Agent-relayed user command ("ClickFix 2.0")  (AST01, high) — **implemented** (`core-injection`)
 - **Threat:** the skill does not run the payload itself — it instructs the **agent to hand a command to
   the human** and have them paste it into their own terminal, framed as a mandatory prerequisite or
   device verification. The agent becomes the trusted intermediary that launders an attacker's command
@@ -470,31 +470,68 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   | `python3 -c "import base64,os;os.system(base64.b64decode(…))"` | **`pass` / 0 findings** |
   Three of five clean; the two that fail do so for reasons that vanish if the attacker changes the
   payload encoding, which is the cheapest possible evasion.
-- **Signals (proposed).** The relay verb is *not* the signal — it must be paired:
-  (a) copy/paste + terminal/shell/console, in **either** order;
-  (b) relay verb (`tell|ask|instruct|prompt|direct|have`) + `user` + run/execute/paste, co-located with
-  **scrutiny-suppression framing** (`required|verification|verify|routine|standard|mandatory|one-time`);
-  (c) `do not (explain|describe|disclose) …(the )?(command|script|step|contents)` — the ClickFix tell,
-  and a shape `SG-INJ-010` currently misses (verified: "do not explain the contents of the command to
-  the user" scans `pass` / 0 findings).
+- **Signals (shipped) — six leaves, every one measured 0 bundles.** *Relay choreography:*
+  (a1) `paste|copy|enter|type` + a **deictic object** (`it`/`this`/`the command`/`the following`) +
+  `into|in your|the|their terminal|shell|console`; (a2) `open … terminal … paste|copy`;
+  (a3) `copy|paste … the command … below|above|following|shown`. *Framing pair:* (b1) relay verb
+  (`tell|ask|instruct|prompt|direct|have|get`) + `user` + `run|execute|paste|enter|type`, co-located
+  with scrutiny-suppression framing (`required|verification|verify|routine|standard|mandatory|one-time`);
+  (b2) the same pair in the other order. *The tell:* (c) `do not|never|without (explain|describe|
+  disclose|reveal|detail|clarify) … (command|script|step|contents|snippet)`.
+- **Correction to this section's own FP table, made at implementation time.** The `planned` spec above
+  recorded leaf (a) — "paste/copy ↔ terminal/shell/console, in **either** order" — as **0/777, free**.
+  Re-measured before shipping, that shape draws **11 corpus bundles**: a changelog quoting the removed
+  phrase "copy and paste into your terminal", `COPY *.json ./` sitting near "your shell", "breaks
+  copy-paste in every renderer without a copy button", "Copy those values from the terminal output",
+  a React component named `Terminal.tsx` being copied, and "Selection copy places terminal text on the
+  clipboard". The fix is the **deictic object** in leaf (a1): requiring `it`/`this`/`the command`
+  between the verb and the terminal drops the shape to **0** while still matching every attack
+  phrasing. Recorded rather than quietly patched, because the lesson generalises — a co-occurrence
+  gate measured as "free" in prose can be an artifact of how the probe was written, so re-measure the
+  leaf you are actually going to ship.
 - **FP line, measured over the 777-bundle corpus** — this is the whole design constraint:
   | Candidate gate | Bundles | Verdict |
   |---|---:|---|
+  | "prerequisite / verification / required setup" framing alone | **612** | ❌ the single most common register in the corpus |
   | relay verb + user + run/execute (bare) | **12** | ❌ never gate on this alone — real skills say "ask the user to run the build" |
-  | "prerequisite / verification / required setup" framing alone | **111** | ❌ far too common |
   | "wait until the user confirms they ran it" alone | **10** | ❌ benign interactive-setup idiom |
-  | **(a)** paste/copy ↔ terminal/shell/console | **0** | ✅ free |
-  | **(b)** relay + user + run **+** suppression framing (either order) | **0** | ✅ free |
-  | **(c)** "do not explain/describe the command" | **~1** | ✅ near-free |
+  | paste/copy ↔ terminal, **either order, no object** | **11** | ❌ — the corrected measurement above |
+  | **(a1)** paste/copy + deictic object → terminal | **0** | ✅ shipped |
+  | **(a2)** open terminal → paste · **(a3)** copy the command below | **0** | ✅ shipped |
+  | **(b1)/(b2)** relay + user + run **+** suppression framing, incl. bare `verify` | **1** | ❌ the compiled-rule measurement — see below |
+  | **(b1)/(b2)** the same, with the bare verb dropped | **0** | ✅ shipped |
+  | **(c)** "do not explain/describe the command" | **0** | ✅ shipped |
   The benign register is "ask the user to run `make build`" — a relay with **no** framing that
   discourages inspection. Gate on the framing, never on the relay.
+- **A second correction, this one from the compiled rule rather than a probe.** The grep probe for
+  the (b1)/(b2) pair predicted **0** bundles; the compiled rule found **1** —
+  `clawhub/lnbits-with-qrcode/SKILL.md:82`, *"⚠️ REQUIRES CONFIRMATION: Decode first, verify balance,
+  ask user, then execute"*. That is a payment skill being **more** careful: the exact inverse of this
+  threat. The bare verb `verify` there governs a step **the agent** performs, whereas the attack's
+  framing governs an obligation placed on **the user** — and the noun forms (`verification`,
+  `required`, `mandatory`, `one-time`) carry that sense without the safety-checklist register.
+  Dropping bare `verify` and `standard` from the alternation returned the corpus to 0 with no loss on
+  any attack phrasing, and the line is now a benign row in the rule test. **Grep prevalence and
+  compiled-rule prevalence are different measurements; only the second one counts.**
 - **Layer/target/severity:** `content`, `[body, manifest, refs]` (this attack lives in prose, not
-  scripts), **high**. Base confidence ~0.7; leaf (a) ~0.8.
+  scripts), **high**. Base confidence 0.7; relay-choreography leaves 0.8/0.75, framing pairs 0.7,
+  the tell 0.75.
+- **FP carve-outs:** `/path/to/` placeholders, and copy-button / clipboard-API renderer ergonomics
+  (`copy button`, `copy to clipboard`) — UI plumbing, not a relay to a human operator.
+- **Corpus:** **0 findings / 777.**
+- **Fixtures:** `TestAgentRelayedCommandCovered` in `pkg/rules/rules_test.go` — 9 TP forms across all
+  three registers + 13 benign rows, including the ordinary relay ("ask the user to run the build"),
+  bare prerequisite framing, all six shapes behind the corrected 11-bundle measurement, the inverse
+  of leaf (c) ("explain what the command does before the user runs it"), and the lnbits line that the
+  first cut of (b2) flagged. Bundle fixture: the
+  device-verification block in `testdata/malicious/SKILL.md`, asserted by
+  `TestMaliciousFixtureTriggersAgentRelayedCommand` in `pkg/scan/scan_test.go`, which also pins the
+  reported line to the true file line (the body's line-offset invariant).
 - **Source:** ClawHub malicious-skills incident postmortem (termdock.com, "ClickFix 2.0 technique",
   341 → 1,184 catalogued malicious skills, attacker account `hightower6eu` with 677 publications,
   AMOS payload). ClickFix is already named in-scope in `docs/owasp-ast-taxonomy.md` §AST01 but had no
   `SG-` id until now.
-- **Status:** backlog `SG-INJ-011` (P0). Next free id in the INJ family.
+- **Status:** shipped in PR #123; tracking issue #119.
 
 ### SG-MEM-001 — Persistent context / memory poisoning  (AST01/AST03, high) — **implemented** (`core-injection`)
 - **Signals (shipped):** the **instruction-only** form — SG-INJ-004 already owns the *write* form (a

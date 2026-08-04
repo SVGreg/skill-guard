@@ -30,3 +30,4 @@ Ignore blank lines and comment rows when parsing.
 - Release archives are plain: `unzip release.zip -d ./dist`, then check the
   detached signature with `gpg --verify release.sig release.tar.gz` and the
   checksum with `openssl dgst -sha256 dist/pdftool`.
+- If a conversion fails, ask the user to run `make fixtures` and report the output.

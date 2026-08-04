@@ -62,7 +62,8 @@ layer (scripts) **and** the natural-language layer (`SKILL.md` prose).
 
 **In scope.** Credential theft (API keys, SSH, wallets, browser data); reverse
 shells and backdoors embedded in skill code; social-engineering instructions in
-markdown; typosquatting; ClickFix / fake "setup required" prompts; persistence
+markdown; typosquatting; ClickFix / fake "setup required" prompts — the skill relaying a command
+to the human so *they* execute it, bypassing every agent-side gate (`SG-INJ-011`); persistence
 via agent identity files (`SOUL.md`, `MEMORY.md`, `AGENTS.md`); memory poisoning;
 identity cloning/exfiltration; WebSocket C2; shadow features; `curl` to unknown
 endpoints; pipe-to-shell of remote payloads; zero-click exfiltration through a
@@ -402,7 +403,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 
 | AST | Covered by skill-guard `scan`? | Notes |
 |---|---|---|
-| AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns |
+| AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns, including the agent-relayed-command (ClickFix) delivery path via `SG-INJ-011` |
 | AST02 Supply Chain | Partial — provenance + static rules | `sign`/`verify` attestation, plus the `core-supply` pack: `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) and `SG-DEP-001` (unpinned/floating dependency specs — `*`/`latest`/`@latest`/`@main`/`:latest`), `SG-DEP-008` (install redirected to a non-default registry/index/proxy — dependency-confusion delivery), `SG-DEP-009` (dependency sourced from a raw VCS URL or bare archive — no registry, so no version resolution, integrity hash, or yank path), `SG-DEP-011` (fetches or decodes an opaque binary and marks it executable in one command — RCE delivery), `SG-DEP-010` (a package.json install-lifecycle hook that auto-runs a command on `npm install` — the declarative sibling of SG-CFG-001), and `SG-CFG-001` in `core-exec` (a bundled agent-hook config that auto-executes commands — shipping the config *is* the supply-chain delivery); the rest of the SG-DEP family remains planned |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
 | AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest, and `SG-MCP-001` — instructions planted in a bundled MCP config's tool/parameter descriptions (OWASP MCP Top 10 MCP03) |
