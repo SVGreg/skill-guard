@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.16](https://github.com/SVGreg/skill-guard/compare/v0.1.15...v0.1.16) (2026-08-04)
+
+
+### Features
+
+* **rules:** add SG-EVA-002 — encrypted / password-protected payload container (AST08/AST02) ([#122](https://github.com/SVGreg/skill-guard/issues/122)) ([b2d396c](https://github.com/SVGreg/skill-guard/commit/b2d396c7b1696e234753540a9ec1812763770352)), closes [#117](https://github.com/SVGreg/skill-guard/issues/117)
+* **rules:** add SG-INJ-011 — agent-relayed user command, "ClickFix 2.0" (AST01) ([#123](https://github.com/SVGreg/skill-guard/issues/123)) ([40ebfab](https://github.com/SVGreg/skill-guard/commit/40ebfab6a66943c816f5a2f2f3206f0c9c8f5649)), closes [#119](https://github.com/SVGreg/skill-guard/issues/119)
+
+
+### Bug Fixes
+
+* **evaluation:** adjust parallelism handling in scripts and documentation ([3a44ce8](https://github.com/SVGreg/skill-guard/commit/3a44ce8f976aec65626335d7550c29519222c5ae))
+* **policy:** reject silent misconfiguration instead of loading it quietly ([#125](https://github.com/SVGreg/skill-guard/issues/125)) ([329397d](https://github.com/SVGreg/skill-guard/commit/329397d3534c9e5f29754b70d801068e0258690f)), closes [#124](https://github.com/SVGreg/skill-guard/issues/124)
+
 ## [0.1.15](https://github.com/SVGreg/skill-guard/compare/v0.1.14...v0.1.15) (2026-08-01)
 
 
