@@ -74,11 +74,13 @@ git clone --depth 1 https://github.com/anthropics/skills /tmp/anthropic-skills
 #   then copy /tmp/anthropic-skills/skills/*/  into evaluation/anthropic/
 
 # 3a. combined report (all four sources) -> reports/REPORT.md + stats.json
-CORPUS_DIRS="clawhub skillsmp orgs anthropic" evaluation/scripts/run_scans.sh 8
+# (parallelism defaults to nproc; pass a number to override, but keep it at or
+# below your core count — oversubscribing has hung the workstation before)
+CORPUS_DIRS="clawhub skillsmp orgs anthropic" evaluation/scripts/run_scans.sh
 python3 evaluation/scripts/aggregate.py
 
 # 3b. standalone report over just one source (e.g. ClawHub)
-CORPUS_DIRS="clawhub" RAW_DIR="raw_clawhub" evaluation/scripts/run_scans.sh 8
+CORPUS_DIRS="clawhub" RAW_DIR="raw_clawhub" evaluation/scripts/run_scans.sh
 RAW_DIR="raw_clawhub" REPORT_NAME="REPORT_clawhub.md" \
   STATS_NAME="stats_clawhub.json" \
   REPORT_TITLE="skill-guard — ClawHub Security Evaluation" \

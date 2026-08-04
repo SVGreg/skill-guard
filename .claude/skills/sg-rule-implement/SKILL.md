@@ -55,7 +55,9 @@ go test ./pkg/rules/ ./pkg/scan/ -v
 - `gofmt -l .` empty · `go vet ./...` · `go test ./...` all green.
 - Exit-code smoke: `scan testdata/malicious`→1, `scan testdata/benign`→0.
 - Regenerate evaluation and cross-check no regressions (git-ignored, local sanity check):
-  `go build -o skill-guard ./cmd/skill-guard && evaluation/scripts/run_scans.sh 8 && python3 evaluation/scripts/aggregate.py`,
+  `go build -o skill-guard ./cmd/skill-guard && evaluation/scripts/run_scans.sh && python3 evaluation/scripts/aggregate.py`
+  (parallelism defaults to nproc — pass an explicit number only to override, and keep it at or below your core
+  count; oversubscribing has hung the workstation before),
   then compare with `evaluation/reports/CROSS_VERIFICATION.md`.
 - Dogfood: `go run ./cmd/skill-guard scan .claude/skills/sg-rule-implement` passes.
 

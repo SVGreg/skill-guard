@@ -54,7 +54,7 @@ absent). Regenerate only if needed — a full run is ~9 minutes:
 
 ```sh
 go build -o skill-guard ./cmd/skill-guard
-CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh 12
+CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh
 python3 evaluation/scripts/aggregate.py
 ```
 
@@ -176,7 +176,7 @@ Re-run the tests until every `want:true` matches and every `want:false` doesn't.
   ```sh
   cp evaluation/reports/stats.json /tmp/stats_before.json
   go build -o skill-guard ./cmd/skill-guard
-  CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh 12
+  CORPUS_DIRS="clawhub anthropic orgs skillsmp" evaluation/scripts/run_scans.sh
   python3 evaluation/scripts/aggregate.py
   evaluation/scripts/rule_findings.py <RULE-ID> --all      # what survives
   ```

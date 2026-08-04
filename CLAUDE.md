@@ -143,7 +143,12 @@ rulepacks with **no policy/waivers**, so results reflect out-of-the-box behavior
    `OUTDIR`, `SKIP_DIRS`); only bundles containing a `SKILL.md` are kept.
 2. `run_scans.sh [PARALLELISM]` — discover every dir containing a `SKILL.md` and scan it in
    parallel to `reports/<RAW_DIR>/<source>__<slug>.json`, each annotated with `_source`,
-   `_slug`, `_exit`, `_path` (env: `CORPUS_DIRS`, `RAW_DIR`).
+   `_slug`, `_exit`, `_path` (env: `CORPUS_DIRS`, `RAW_DIR`). Defaults to `nproc` when
+   `PARALLELISM` is omitted — **do not pass a number above the machine's core count.**
+   When host has low number of cores; an oversubscribed `-P 12`/`-P 16` (including ad-hoc `xargs -P`
+   probes written for a single rule's FP measurement) may hung the workstation before.
+   The same cap applies to any one-off parallel scan script written in-session, not just
+   this file.
 3. `aggregate.py` — roll raw JSON into `stats.json` + `REPORT.md` (env: `RAW_DIR`,
    `REPORT_NAME`, `STATS_NAME`, `REPORT_TITLE`).
 

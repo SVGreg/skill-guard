@@ -10,7 +10,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN="$ROOT/skill-guard"
 RAW="$ROOT/evaluation/reports/${RAW_DIR:-raw}"
-JOBS="${1:-8}"
+JOBS="${1:-$(nproc 2>/dev/null || echo 4)}"
 CORPUS_DIRS="${CORPUS_DIRS:-clawhub anthropic}"
 
 [ -x "$BIN" ] || { echo "building skill-guard ..."; (cd "$ROOT" && go build -o skill-guard ./cmd/skill-guard) || exit 1; }
