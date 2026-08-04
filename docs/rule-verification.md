@@ -285,8 +285,20 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   conditional on a competing trusted tool existing). Base confidence ~0.65.
 - **Source:** MPMA — academic "MCP Preference Manipulation Attack" write-ups; Adversa AI MCP security
   resources (2026-07); the MCP-routing-abuse family alongside OWASP MCP Top 10.
-- **Status:** backlog `SG-MCP-002` (P2), ready for `sg-rule-implement` once a corpus with MCP-shipping
-  skills exists to calibrate the FP line (same caveat as SG-MCP-001).
+- **Status:** backlog `SG-MCP-002` (P2), **blocked on a classifier gap, measured 2026-08-05.** The corpus
+  prerequisite is now met — 105 corpus files carry an MCP manifest — but measuring it surfaced a prior
+  problem. This rule targets `[configs]`, and `pkg/skill.classify` assigns the `config` role by exact
+  basename (`requirements.txt`, `package.json`, `pyproject.toml`, `settings.json`, `mcp.json`,
+  `Makefile`) or a `.claude/` / `.git/hooks/` path prefix. **0 of the 76 JSON MCP manifests in the corpus
+  reach that role** — they are named `.mcp.json`, `cursor-mcp.json`, `windsurf-mcp.json`,
+  `claude-desktop-mcp.json`, `gemini-cli-mcp.json`, `jetbrains-mcp.json`, `antigravity-mcp.json`, or
+  one-file-per-tool (`search_tasks.json`, `create_task.json`), and none sit under `.claude/`. Note that
+  `configNames` contains `mcp.json` but **not `.mcp.json`**, the documented project-scope filename.
+  Verified directly by placing a payload in each candidate name: found in `mcp.json`, `settings.json` and
+  `.claude/server.json`; not found in `.mcp.json`, `windsurf-mcp.json`, `tools.json` or
+  `search_tasks.json`. Shipping this rule before the classifier is widened would produce a detection that
+  fires on nothing real — the same failure shape as SG-EVA-001, where a rule cannot see what the walk
+  never opens. Tracked as an Engine & hardening row in `planned-rules.md`.
 
 ### SG-INJ-006 — System-prompt / tool-schema exfiltration  (AST01, high) — **implemented** (`core-injection`)  [SkillSpector P6–P8]
 - **Signals:** instruction families for **direct** leak (`print|reveal|show|repeat|output|display` + `your (system )?(prompt|instructions|rules|guidelines)`), **indirect** extraction (`summarize|translate|rephrase|encode|spell out` + `your instructions`), and **exfil-via-tool** (leak text then `write to file`/`POST`/`log`). Cover `initial prompt`, `the text above this conversation`, `everything in your context`.
