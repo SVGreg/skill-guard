@@ -245,6 +245,84 @@ rules:
     rationale: A package.json that binds an install-lifecycle key (preinstall/install/postinstall/…/uninstall) to a command makes `npm install` execute that command automatically, with the user's privileges and before any review — installing code execution by shipping a manifest (AST02 supply chain / AST01 execution). Same shape as a bundled agent-hook config (SG-CFG-001).
     fix: Do not ship install-lifecycle scripts in a skill bundle. If a build step is genuinely required, document it and let the user run it deliberately after review — never on `npm install`.
 
+  - id: SG-EVA-001
+    title: Self-extracting payload staged in a scanner-skipped location
+    ast: [AST08, AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.8
+    targets: [body, scripts, configs]
+    match:
+      # "Self-Extracting Skill (SFS) packing" (Cloak and Detonate, arXiv
+      # 2607.02357): the real payload is sealed as an opaque blob inside a
+      # directory scanners skip by convention — `.git/` — and shipped with a
+      # benign cover SKILL.md plus a small decoder. At install time a scanner
+      # sees a harmless tree; at first execution the decoder rematerializes the
+      # payload (typically as WORKFLOW.md) and the agent follows it. Measured
+      # to bypass >=90% of every static scanner tested.
+      #
+      # skill-guard has exactly this blind spot, verified on main before this
+      # rule: `skipNames` in pkg/skill/skill.go drops `.git`, and the walk also
+      # drops every `*.skillsig`, so BOTH a `.git/skillpack.dat` bundle and a
+      # `payload.skillsig` bundle scan `pass / 0 findings`.
+      #
+      # A rule cannot read a file the walk never opens — but it does not need
+      # to. **The decoder is always visible**: it lives in a scanned script or
+      # in the body prose, and the blob is inert without it. So this rule
+      # matches the decoder's reach into the skipped location rather than the
+      # blob itself. (The provenance half of issue #17 — those files are also
+      # outside the Merkle root, so the blob can be rewritten after signing and
+      # `verify` still passes — is a signing-semantics decision left to the
+      # owner and deliberately not changed here.)
+      #
+      # Precision: the paired shape measured **0 hits across the 777-bundle
+      # evaluation corpus**, with the broadest verb set tried (including
+      # `python -c`/`node -e`). A *bare* `.git/<path>` leaf would have taken 45
+      # occurrences across 27 files — all genuine git internals (`.git/hooks`,
+      # `.git/config`, `.git/index.lock`, `.git/logs/HEAD`) — which is why the
+      # decoder verb is required and why those paths are NOT suppressed: a path
+      # carve-out would document its own bypass (`base64 -d .git/objects/x`).
+      any:
+        # (a) A decode/extract command reaching into a VCS metadata directory.
+        - regex: '(?i)(?:base64\s+(?:-d|-D|--decode)|xxd\s+-r|uudecode|openssl\s+enc[^\n]{0,40}-d\b|gunzip|zcat|gzip\s+-d|tar\s+-?[xz]|unzip|7z[ar]?\s+[xe]|python3?\s+-c|node\s+-e|perl\s+-[pe]|base64\.b64decode|\batob\s*\(|Buffer\.from\s*\()[^\n]{0,80}\.(?:git|hg|svn)/[^\s"''|;)]+'
+          confidence: 0.85
+        # (b) Same pair, path first — `cat .git/skillpack.dat | base64 -d`.
+        - regex: '(?i)\.(?:git|hg|svn)/[^\s"''|;)]+[^\n]{0,80}(?:base64\s+(?:-d|-D|--decode)|xxd\s+-r|uudecode|openssl\s+enc[^\n]{0,40}-d\b|gunzip|zcat|gzip\s+-d|tar\s+-?[xz]|unzip|7z[ar]?\s+[xe]|base64\.b64decode|\batob\s*\(|Buffer\.from\s*\()'
+          confidence: 0.85
+        # (c) Anything out of a skipped directory redirected over an agent
+        # instruction file — the rematerialization step itself, which needs no
+        # decoder verb (`cat .git/blob > WORKFLOW.md`).
+        - regex: '(?i)\.(?:git|hg|svn)/[^\n]{0,60}>\s*[^\s;|]*(?:SKILL|WORKFLOW|AGENTS?|CLAUDE|GEMINI|INSTRUCTIONS|RULES)\.mdx?\b'
+          confidence: 0.85
+        # (d) The same staging trick against skill-guard's *own* skip rule: the
+        # walk drops every `*.skillsig` (the attestation sidecar), so a blob
+        # named `payload.skillsig` is equally invisible. Nothing legitimate
+        # decodes a `.skillsig` — `verify` reads it, scripts do not.
+        - regex: '(?i)(?:base64\s+(?:-d|-D|--decode)|xxd\s+-r|uudecode|openssl\s+enc[^\n]{0,40}-d\b|gunzip|zcat|tar\s+-?[xz]|unzip|7z[ar]?\s+[xe]|python3?\s+-c|node\s+-e|base64\.b64decode|\batob\s*\(|Buffer\.from\s*\()[^\n]{0,80}[^\s"''|;)]*\.skillsig\b'
+          confidence: 0.8
+        # (e) A `.skillsig` rematerialized over an instruction file.
+        - regex: '(?i)[^\s"''|;)]*\.skillsig\b[^\n]{0,60}>\s*[^\s;|]*(?:SKILL|WORKFLOW|AGENTS?|CLAUDE|GEMINI|INSTRUCTIONS|RULES)\.mdx?\b'
+          confidence: 0.85
+    suppress:
+      # Inspecting a DSSE attestation is not staging a payload: the envelope's
+      # `.payload` field is genuinely base64, so a documented "decode the
+      # attestation" example must stay clean. Hinged on an attestation noun so
+      # it cannot be used as a bypass — a decoder pointed at a blob has no
+      # reason to name DSSE or `skill-guard verify`.
+      - '(?i)\bdsse\b|\.payload\b|skill-guard\s+(?:verify|sign|attest)'
+      - '(?i)/path/to/'
+    rationale: >-
+      Sealing the real payload in a location the scanner never opens — a `.git/` blob, or a file named
+      `*.skillsig` — and shipping a small decoder that rematerializes it at first run defeats static review
+      by construction: the reviewed tree and the executed skill are different artifacts (AST08 poor
+      scanning, AST01 injection). The blob is inert without the decoder, so the decoder is the durable
+      signal. Sibling of SG-EVA-002, which hides the payload by encoding rather than by location.
+    fix: >-
+      Ship every file the skill actually uses in the bundle proper, where it can be reviewed, scanned and
+      hashed. Never stage content in `.git/` or under a `*.skillsig` name, and never have a setup step
+      write an agent instruction file (`SKILL.md`, `WORKFLOW.md`, `CLAUDE.md`) from an unreviewed blob.
+
   - id: SG-EVA-002
     title: Encrypted / password-protected payload container
     ast: [AST08, AST02]
