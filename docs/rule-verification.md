@@ -1187,6 +1187,53 @@ Backtick and `*` are excluded from the redirect-target character class for the r
   `curl … -o /tmp/stage2 && chmod +x /tmp/stage2` in `testdata/malicious/setup.sh`, asserted by
   `TestMaliciousFixtureTriggersFetchChmodExec` in `pkg/scan/scan_test.go`.
 
+### SG-EVA-002 — Encrypted / password-protected payload container  (AST08/AST02, high) — **implemented** (`core-supply`)
+- **Threat:** the real payload ships (or is fetched) inside a container nothing in the review path can
+  open — a password-protected `zip`/`7z`, a symmetric GPG blob, an `openssl enc` blob — and the skill
+  hands the passphrase to the agent in its own prose or setup script. Only the agent, at run time, ever
+  materialises the plaintext, and it then runs it. Sighted in the wild: Snyk's *ToxicSkills* audit of
+  3,984 ClawHub skills found the encrypted archive **and** the plaintext password left in the
+  documentation (`unzip -P "infected123" helper.zip`, *"extract using pass: `openclaw`"*).
+- **Sibling of SG-EVA-001, and the implementable half of the pair.** 001 hides the payload by
+  *location* (a directory the file walker skips, which is why it needs an engine change as well as a
+  rule); 002 hides it in plain sight by *encoding*, and is a pure pattern rule.
+- **Why SG-DEP-011 cannot cover it.** DEP-011 is the near miss, and the reason it misses is structural,
+  not a tuning gap: every one of its leaves joins the fetch **and** the `chmod +x` on **one command
+  line**, whereas the archive shape splits them across three lines with a decryption step in between.
+  Verified before implementation — the full chain (fetch, `unzip -P`, `chmod +x`, execute) plus the
+  7z/gpg/openssl variants scanned **`pass` / 0 findings**.
+- **Precision is the flag itself, decided by measurement.** Unlike DEP-011, this rule needs no
+  correlation: each command leaf measured **0 hits across the 777-bundle corpus** — `unzip … -P`,
+  `7z x -p`, `zip -P`/`-e`, `gpg --passphrase`, `gpg --decrypt`, and `openssl enc` are all absent from
+  real skills. An inline archive passphrase is essentially never legitimate in a bundle.
+- **Signals (shipped):** ten leaves in two registers. *Command:* (a) `unzip … -P <literal>`;
+  (b) the same with a `$VAR` passphrase, lower confidence since it may be prompted rather than shipped;
+  (c) `7z`/`7za`/`7zr … -p<pw>`; (d) `zip -P <pw>` / `zip -e`, the **packing** direction of the same
+  primitive (building an encrypted archive over sensitive paths for exfil); (e) `gpg … --passphrase`;
+  (f) `gpg … --decrypt`/`-d` without an inline secret; (g) `openssl enc … -d`/`-pass`/`-k`.
+  *Prose:* (h) `extract|unzip|unpack … using|with … pass(word|phrase)`; (i) the reversed
+  `password … to extract|unzip|decrypt`; (j) an archive noun tied to a passphrase.
+- **FP carve-outs, all measured.** `gpg --verify` and `openssl dgst` are **checking, not decrypting**,
+  and are suppressed explicitly — the scoping matters: a bare `openssl` leaf would have inherited **14
+  corpus hits** of `openssl dgst`, which is why leaf (g) is scoped to `enc`. `<password>` placeholders,
+  `your_password`, and `/path/to/` are suppressed. The prose leaves are hinged on `using`/`with`/`to`
+  for the same reason: the looser `extract … password` shape measured **5 corpus hits, all benign**
+  (`0% pass rate`, `pass flags after --`, `reader.decrypt("password")`, `an interrupted pass`).
+  Leaf (d)'s `\bzip\b` does not match inside `unzip`/`gzip`/`bzip2`, so it does not double-fire on (a).
+- **Confidence:** inline-literal passphrase leaves 0.85; `zip -P`/`-e` packing 0.75; the variable-
+  passphrase and bare-`--decrypt` forms 0.7 (the secret may be prompted); prose leaves 0.7, where the
+  documentary modifier still applies — a tutorial *about* encrypted archives is down-weighted, a skill
+  handing over its own extraction passphrase is not. Severity **high**.
+- **Corpus:** **0 findings / 777.**
+- **Fixtures:** `TestEncryptedContainerCoversPackedPayload` in `pkg/rules/rules_test.go` — 11 TP forms
+  (the verbatim in-the-wild `unzip -P`, 7z, the `zip -P` packing direction, gpg both ways, `openssl enc`,
+  and all three prose registers) + 14 benign rows (ordinary archive handling, `gpg --verify`,
+  `openssl dgst`, the five measured corpus FPs of the loose prose shape, and a `<password>` placeholder).
+  Bundle fixture: the fetch → `unzip -P "infected123"` → `chmod +x` chain in
+  `testdata/malicious/setup.sh` plus the passphrase prose in `testdata/malicious/SKILL.md`, both asserted
+  by `TestMaliciousFixtureTriggersEncryptedContainer` in `pkg/scan/scan_test.go`; the benign fixture
+  carries `unzip release.zip`, `gpg --verify` and `openssl dgst` and stays clean.
+
 ### SG-REF-001 — External reference inventory  (AST05, info) — always emitted
 - **Signals:** enumerate every external URL/remote ref in body + scripts + configs; classify (doc, dependency, fetch-target). Feeds the card `external_refs[]`; never a gate by itself.
 - **FP carve-outs:** n/a (informational).
@@ -1338,7 +1385,7 @@ section (Signals / FP carve-outs / Confidence / Fixtures) in the appropriate num
 |---|---|---|
 | `SG-DEP-009` | ~~Dependency sourced from a raw git URL / arbitrary archive rather than a registry~~ — **shipped**, spec now at §4 above | |
 | `SG-EVA-001` | Self-extracting payload staged in a scanner-skipped directory, outside the Merkle root | needs an engine change as well as a rule |
-| `SG-EVA-002` | Encrypted / password-protected payload container — the payload ships (or is fetched) inside a password-protected zip/7z, a GPG blob, or an `openssl enc` blob, with the passphrase supplied in the bundle's own prose or script | the sibling of `SG-EVA-001`: 001 hides the payload by **location** (a path the walker skips), 002 hides it in plain sight by **encoding** (a container no reader can open). Pure pattern rule — unlike 001 it needs no engine change |
+| `SG-EVA-002` | ~~Encrypted / password-protected payload container — passphrase supplied in the bundle's own prose~~ — **shipped**, spec now at §4 above | the sibling of `SG-EVA-001`: 001 hides the payload by **location**, 002 by **encoding**; 002 needed no engine change |
 | `SG-INJ-007` | ~~Terminal/ANSI escape-sequence injection (CSI hide, OSC 52 clipboard write)~~ — **shipped**, spec now at §2 above | the `escape_sequence` leaf primitive it needed now exists in `pkg/rules` alongside `bidi_control`/`tag_block` |
 | `SG-INJ-008` | ~~Conditional / time-bomb instruction (behaves differently under a hidden trigger)~~ — **shipped**, spec now at §2 above | |
 | `SG-INJ-009` | ~~Role confusion — text forged to look like a system/operator turn~~ — **shipped**, spec now at §2 above | |

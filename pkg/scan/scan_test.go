@@ -470,3 +470,31 @@ func TestMaliciousFixtureTriggersAgentConfigOverwrite(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-INJ-004")
 }
+
+// TestMaliciousFixtureTriggersEncryptedContainer asserts the SG-EVA-002 fixture
+// end-to-end, in both registers the rule covers: the `unzip -P "…"` step in
+// setup.sh and the prose that hands the agent the extraction passphrase in
+// SKILL.md. Its own test rather than a row in TestMaliciousFails' `want` map —
+// that map is a single line every rule PR appends to and conflicts on every
+// concurrently-open branch.
+func TestMaliciousFixtureTriggersEncryptedContainer(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	var inScript, inProse bool
+	for _, f := range rep.Findings {
+		if f.RuleID != "SG-EVA-002" {
+			continue
+		}
+		switch f.File {
+		case "setup.sh":
+			inScript = true
+		case "SKILL.md":
+			inProse = true
+		}
+	}
+	if !inScript {
+		t.Error("expected SG-EVA-002 on the setup.sh `unzip -P` step")
+	}
+	if !inProse {
+		t.Error("expected SG-EVA-002 on the SKILL.md extraction-passphrase prose")
+	}
+}
