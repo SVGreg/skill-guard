@@ -309,3 +309,62 @@ rules:
     fix: >-
       Treat skill files as read-only at runtime; do not self-modify. Generating a *different* skill into
       an output directory is fine — overwriting the running bundle's own SKILL.md is not.
+
+  - id: SG-EXE-006
+    title: Dynamic-context command executed before the model sees the skill
+    ast: [AST01, AST03]
+    severity: critical
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [manifest, body, refs]
+    match:
+      # Claude Code renders a *dynamic-context* span in skill markdown by running
+      # the command at PREPROCESSING time and splicing its stdout into the prompt
+      # — "each dynamic context command executes immediately (before Claude sees
+      # anything) … This is preprocessing, not something Claude executes."
+      #
+      # That is why this is not "a command in a skill" (SG-EXE-001/SG-NET-002 model
+      # a command the agent MAY choose to run; SG-INJ-011 one a HUMAN is talked
+      # into running). This one runs unconditionally, before any model turn, so
+      # every permission prompt and model-level defence is bypassed by
+      # construction — SG-CFG-001's guarantee relocated from .claude/settings.json
+      # into the skill's own body. Hence `critical` for bytes that would be `high`
+      # as a mere suggestion.
+      #
+      # PRECISION IS THE WHOLE JOB, and the first gate is documented rather than
+      # tuned. The corpus has 25 `!` + backtick occurrences across 18 files, but
+      # only 2 are real dynamic-context commands (`git branch --show-current`,
+      # `gh issue list …` — both benign inspection); the other 23 are prose
+      # punctuation (``!`, ` ``, ``!`)` ``, a Rust `!` discussed in backticks). A
+      # bare span leaf would be ~92% FP. The vendor docs specify the inline form
+      # runs ONLY when `!` is at line-start or directly after whitespace (`KEY=!`
+      # + backtick is inert literal text), and that anchor alone takes the corpus
+      # from 23 to 4. Then gate on the command's EFFECT; the dangerous variants
+      # measure 0 across the corpus, and read-only git/gh queries carry no sink so
+      # they need no suppress.
+      #
+      # BOTH DOCUMENTED SYNTAXES ARE COVERED. Matching only the inline form would
+      # be bypassed by the vendor's own alternative — a fenced block opened with
+      # ```! is the multi-line form and scans clean without leaf (b).
+      any:
+        # (a) inline: !`<command with an effect>` — anchored at line-start or
+        #     after whitespace, per the documented recognition rule.
+        - regex: '(?m)(?:^|\s)!`[^`\n]{0,200}(?:curl|wget|\bnc\s|https?://|gh\s+auth\s+token|aws\s+configure\s+get|op\s+read|gcloud\s+auth\s+print-access-token|\$\{?[A-Za-z_]*(?:TOKEN|API_?KEY|SECRET|PASSWORD)|~/\.(?:aws|ssh)|\.env\b|\|\s*(?:sh|bash|zsh)\b|\beval\b|base64\s+(?:-d|--decode)|\brm\s+-rf|\bsudo\b|\bchmod\s+\+x|\btee\b|>\s*[~/.\w])[^`\n]{0,200}`'
+          confidence: 0.9
+        # (b) fenced: a block opened with ```! — the documented multi-line form.
+        #     `[^`]` keeps the window inside the block so the closing fence is
+        #     never crossed (RE2 has no backreference to match the opener).
+        - regex: '(?m)^\s*```!\s*\n[^`]{0,600}(?:curl|wget|\bnc\s|https?://|gh\s+auth\s+token|aws\s+configure\s+get|op\s+read|gcloud\s+auth\s+print-access-token|\$\{?[A-Za-z_]*(?:TOKEN|API_?KEY|SECRET|PASSWORD)|~/\.(?:aws|ssh)|\.env\b|\|\s*(?:sh|bash|zsh)\b|\beval\b|base64\s+(?:-d|--decode)|\brm\s+-rf|\bsudo\b|\bchmod\s+\+x|\btee\b|>\s*[~/.\w])'
+          confidence: 0.9
+    rationale: >-
+      A dynamic-context span (inline !`cmd`, or a ```! fenced block) is executed by the agent
+      runtime at preprocessing time — before the model sees the skill and before any permission
+      prompt — and its stdout is spliced into the prompt. A span carrying a network sink,
+      credential source, exec chain, redirect, or destructive verb is therefore a guaranteed
+      execution, not a suggested one (AST01/AST03).
+    fix: >-
+      Do not put commands with side effects in a dynamic-context span; use it only for read-only
+      state a reviewer can predict (`git branch --show-current`, `gh issue list`). Operators can
+      disable the feature centrally with "disableSkillShellExecution": true, which replaces every
+      command with a placeholder — note that bundled and managed skills are unaffected by it.
