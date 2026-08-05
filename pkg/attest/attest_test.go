@@ -1,6 +1,7 @@
 package attest
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -288,4 +289,77 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestReadEnvelopeRefusesOversizedAttestation pins the size cap on the one
+// bundle-adjacent file the pkg/skill walk deliberately skips. Because the walk
+// skips ".skillsig" it also never applied its 16 MiB per-file cap to it, so a
+// hostile bundle could ship an arbitrarily large attestation and `verify` would
+// read all of it — measured at 875 MB RSS for a 133 MiB envelope, while the same
+// bytes in any other bundle file are refused without being read.
+func TestReadEnvelopeRefusesOversizedAttestation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md.skillsig")
+	// Valid JSON, so a failure here is the cap and not a parse error.
+	oversized := append([]byte(`{"payloadType":"x","payload":"`),
+		append(bytes.Repeat([]byte("A"), maxAttestFileSize), []byte(`"}`)...)...)
+	if err := os.WriteFile(path, oversized, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, err := ReadEnvelope(path)
+	if err == nil {
+		// Deliberately not printing env — it holds the whole oversized payload.
+		t.Fatalf("oversized attestation accepted (%d bytes read)", len(env.Payload))
+	}
+	if !contains(err.Error(), "size cap") {
+		t.Fatalf("error does not name the cap: %v", err)
+	}
+}
+
+// TestReadEnvelopeAcceptsRealAttestation guards the other side of the cap: the
+// largest bundle in the evaluation corpus (1739 files) signs to ~317 KB, so no
+// plausible attestation is anywhere near the limit.
+func TestReadEnvelopeAcceptsRealAttestation(t *testing.T) {
+	b := fixtureBundle(t)
+	signer, err := GenerateKey("cap-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := BuildStatement(b, nil, signer, "test@example.com", time.Hour)
+	env, err := SignWith(context.Background(), st, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "SKILL.md.skillsig")
+	if err := WriteEnvelope(path, env); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadEnvelope(path)
+	if err != nil {
+		t.Fatalf("real attestation refused: %v", err)
+	}
+	if got == nil || got.Payload != env.Payload {
+		t.Fatal("round-trip lost the envelope")
+	}
+}
+
+// TestReadEnvelopeAbsentIsNotAnError keeps ReadEnvelope's (nil, nil) contract for
+// an unsigned bundle — the switch to an Open-based read must not turn "no
+// attestation" into a hard error, which would break `verify` on unsigned skills.
+func TestReadEnvelopeAbsentIsNotAnError(t *testing.T) {
+	env, err := ReadEnvelope(filepath.Join(t.TempDir(), "nope.skillsig"))
+	if err != nil || env != nil {
+		t.Fatalf("absent attestation: got (%+v, %v), want (nil, nil)", env, err)
+	}
+}
+
+// TestLoadKeyRefusesOversizedFile — same cap, sibling path.
+func TestLoadKeyRefusesOversizedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "huge.key")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("A"), maxAttestFileSize+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadKey(path); err == nil || !contains(err.Error(), "size cap") {
+		t.Fatalf("oversized key file: got %v, want a size-cap error", err)
+	}
 }

@@ -140,14 +140,16 @@ func SavePub(s *LocalSigner, path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// LoadKey reads a signer from a key file. The declared algorithm is enforced:
+// LoadKey reads a signer from a key file (size-capped, see maxAttestFileSize —
+// a key file is a few hundred bytes, so pointing --key at something huge is a
+// mistake to refuse, not a read to attempt). The declared algorithm is enforced:
 // Ed25519 is the only scheme this signer implements, so a key file naming any
 // other one is rejected instead of being silently loaded as Ed25519 and then
 // attested as "ed25519" — a claim that would not match the file it came from.
 // An empty algorithm is accepted for keys written before the field was
 // meaningful; those are Ed25519 by construction.
 func LoadKey(path string) (*LocalSigner, error) {
-	data, err := os.ReadFile(path)
+	data, err := readCapped(path)
 	if err != nil {
 		return nil, err
 	}
