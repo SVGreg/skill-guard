@@ -297,12 +297,107 @@ func TestOverBroadActivationTrigger(t *testing.T) {
 		{"Always back up the file before editing it.", false},
 		{"Use for any spreadsheet or CSV analysis.", false},
 		{"Run tests in all packages of the monorepo.", false},
+
+		// TP — activation phrasings added by the cycle-72 polish.
+		{"description: Automatically assess task complexity. Triggers on every user message to pick a reasoning level.", true},
+		{"Load this skill at the start of every conversation.", true},
+		{"Activate this tool on each turn of the session.", true},
+		{"Use this skill unconditionally.", true},
+		{"Invoke this agent for anything the user brings up.", true},
+		{"This skill is always relevant.", true},
+		{"Use this skill for all user interactions, whatever the domain.", true},
+		{"This tool applies to every session, no matter the topic.", true},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("manifest", c.text)) > 0
 		if got != c.want {
 			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
 		}
+	}
+}
+
+// TestOverBroadActivationTriggerCorpusNegatives pins the false positives the rule
+// carried from the day it shipped. Its leaves asked only "is a universal object
+// present?" — but `request`, `query`, `task`, `no matter what` and `in all cases`
+// are ordinary developer vocabulary, so on 777 real skills it was 46 hits / 1 true
+// positive. Every row below is a **verbatim excerpt from the evaluation corpus**
+// (the file it came from is named), not an invented paraphrase, which is what
+// stops the cluster from coming back. The fix they pin is the activation anchor:
+// the line must also claim that *this skill activates*, not merely contain a
+// universal noun. Kept in a separate function from the recall table above so a
+// regression names which axis broke.
+func TestOverBroadActivationTriggerCorpusNegatives(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-TRIG-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-TRIG-001 not found")
+	}
+	// HTTP request / SQL query — 24 of the 43 false positives.
+	corpus := []string{
+		"- Set `Content-Type` header on every request with a body - missing it causes silent 400s",                                                                              // api-dev
+		"- **Always specify the connection.** Include the `Maton-Connection` header with the correct connection ID on every request to ensure it targets the intended account.", // google-workspace-admin
+		"- [ ] JWT tokens validated on every request",                                                                       // security-auditor
+		"| Add `Authorization: Bearer $SLEEK_API_KEY` to every request |",                                                   // sleek-design-mobile-apps
+		"| Org set to ZDR / retention below 30 days | 400 on every request |",                                               // claude-api/shared/error-codes.md
+		"Instead of creating a new connection or browser for every request, the spider reuses sessions.",                    // scrapling-official
+		"| `proxy` | str or dict or null | null | Proxy for all requests in this session |",                                 // scrapling-official
+		"the logic above for setting the parser config will apply globally to all requests/fetches made through that class", // scrapling-official
+		"Enforce mandatory filters on all queries:",                                                                         // lightdash
+		"pg_stat_statements tracks execution statistics for all queries, helping identify slow queries.",                    // supabase
+		"### sqlc for all queries", // gmautner tech-stack
+		"A monolithic agent loads its full context on every request. Specialists are",                                                                // pkurri infra-ai-team
+		"enricher or retrieval channel runs for every request. The receipt, trace, and",                                                              // superlocalmemory
+		"eliminating Python subprocess startup on every prompt.",                                                                                     // superlocalmemory
+		"grok-build gives Codex a reliable local way to use Grok for real software work without creating a new unmanaged process for every request.", // grok-bridge-rs
+		"enforces them on every request the page makes.",                                                                                             // seal-frameworks
+		// `no matter what` / `regardless of what` — an English idiom, not a trigger
+		// claim. It matched the GPL text bundled in a corpus skill.
+		"Corresponding Source.  Regardless of what server hosts the",                                                         // ThirdPartyLicenses.txt (GPL)
+		"| Host → container | App must bind `0.0.0.0` inside; `127.0.0.1` inside = unreachable no matter what you publish |", // docker
+		"- SELinux: every bind mount needs `:z` or `:Z` or access dies with EACCES no matter what the UIDs say",              // docker
+		"<!-- What won't change. The lines that hold no matter what. -->",                                                    // cognitive-memory SOUL.md
+		"| Delimiters mark injected content as structured data regardless of what it says |",                                 // planning-with-files
+		"The body of SKILL.md is only read AFTER the skill loads, regardless of what the body says.",                         // trailofbits designing-workflow-skills
+		"competitor's own site. Unwinnable, no matter what you do to the page.",                                              // seo-growth
+		// `in all cases` / `in any case` — a discourse marker.
+		"but cannot prove that a PoC is correct in all cases.",             // trailofbits zeroize-audit
+		"- [ ]  Automatic media download > Disable all types in all cases", // seal-frameworks
+		"**Data:** \"In any case, I will attempt to recalibrate.\"",        // ai-persona-os
+		// Universal noun in a non-activation register.
+		"a conflict forces the model to deliberate or guess on every task.",                      // agent-context-audit
+		"- This reflects human preference votes, not absolute quality guarantees for every task", // image-generation
+		"### 4. Feedback on Every Interaction",                                                   // frontend
+		// Second pass: `relevant`/`applicable` are ordinary adjectives and `it` is a
+		// pronoun for anything — as bare activation anchors they resurrected the FP
+		// class in a new register (7 fresh hits on the re-scan). The adjective must
+		// now govern the object (`relevant in all situations`); the pronoun is gone.
+		"At the start of every session, the system can automatically inject relevant context:",
+		"| `session_init` | Returns relevant memories + learning status. Call once at the beginning of every session. |",
+		"When a learning is broadly applicable (not a one-off fix), promote it to a workspace file so every session inherits it.",
+		"These apply across ALL situations. Load the relevant situation file first, then pull from here.",
+		"- Heading ids can be pinned with `{#custom-id}` — use it for anything linked from outside (`links.md`).",
+		"> \"I wired this to trigger for planning, goals, and tasks. Want to also trigger it for anything else?\"",
+		"**Tip:** The `download_delay` parameter adds a fixed wait before every request, regardless of the domain. Use it for simple rate limiting.",
+		// A trigger that IS scoped by a following conditional is correct usage —
+		// this was leaf (3)'s only corpus hit, and the suppress exists for it.
+		"description: Generate and edit diagrams. Always use this skill when the user asks to draw, revise, or export any diagram.", // diagram-generator
+	}
+	for _, text := range corpus {
+		if got := r.Evaluate("body", text); len(got) > 0 {
+			t.Errorf("corpus false positive still matches (%q): %+v", text, got[0].Excerpt)
+		}
+	}
+	// The one real corpus true positive must survive all of the above.
+	tp := "description: Automatically assess task complexity and adjust reasoning level. Triggers on every user message to evaluate whether extended thinking would improve the answer."
+	if got := r.Evaluate("manifest", tp); len(got) == 0 {
+		t.Errorf("lost the corpus true positive (adaptive-reasoning's description): %q", tp)
 	}
 }
 
