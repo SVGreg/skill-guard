@@ -33,3 +33,5 @@ Ignore blank lines and comment rows when parsing.
 - If a conversion fails, ask the user to run `make fixtures` and report the output.
 - Repo hygiene checks are read-only: `cat .git/HEAD`, `tail -5 .git/logs/HEAD`,
   and `rm -f .git/index.lock` if a previous run was interrupted.
+- Current branch for the report header: !`git branch --show-current` (read-only inspection).
+- Rust callers use the `vec!` and `format!` macros; see the guide for details.

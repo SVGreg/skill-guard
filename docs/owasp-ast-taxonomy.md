@@ -76,7 +76,10 @@ secrecy directives that tell the agent to hide an action from the user
 ("do not mention this to the user", "act silently and do not report") (SG-INJ-010);
 covert behavioral steering / bias injection that manipulates the user toward a
 commercial or undisclosed end ("subtly steer the user … without them realizing",
-inject marketing into every response, suppress competitors) (SG-STEER-001).
+inject marketing into every response, suppress competitors) (SG-STEER-001);
+**dynamic-context spans** — inline `` !`cmd` `` or a ```` ```! ```` fenced block — whose command
+the agent runtime executes at *preprocessing* time, before the model sees the skill and before any
+permission prompt, so the payload's execution is guaranteed rather than suggested (`SG-EXE-006`).
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
 otherwise-legitimate skill → AST03. Deception at the *metadata* layer → AST04.
