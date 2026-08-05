@@ -27,6 +27,7 @@ SRC_DESC = {
     "orgs": "Vendor repos — trailofbits, stripe, supabase, tinybird",
     "anthropic": "github.com/anthropics/skills example skills",
     "clawhub_more": "ClawHub — additional download-ranked batch",
+    "skillject": "SkillJect — carrier skills used in malicious-skill research",
 }
 
 TEMPLATE = r"""<title>__TITLE__</title>
@@ -344,7 +345,7 @@ Object.entries(DATA.by_source).sort((a,b)=>b[1].n-a[1].n).forEach(([src,s])=>{
   const sv = s.severity||{};
   const pr = s.pass_rate;
   const col = pr>=90?"var(--pass)":pr>=70?"var(--warn)":"var(--fail)";
-  const desc = ({"clawhub":"ClawHub registry — top downloads","skillsmp":"SkillsMP — GitHub-indexed","orgs":"vendor repos (trailofbits, stripe…)","anthropic":"anthropics/skills examples","clawhub_more":"ClawHub extra batch"})[src]||"skill bundles";
+  const desc = ({"clawhub":"ClawHub registry — top downloads","skillsmp":"SkillsMP — GitHub-indexed","orgs":"vendor repos (trailofbits, stripe…)","anthropic":"anthropics/skills examples","clawhub_more":"ClawHub extra batch","skillject":"SkillJect — malicious-skill research carriers"})[src]||"skill bundles";
   const tr = el("tr");
   tr.innerHTML = `<td class="l"><span class="src">${esc(src)}</span><br><span class="desc">${esc(desc)}</span></td>`
     + `<td class="num">${nf(s.n)}</td>`

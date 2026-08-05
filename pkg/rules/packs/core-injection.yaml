@@ -212,6 +212,21 @@ rules:
       # benign permission/build phrasings that share a keyword but not the intent
       - '(?i)\bunrestricted\s+(file|network|disk|read|write|access|permissions?)\b'
       - '(?i)\bwithout\s+(any\s+)?(dependencies|warnings?|errors?|changes?)\b'
+      # The MIT grant clause — "to deal in the Software without restriction,
+      # including without limitation the rights to use, copy, modify …" — is a
+      # copyright grant, not jailbreak framing, but it hit the
+      # "without (any) restrictions?" leaf at 0.95 on every bundle shipping a
+      # LICENSE (17 files across the 877-bundle evaluation corpus; 5 of the 100
+      # SkillJect bundles failed on nothing else). Anchoring on the full
+      # "…without limitation" idiom rather than on "Software" or a LICENSE
+      # filename keeps the suppress tight and survives every line-wrap variant
+      # the corpus contains, including derivative licenses that swap the subject
+      # noun ("in the Materials without restriction, including without
+      # limitation"). Note `suppress` is matched against the single line the hit
+      # landed on, so the idiom must stay on one line to be excused — a LICENSE
+      # is still scanned like any other prose, and injected text placed in one
+      # still reports.
+      - '(?i)\bwithout\s+restrictions?,?\s+including\s+without\s+limitation\b'
     rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy — or telling it to run "unfiltered"/"jailbreak" mode or drop disclaimers — is a jailbreak preamble (AST01).
     fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
 

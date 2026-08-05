@@ -134,8 +134,18 @@ rulepacks with **no policy/waivers**, so results reflect out-of-the-box behavior
 
 | Folder | Source | Count |
 |--------|--------|------:|
-| `clawhub/` | Top skills #1–200 by downloads from the ClawHub registry | 200 |
+| `clawhub/` | Top skills by downloads from the ClawHub registry | 500 |
+| `skillsmp/` | GitHub-indexed skills from SkillsMP (`sort=recent`, ≤5 per repo) | ~200 |
+| `orgs/` | Vendor repos via skills.rest — `trailofbits`, `stripe`, `supabase`, `tinybird` | 111 |
 | `anthropic/` | Example skills from `github.com/anthropics/skills` | 17 |
+| `skillject/` | `data/skills_sample` from `github.com/jiaxiaojunQAQ/SkillJect` | 100 |
+
+`skillject/` holds the **carrier** skills a published malicious-skill research framework
+injects into at run time — real community skills, not pre-injected attacks; the payloads
+(`data/bash_scripts/`) are deliberately not vendored. Treat it like the other sources (an
+unlabeled FP corpus) but re-scan it whenever injection rules change, since it is the exact
+population that framework targets. Its bundles also ship a registry `skill-report.json`
+that the other corpora lack.
 
 **Pipeline** (`evaluation/scripts/`):
 
@@ -151,17 +161,18 @@ rulepacks with **no policy/waivers**, so results reflect out-of-the-box behavior
    this file.
 3. `aggregate.py` — roll raw JSON into `stats.json` + `REPORT.md` (env: `RAW_DIR`,
    `REPORT_NAME`, `STATS_NAME`, `REPORT_TITLE`).
+4. `report_html.py` — render a `stats.json` into a single self-contained interactive HTML
+   page, no external assets (env: `STATS_NAME`, `HTML_NAME`, `REPORT_TITLE`).
 
 The env vars let one script set produce multiple scoped reports (e.g. the standalone
-`clawhub_more` run reuses the same scripts with `CORPUS_DIRS`/`RAW_DIR` overrides).
+`skillject` run reuses the same scripts with `CORPUS_DIRS`/`RAW_DIR` overrides).
 
-**Reports** (`evaluation/reports/`): `REPORT.md` (clawhub + anthropic), `REPORT_clawhub_more.md`
-(the 100 new skills), and `CROSS_VERIFICATION.md` — a per-finding false-positive audit. The two
-`REPORT*.md` reflect the **tuned** ruleset after the FP fixes from `CROSS_VERIFICATION.md`
-(289 → 73 findings, no detection loss); the audit records the before/after. When you change a
-rule pack, regenerate the affected report and sanity-check against the cross-verification audit
-so a "fix" doesn't silently drop true positives. See `evaluation/README.md` for the full
-reproduce recipe.
+**Reports** (`evaluation/reports/`): `REPORT.md`/`REPORT.html` (all five corpora) and
+`REPORT_skillject.md`/`.html` (the SkillJect sample alone). When you change a rule pack,
+regenerate the affected report and read the new hits — these are real, unlabeled skills, so
+every hit is an FP candidate until someone reads it, and a "fix" must not silently drop true
+positives. `rule_findings.py <RULE-ID>` dumps every corpus hit for one rule for exactly that
+audit. See `evaluation/README.md` for the full reproduce recipe.
 
 Interpretation caveat baked into the design: static analysis flags **capability and pattern, not
 confirmed intent**. A `pass` is not a safety guarantee; a `fail` is an invitation to review.
