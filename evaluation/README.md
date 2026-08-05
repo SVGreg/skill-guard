@@ -5,9 +5,10 @@ of **real Agent Skills** and aggregates the results into a stats report.
 
 ## Corpus
 
-Four sources, chosen for complementary coverage — a download-ranked registry, a
-GitHub index, org/vendor repos, and Anthropic's examples — so the false-positive
-picture reflects many independent authors, not one house style.
+Five sources, chosen for complementary coverage — a download-ranked registry, a
+GitHub index, org/vendor repos, Anthropic's examples, and a security-research
+sample — so the false-positive picture reflects many independent authors, not one
+house style.
 
 | Folder | Source | Skills |
 |--------|--------|------:|
@@ -15,6 +16,24 @@ picture reflects many independent authors, not one house style.
 | `skillsmp/` | GitHub-indexed skills from [SkillsMP](https://skillsmp.com), `sort=recent` for author diversity, ≤5 per repo | ~200 |
 | `orgs/` | Organization/vendor repos surfaced by [skills.rest](https://skills.rest) — `trailofbits`, `stripe`, `supabase`, `tinybird` | 111 |
 | `anthropic/` | Example skills from [`github.com/anthropics/skills`](https://github.com/anthropics/skills) | 17 |
+| `skillject/` | `data/skills_sample` from [SkillJect](https://github.com/jiaxiaojunQAQ/SkillJect), a malicious-skill research framework | 100 |
+
+### About `skillject/`
+
+SkillJect is an agent-security evaluation framework that injects shell payloads
+into skill content and measures whether a coding agent executes them. The
+`data/skills_sample` bundles it ships are the **carriers**, not the attacks: real,
+community-authored skills (71 of the 100 carry an upstream `source_url` in their
+`skill-report.json`) that the framework mutates *at run time*. The payload corpus
+lives separately in `data/bash_scripts/` and is **not** vendored here.
+
+So this folder behaves like the other four — an unlabeled real-world set, useful
+for false positives — with the caveat that it is the exact carrier population a
+published attack framework targets, which makes it worth re-scanning whenever
+injection rules change. Each bundle also ships a registry-generated
+`skill-report.json` (a third-party audit artifact absent from the other corpora);
+it produced zero findings in the first run, so it does not skew the comparison.
+One slug, `skill-finder`, collides by name with a `clawhub/` bundle.
 
 Each skill can ship sub-skills that carry their own `SKILL.md`; every one is
 discovered and scanned independently, so the scanned-bundle count runs a little
@@ -28,11 +47,13 @@ before quoting a headline finding rate.
 
 | Report | Scope |
 |--------|-------|
-| [`reports/REPORT.md`](reports/REPORT.md) | combined — `clawhub` (223 bundles) + `anthropic` (17) = 240 |
-| [`reports/REPORT_clawhub200.md`](reports/REPORT_clawhub200.md) | standalone — the ClawHub top 200 only (223 bundles) |
+| [`reports/REPORT.md`](reports/REPORT.md) | combined — every corpus dir |
+| [`reports/REPORT.html`](reports/REPORT.html) | the combined report as a self-contained interactive page |
+| [`reports/REPORT_skillject.md`](reports/REPORT_skillject.md) | standalone — the SkillJect sample (100 bundles) |
+| [`reports/REPORT_skillject.html`](reports/REPORT_skillject.html) | the SkillJect report as a self-contained interactive page |
 
 Each report has a machine-readable sibling (`reports/stats.json`,
-`reports/stats_clawhub200.json`). Each subfolder under a corpus dir is one skill
+`reports/stats_skillject.json`). Each subfolder under a corpus dir is one skill
 bundle (a `SKILL.md` plus its scripts/assets), exactly as it ships. Provenance for
 every bundle is recorded in the `_manifest.json` in each corpus folder (ClawHub
 owner handle + download count; Anthropic source commit).
@@ -45,18 +66,21 @@ evaluation/
   skillsmp/<owner__repo__skill>/  GitHub-indexed bundles (+ _manifest.json)
   orgs/<org__repo__skill>/ vendor-repo bundles    (+ _manifest.json)
   anthropic/<slug>/        copied skill bundles   (+ _manifest.json)
+  skillject/<slug>/        SkillJect carrier bundles (+ _manifest.json)
   scripts/
     fetch_clawhub.py       pull top-N skills by downloads from clawhub.ai
     fetch_skillsmp.py      pull skills via the SkillsMP API -> GitHub bundles (gh)
     fetch_orgs.sh          clone vendor repos (skills.rest set) -> orgs/
     run_scans.sh           scan every bundle in parallel -> reports/<RAW_DIR>/*.json
     aggregate.py           roll raw JSON up into stats.json + REPORT.md
+    report_html.py         render a stats.json into a self-contained HTML page
     rule_findings.py       every corpus hit for one rule, for FP auditing
   reports/
     raw/<source>__<slug>.json           combined-run scan results (one per bundle)
-    raw_clawhub200/<source>__<slug>.json standalone clawhub-200 run
-    stats.json / stats_clawhub200.json   aggregated statistics
-    REPORT.md / REPORT_clawhub200.md     the human-readable evaluation reports
+    raw_skillject/<source>__<slug>.json standalone SkillJect run
+    stats.json / stats_skillject.json   aggregated statistics
+    REPORT.md / REPORT_skillject.md     the human-readable evaluation reports
+    REPORT.html / REPORT_skillject.html the same reports as interactive pages
 ```
 
 ## Reproduce
@@ -72,19 +96,26 @@ WANT=200 SKIP_DIRS=clawhub,anthropic,orgs \
 evaluation/scripts/fetch_orgs.sh                                         # vendor repos -> orgs/
 git clone --depth 1 https://github.com/anthropics/skills /tmp/anthropic-skills
 #   then copy /tmp/anthropic-skills/skills/*/  into evaluation/anthropic/
+git clone --depth 1 https://github.com/jiaxiaojunQAQ/SkillJect /tmp/skillject
+#   then copy /tmp/skillject/data/skills_sample/*/ into evaluation/skillject/
+#   (_manifest.json is built from each bundle's skill-report.json "meta" block)
 
-# 3a. combined report (all four sources) -> reports/REPORT.md + stats.json
+# 3a. combined report (all five sources) -> reports/REPORT.md + stats.json
 # (parallelism defaults to nproc; pass a number to override, but keep it at or
 # below your core count — oversubscribing has hung the workstation before)
-CORPUS_DIRS="clawhub skillsmp orgs anthropic" evaluation/scripts/run_scans.sh
+CORPUS_DIRS="clawhub skillsmp orgs anthropic skillject" evaluation/scripts/run_scans.sh
 python3 evaluation/scripts/aggregate.py
+python3 evaluation/scripts/report_html.py                 # -> reports/REPORT.html
 
-# 3b. standalone report over just one source (e.g. ClawHub)
-CORPUS_DIRS="clawhub" RAW_DIR="raw_clawhub" evaluation/scripts/run_scans.sh
-RAW_DIR="raw_clawhub" REPORT_NAME="REPORT_clawhub.md" \
-  STATS_NAME="stats_clawhub.json" \
-  REPORT_TITLE="skill-guard — ClawHub Security Evaluation" \
+# 3b. standalone report over just one source (e.g. SkillJect)
+CORPUS_DIRS="skillject" RAW_DIR="raw_skillject" evaluation/scripts/run_scans.sh
+RAW_DIR="raw_skillject" REPORT_NAME="REPORT_skillject.md" \
+  STATS_NAME="stats_skillject.json" \
+  REPORT_TITLE="skill-guard — SkillJect Sample Corpus Evaluation" \
   python3 evaluation/scripts/aggregate.py
+STATS_NAME="stats_skillject.json" HTML_NAME="REPORT_skillject.html" \
+  REPORT_TITLE="skill-guard — SkillJect Sample Corpus Evaluation" \
+  python3 evaluation/scripts/report_html.py
 
 # 3c. audit one rule's precision — every hit it produced, to judge TP vs FP
 #     (these are real, unlabeled skills, so each hit is an FP candidate until read)

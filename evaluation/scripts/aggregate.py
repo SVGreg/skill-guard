@@ -37,7 +37,7 @@ def summarize(rows):
         "risk_tiers": Counter(),
         "clean_skills": 0,
     }
-    per_source = defaultdict(lambda: {"n": 0, "pass": 0, "fail": 0,
+    per_source = defaultdict(lambda: {"n": 0, "pass": 0, "warn": 0, "fail": 0,
                                       "findings": 0, "risk_sum": 0,
                                       "sev": Counter()})
     skills = []
@@ -54,8 +54,10 @@ def summarize(rows):
         ps["n"] += 1
         ps["risk_sum"] += score
         ps["findings"] += len(findings)
-        if verdict == "pass":
-            ps["pass"] += 1
+        # keep warn distinct from fail: a warn is not a failing verdict, and
+        # folding it in overstates the per-source fail count.
+        if verdict in ("pass", "warn"):
+            ps[verdict] += 1
         else:
             ps["fail"] += 1
         if not findings:
@@ -85,7 +87,8 @@ def summarize(rows):
         })
     for src, ps in per_source.items():
         stats["by_source"][src] = {
-            "n": ps["n"], "pass": ps["pass"], "fail": ps["fail"],
+            "n": ps["n"], "pass": ps["pass"], "warn": ps["warn"],
+            "fail": ps["fail"],
             "pass_rate": round(100 * ps["pass"] / ps["n"], 1) if ps["n"] else 0,
             "total_findings": ps["findings"],
             "avg_risk": round(ps["risk_sum"] / ps["n"], 1) if ps["n"] else 0,
@@ -115,6 +118,9 @@ def md(stats):
         "clawhub": "top skills by download count from the ClawHub registry (`clawhub.ai`)",
         "clawhub_more": "ClawHub skills ranked #41–140 by download count (`clawhub.ai`)",
         "anthropic": "the official `github.com/anthropics/skills` example skills",
+        "skillsmp": "GitHub-indexed skills from SkillsMP (`sort=recent`, ≤5 per repo)",
+        "orgs": "vendor repos via skills.rest — trailofbits, stripe, supabase, tinybird",
+        "skillject": "`data/skills_sample` from the SkillJect malicious-skill research framework — real carrier skills, not pre-injected attacks",
     }
     A("| Corpus | Source |")
     A("|---|---|")
@@ -139,12 +145,12 @@ def md(stats):
 
     # by source
     A("## By corpus\n")
-    A("| Corpus | Skills | Pass | Fail | Pass rate | Findings | Avg risk | crit | high | med | low |")
-    A("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    A("| Corpus | Skills | Pass | Warn | Fail | Pass rate | Findings | Avg risk | crit | high | med | low |")
+    A("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for src in sorted(stats["by_source"]):
         s = stats["by_source"][src]
         sv = s["severity"]
-        A(f"| {src} | {s['n']} | {s['pass']} | {s['fail']} | {s['pass_rate']}% | "
+        A(f"| {src} | {s['n']} | {s['pass']} | {s['warn']} | {s['fail']} | {s['pass_rate']}% | "
           f"{s['total_findings']} | {s['avg_risk']} | {sv.get('critical',0)} | "
           f"{sv.get('high',0)} | {sv.get('medium',0)} | {sv.get('low',0)} |")
     A("")
