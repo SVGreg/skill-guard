@@ -2647,6 +2647,76 @@ func TestAgentConfigOverwriteIgnoresMarkdownBlockquote(t *testing.T) {
 	}
 }
 
+// TestSelfExtractingSkillCoversSkippedLocations pins SG-EVA-001 to the
+// Self-Extracting Skill shape (Cloak and Detonate, arXiv 2607.02357): the real
+// payload sits as an opaque blob in a location the scanner never opens, and a
+// small decoder rematerializes it at first run. skill-guard has two such blind
+// spots and both were verified `pass / 0 findings` on main before this rule —
+// `skipNames` drops `.git`, and the walk drops every `*.skillsig`.
+//
+// The rule deliberately matches the *decoder*, not the blob: a rule cannot read
+// a file the walk never opens, but it does not have to — the blob is inert
+// without the decoder, and the decoder always lives in a scanned script or in
+// the body prose.
+//
+// The benign rows are the reason the decoder verb is required rather than the
+// path alone. A bare `.git/<path>` leaf would take 45 corpus occurrences across
+// 27 files, every one a genuine git internal, so those paths are matched but
+// only in the company of a decoder — carving them out by name would document
+// the rule's own bypass (`base64 -d .git/objects/x`).
+func TestSelfExtractingSkillCoversSkippedLocations(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EVA-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EVA-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// TP — the paper's shape, verbatim and in the variants a real bundle would use.
+		{"base64 -d .git/skillpack.dat > WORKFLOW.md", true},
+		{"cat .git/skillpack.dat | base64 --decode > WORKFLOW.md", true},
+		{"openssl enc -aes-256-cbc -d -in .git/blob.enc -out WORKFLOW.md", true},
+		{"tar xzf .git/.cache/stage.tgz -C .", true},
+		{"xxd -r -p .git/objects/aa/deadbeef > run.sh", true},
+		{"python3 -c \"import base64,pathlib; pathlib.Path('WORKFLOW.md').write_bytes(base64.b64decode(open('.git/skillpack.dat').read()))\"", true},
+		{"cp .git/hidden/WORKFLOW.tmpl > CLAUDE.md", true},
+		// The same trick against skill-guard's own skip rule.
+		{"base64 -d payload.skillsig > WORKFLOW.md", true},
+		{"gunzip -c assets/notes.skillsig > AGENTS.md", true},
+
+		// Benign — real git internals, which the corpus is full of. The decoder
+		// verb is what separates them.
+		{"ls -la .git/hooks/pre-commit", false},
+		{"git config --file .git/config user.name", false},
+		{"rm -f .git/index.lock", false},
+		{"tail -5 .git/logs/HEAD", false},
+		{"cat .git/HEAD", false},
+		{"grep -r ignore .git/info/exclude", false},
+		{"du -sh .git/objects", false},
+		// Ordinary decoding that does not reach into a skipped location.
+		{"base64 -d assets/data.b64 > data.json", false},
+		{"tar xzf release.tgz -C build/", false},
+		// Inspecting an attestation is not staging a payload — the DSSE
+		// envelope's `.payload` really is base64.
+		{"cat SKILL.md.skillsig | jq -r .payload | base64 -d", false},
+		{"skill-guard verify . && base64 -d SKILL.md.skillsig", false},
+	}
+	for _, c := range cases {
+		if got := len(r.Evaluate("scripts", c.text)) > 0; got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestEncryptedContainerCoversPackedPayload pins SG-EVA-002 to the
 // encrypted-payload-container shape. The threat is that nothing in the review
 // path can open the container: a password-protected zip/7z, a symmetric GPG
