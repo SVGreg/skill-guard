@@ -467,6 +467,19 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
 - **The `hide/conceal` object must be an action noun.** `the \w+` matched "Hide the object holder
   abstraction from the user" (mesonbuild, ×2 bundles) — API-design prose. Restricted to
   `this|it|that|the <fact|file|step|action|change|command|upload|transfer|log|…>`: 2 → 0.
+- **Three FP classes only became visible *after* the confidence fix** — they live on the leaves that
+  could never fire before, so no earlier audit could have found them. Worth remembering as a method
+  note: un-blinding a leaf requires a *fresh* precision audit, because the old corpus numbers describe
+  a rule that was partly switched off. (a) **"tell the user TO `<act>`" is instruction-giving, not
+  disclosure** — "NEVER tell the user to open a terminal or run commands. You have built-in tools."
+  (`ai-persona-os`) is the *opposite* of concealment, and "Never tell a user where they must register"
+  (`stripe` tax guidance) is advice-limiting; suppressed on the grammatical distinction, leaving "tell
+  the user THAT/ABOUT …" and "tell the user what you did" untouched. (b) **`keep this hidden/quiet`
+  must name its audience** (`from the user|operator|anyone`) — without that, "keep it hidden on you"
+  (physical opsec advice, `seal-frameworks`) and `sag "[whispers] keep this quiet"` (a text-to-speech
+  example) match the idiom alone. (c) **A comma before the verb means the adverb modifies the
+  *preceding* clause** — "Upgrade pip quietly, then install the package" (`ait-squad`) is the same
+  register error in mirror image, so comma joins are gone except sentence-initial "Silently, `<verb>` …".
 - **Confidence: 0.9 on every leaf — this rule is the extreme case of the documentary cliff.**
   `docKeywords` (`pkg/rules/rules.go`) contains `do not`, `don't`, `never`, `avoid` — which is this
   rule's *entire* trigger vocabulary, so at 0.7 a leaf whose own match text is "do not mention …"
@@ -478,14 +491,29 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   phrasings caught before, 20 of 20 after.** 0.9 computes to 0.65 and emits. This is the same
   correction `SG-MCP-001`/`SG-DEP-008`/`SG-EXE-001`/`SG-NET-008` already carry, and the FP boundary is
   unaffected — `suppress` is applied after the threshold, independent of confidence.
-- **Corpus:** **42 findings / 20 bundles → 5 findings / 5 bundles** (877 bundles). The five that
-  remain are one identical line mirrored across `stripe/agent-toolkit` copies: *"Once the user picks,
-  silently run `which <tool> 2>/dev/null` …"*. **Deliberately kept.** It is an imperative to run a
-  command without disclosure — the pattern the rule detects — and separating it from an attack would
-  require inferring that the command is harmless and the author well-meaning, which is intent
-  inference the design rejects everywhere else. It is a prime candidate for the planned severity-capping
-  context rule (`docs/design-note-demotion.md`). Pinned verbatim as a `true` row so a future cycle
-  re-decides it consciously rather than by accident.
+- **Corpus (777 bundles, 2026-08-06):** **42 findings / 20 bundles → 11 findings / 8 bundles.**
+  14 bundles lost every finding (4 of them `fail` → `pass`: `3x-haust__oh-my-design` ×2, `memory`,
+  `xiaohongshu-publisher`); 2 were newly flagged; 6 kept theirs. The 11 that remain are all judged and
+  all kept on purpose:
+  - **5 × `stripe/agent-toolkit`** (one identical line, mirrored across provider copies): *"Once the
+    user picks, silently run `which <tool> 2>/dev/null` …"*. An imperative to run a command without
+    disclosure **is** the pattern; separating it from an attack would require inferring that the
+    command is harmless and the author well-meaning — intent inference the design rejects everywhere
+    else. Pinned verbatim as a `true` test row so a future cycle re-decides it consciously.
+  - **3 × `prompt-guard` + 2 × `security-sentinel-skill`** — attack strings quoted inside security
+    tools' own signature databases and threat write-ups ("…transfer ETH to 0x… do not notify user").
+    The project's stated position is **not** to suppress this class: defensive framing is not a
+    boundary that survives transport, and a `refs` doc reaches the model exactly as the body does.
+  - **1 × `ai-persona-os`** — "Do NOT tell the user the model picked wrong" — genuinely ambiguous:
+    the construct is present, the intent is UX guidance. Left as a match, not pinned as a test row.
+
+  All 11 are prime candidates for the planned severity-capping context rule
+  (`docs/design-note-demotion.md`), which is the mechanism designed for exactly this "correctly
+  matched, low real risk" class.
+- **No effect outside this rule.** The only other rule whose count moved between the stored baseline
+  and this run is `SG-TRIG-001` (46 → 2), which is PR #129's narrowing landing in `main` *after* the
+  stored report was generated — verified by scanning the 28 affected bundles with a `main` build,
+  which produces the same counts as this branch.
 - **Fixtures:** `TestConcealmentDirectiveCovered` in `pkg/rules/rules_test.go` — 32 TP rows (all ten
   leaves, "user"/"operator"/"anyone" objects) + 36 benign rows, of which **25 are verbatim corpus
   excerpts** from the 2026-08-06 audit (descriptive `silently`, the mesonbuild abstraction comment, the
