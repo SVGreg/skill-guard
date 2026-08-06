@@ -51,7 +51,7 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 		return res
 	}
 
-	st, _, err := attest.DecodeStatement(env)
+	st, raw, err := attest.DecodeStatement(env)
 	if err != nil {
 		res.Findings = append(res.Findings, prv("SG-PRV-002", model.SevCritical,
 			"Malformed attestation", err.Error(), "Re-sign the bundle."))
@@ -69,7 +69,12 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 		revoked[r] = true
 	}
 
-	pae := attest.PAE(env.PayloadType, mustDecode(env.Payload))
+	// Reuse the payload DecodeStatement already decoded rather than base64-decoding
+	// env.Payload a second time. The old helper discarded its error, so a payload
+	// that decoded here but not there would have silently produced a PAE over nil
+	// and reported "invalid signature" instead of "malformed attestation"; it also
+	// held a second full copy of an attacker-sized payload.
+	pae := attest.PAE(env.PayloadType, raw)
 	var anyValid, anyTrusted bool
 	for _, sig := range env.Signatures {
 		sigBytes, err := base64.StdEncoding.DecodeString(sig.Sig)
@@ -142,9 +147,15 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 			"Re-sign the bundle."))
 	}
 
-	// Merkle integrity.
+	// Merkle integrity. MerkleRoot returns "" for an empty leaf set — a sentinel
+	// meaning "no tree", not a root — so an empty bundle compared equal to a
+	// statement carrying an empty merkle_root and was reported as MATCH. The CLI
+	// cannot reach that (LoadBundle requires a SKILL.md), but Verify is part of the
+	// public library API and takes the *skill.Bundle it is handed. Treat an
+	// unbuildable root as a mismatch: integrity that cannot be computed is not
+	// integrity that holds.
 	got := attest.MerkleRoot(attest.BundleLeaves(b))
-	if got != st.Subject.MerkleRoot {
+	if got == "" || got != st.Subject.MerkleRoot {
 		res.Findings = append(res.Findings, prv("SG-PRV-003", model.SevCritical,
 			"Merkle root mismatch (tamper/drift)",
 			"Recomputed bundle root does not match the signed root — content changed since signing.",
@@ -176,9 +187,4 @@ func prv(id string, sev model.Severity, title, rationale, fix string) model.Find
 		Fix:        fix,
 		Confidence: 1.0,
 	}
-}
-
-func mustDecode(s string) []byte {
-	b, _ := base64.StdEncoding.DecodeString(s)
-	return b
 }

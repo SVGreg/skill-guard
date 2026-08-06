@@ -152,3 +152,52 @@ func TestVerifyFailsClosedOnUnreadableExpiry(t *testing.T) {
 		})
 	}
 }
+
+// TestVerifyEmptyBundleIsNotAMatch pins the empty-root sentinel. MerkleRoot
+// returns "" for an empty leaf set — "no tree", not a root — so an empty bundle
+// used to compare equal to a statement carrying an empty merkle_root and was
+// reported as MATCH, i.e. the integrity check failed open. The CLI cannot reach
+// this (LoadBundle requires a SKILL.md) but Verify is public library API.
+func TestVerifyEmptyBundleIsNotAMatch(t *testing.T) {
+	_, _, signer, roster := signedFixture(t)
+	empty := &skill.Bundle{}
+	st := attest.BuildStatement(empty, nil, signer, "test@example.com", 24*time.Hour)
+	if st.Subject.MerkleRoot != "" {
+		t.Fatalf("precondition: empty bundle should produce an empty root, got %q", st.Subject.MerkleRoot)
+	}
+	env, err := attest.SignWith(context.Background(), st, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Verify(empty, env, roster)
+	if res.MerkleMatch {
+		t.Error("empty bundle reported as a Merkle MATCH; integrity cannot be established over no files")
+	}
+	if !hasFinding(res, "Merkle root mismatch (tamper/drift)") {
+		t.Errorf("missing mismatch finding, got %+v", res.Findings)
+	}
+}
+
+// TestVerifyUsesTheDecodedPayload guards the PAE input after dropping the second
+// base64 decode: a signature made over the real payload must still verify.
+func TestVerifyUsesTheDecodedPayload(t *testing.T) {
+	b, env, _, roster := signedFixture(t)
+	res := Verify(b, env, roster)
+	if !res.SignatureValid || !res.Trusted {
+		t.Fatalf("valid signature no longer verifies: %+v", res)
+	}
+}
+
+// TestVerifyMalformedPayloadIsReportedAsMalformed pins the early return that made
+// the removed mustDecode helper's swallowed error unreachable: an undecodable
+// payload must be reported as malformed, not fall through to a PAE over nil and a
+// misleading "invalid signature". This held before the change and must keep
+// holding — it is the invariant that let the second decode be deleted safely.
+func TestVerifyMalformedPayloadIsReportedAsMalformed(t *testing.T) {
+	b, env, _, roster := signedFixture(t)
+	bad := &attest.Envelope{PayloadType: env.PayloadType, Payload: "!!!not base64!!!", Signatures: env.Signatures}
+	res := Verify(b, bad, roster)
+	if !hasFinding(res, "Malformed attestation") {
+		t.Errorf("want a malformed-attestation finding, got %+v", res.Findings)
+	}
+}
