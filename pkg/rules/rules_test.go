@@ -581,6 +581,17 @@ func TestConcealmentDirectiveCovered(t *testing.T) {
 		{"Never fabricate — if something isn't in the text, don't include it in the summary", false},
 		// A persona rule about where to troll, not a demand for secrecy about an action.
 		{"Never troll in group chats or external communications — keep it between us", false},
+
+		// FP — second corpus pass, after raising the leaves to 0.9 un-blinded the
+		// negation-carrying ones. "tell the user TO <act>" is instruction-giving,
+		// not disclosure; both concealment idioms now have to name their audience.
+		{"**NEVER tell the user to open a terminal or run commands.** You have built-in tools. USE THEM.", false},
+		{"**AGENT: Run these checks via exec, then format the output below. Do NOT tell the user to run anything.**", false},
+		{"Guide, don't advise. Never tell a user where they must register or whether they're legally obligated.", false},
+		{"API key or credentials for any third-party service — don't tell them to sign", false},
+		{"# Upgrade pip quietly, then install the bundled package from the skill dir.", false},
+		{"carry your Yubikey on the same keychain as your laptop bag key; keep it hidden on you.", false},
+		{"- Example: `sag \"[whispers] keep this quiet. [short pause] ok?\"`", false},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("scripts", c.text)) > 0

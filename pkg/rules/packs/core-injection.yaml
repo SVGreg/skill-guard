@@ -646,18 +646,28 @@ rules:
         # leading "do not")
         - regex: '(?i)\bwithout\s+(the\s+user''?s?\s+(knowledge|awareness|noticing)|(telling|informing|notifying|alerting)\s+(the\s+)?(user|operator|human|anyone|anybody))'
           confidence: 0.9
-        # act silently / keep this hidden / conceal <action> from the user.
+        # act silently / keep this hidden FROM SOMEONE / conceal <action> from the
+        # user. Both concealment verbs name their audience: without it, "keep it
+        # hidden on you" (physical opsec advice, seal-frameworks) and "keep this
+        # quiet" inside a text-to-speech example (sag) match on the idiom alone.
         # The hidden object is an action noun, not any noun: "hide the object
         # holder abstraction from the user" is API-design prose, not concealment.
-        - regex: '(?i)(\bact\s+silently\b|keep\s+(this|it|that)[^\n]{0,20}\b(hidden|secret|quiet|concealed)\b|(hide|conceal)\s+(this|it|that|the\s+(fact|file|step|action|change|activity|output|command|operation|download|upload|request|error|message|process|script|edit|copy|transfer|call|log|entry|detail|part))\b[^\n]{0,20}\bfrom\s+(the\s+)?(user|operator|human|owner))'
+        - regex: '(?i)(\bact\s+silently\b|keep\s+(this|it|that)[^\n]{0,20}\b(hidden|secret|quiet|concealed)\b[^\n]{0,15}\bfrom\s+(the\s+)?(user|operator|human|owner|them|anyone|anybody)|(hide|conceal)\s+(this|it|that|the\s+(fact|file|step|action|change|activity|output|command|operation|download|upload|request|error|message|process|script|edit|copy|transfer|call|log|entry|detail|part))\b[^\n]{0,20}\bfrom\s+(the\s+)?(user|operator|human|owner))'
           confidence: 0.9
         # <adverb> <bare verb> — an imperative to act without disclosure. The verb
         # must be in bare/imperative form (trailing \b), so the descriptive
         # third-person and participle forms that dominate real prose — "silently
         # deletes", "silently dropped", "silently running", "silently collects" —
         # do not match. Only adverbs and light verb-phrase heads may sit between
-        # ("silently and immediately delete", "silently make a copy").
-        - regex: '(?i)\b(silently|quietly|discreetly)((\s|[,:;])+(and|then|also|just|first|quietly|silently|immediately|automatically|quickly|discreetly|in\s+the\s+background|make\s+an?|create\s+an?|take\s+an?|perform\s+an?|do\s+an?))*(\s|[,:;])+(delete|remove|send|upload|modify|write|read|copy|exfiltrat\w*|run|execute|install|fetch|post|collect|forward|transmit|push)\b'
+        # ("silently and immediately delete", "silently make a copy"), joined by
+        # whitespace only: a comma means the adverb belongs to the *preceding*
+        # clause, which is how "Upgrade pip quietly, then install the package"
+        # (ait-squad) matched — the same register error in mirror image.
+        - regex: '(?i)\b(silently|quietly|discreetly)(\s+(and|then|also|just|first|quietly|silently|immediately|automatically|quickly|discreetly|in\s+the\s+background|make\s+an?|create\s+an?|take\s+an?|perform\s+an?|do\s+an?))*\s+(delete|remove|send|upload|modify|write|read|copy|exfiltrat\w*|run|execute|install|fetch|post|collect|forward|transmit|push)\b'
+          confidence: 0.9
+        # Sentence-initial "Silently, <verb> …" — the one comma form that is a
+        # directive rather than a trailing adverb.
+        - regex: '(?im)(^|[.!?]\s+)(silently|quietly|discreetly)\s*,\s*(delete|remove|send|upload|modify|write|read|copy|exfiltrat\w*|run|execute|install|fetch|post|collect|forward|transmit|push)\b'
           confidence: 0.9
         # "no need to tell the user" — the soft form of the same directive.
         - regex: '(?i)\b(no need|don''?t need|there''?s no need|not necessary)\b[^\n]{0,25}(to\s+)?(tell|inform|mention|notify|report|disclose)\b[^\n]{0,25}\b(the\s+)?(user|operator|human|owner|anyone|anybody)\b'
@@ -685,6 +695,15 @@ rules:
       # — the leading negation makes this *require* disclosure, the mirror image of
       # the attack.
       - '(?i)\b(do not|don''?t|never)\b[^\n]{0,45}\bwithout\s+(asking|telling|informing|notifying|getting|obtaining|first|prior|the\s+user''?s?\s+(permission|consent|approval|sign[- ]?off))'
+      # "Never tell the user TO <do something>" is instruction-giving, not
+      # disclosure — the object slot holds an action the *user* would take, not a
+      # fact being withheld. Corpus: "NEVER tell the user to open a terminal or
+      # run commands. You have built-in tools." (ai-persona-os) is the opposite of
+      # concealment, and "Never tell a user where they must register" (stripe tax
+      # guidance) is advice-limiting. The concealment sense is "tell the user
+      # THAT/ABOUT …", which this does not touch — "what you did" is kept because
+      # only "what to" is excluded.
+      - '(?i)\b(tell|telling|inform|informing|advise)\s+(the\s+|a\s+|any\s+)?(user|users|them|him|her|operator)\s+(to\s+\w|where|when|whether|how\s+to|what\s+to)'
       # Negated adverb: "must NOT silently fall back", "does not silently install",
       # "never silently run and present results" — a demand for disclosure, the
       # mirror image of the directive. Corpus: 80 occurrences / 28 bundles of this
