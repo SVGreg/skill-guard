@@ -19,11 +19,17 @@ type Result struct {
 	Present        bool
 	SignatureValid bool // at least one cryptographically valid signature
 	Trusted        bool // a valid signature from a roster key
-	MerkleMatch    bool
-	Expired        bool
-	Publisher      string
-	Statement      *attest.Statement
-	Findings       []model.Finding
+	// Revoked reports that every signature which verified did so with a key the
+	// roster lists under `revoked`. It is not the negation of Trusted: a key that
+	// is simply absent from the roster leaves both false, and the two states need
+	// different words — "the key is revoked" is a decision the consumer made,
+	// "the key is unknown" is one they have not made yet.
+	Revoked     bool
+	MerkleMatch bool
+	Expired     bool
+	Publisher   string
+	Statement   *attest.Statement
+	Findings    []model.Finding
 }
 
 // Verify checks env (may be nil) against the bundle under the trust roster.
@@ -116,6 +122,7 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 			"No signature verified against a trusted key in the roster.",
 			"Confirm the signing key is trusted and the bundle is authentic."))
 	case !anyTrusted:
+		res.Revoked = true
 		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
 			"Signing key revoked",
 			"The valid signature was made with a revoked key.",
