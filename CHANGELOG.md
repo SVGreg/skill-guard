@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.17](https://github.com/SVGreg/skill-guard/compare/v0.1.16...v0.1.17) (2026-08-08)
+
+
+### Features
+
+* **rules:** add SG-EVA-001 — self-extracting payload staged in a scanner-skipped location (AST08/AST01) ([#130](https://github.com/SVGreg/skill-guard/issues/130)) ([d1cecec](https://github.com/SVGreg/skill-guard/commit/d1cecece52ce90822f1695e8fb59fe30081b3e65))
+* **rules:** add SG-EVA-003 — bundled image/PDF as an instruction carrier (AST08/AST01) ([#150](https://github.com/SVGreg/skill-guard/issues/150)) ([0d9b2b5](https://github.com/SVGreg/skill-guard/commit/0d9b2b52ceb311305056f5c67d728206a3ff4a25))
+* **rules:** add SG-EXE-006 — dynamic-context command executed before the model sees the skill (AST01/AST03) ([#137](https://github.com/SVGreg/skill-guard/issues/137)) ([7c43c6a](https://github.com/SVGreg/skill-guard/commit/7c43c6a9eaf5f20252c2d23f8b17663f36b72f43))
+* **rules:** add SG-MEM-003 — persisted state re-loaded to govern future behaviour (AST01/AST03) ([#153](https://github.com/SVGreg/skill-guard/issues/153)) ([33c6985](https://github.com/SVGreg/skill-guard/commit/33c6985512aaaa3c4e687bf73628de0b0807ef49))
+* **rules:** add SG-REF-004 — external ruleset declared authoritative (AST05/AST01) ([#145](https://github.com/SVGreg/skill-guard/issues/145)) ([4b657d7](https://github.com/SVGreg/skill-guard/commit/4b657d733601e5f8fefc98f96a90240436502212))
+
+
+### Bug Fixes
+
+* **attest:** bound the attestation read — .skillsig was exempt from every size cap ([#139](https://github.com/SVGreg/skill-guard/issues/139)) ([d80a300](https://github.com/SVGreg/skill-guard/commit/d80a300c53ae5296c0aa2898d6925d8a3d498b40))
+* **rules:** narrow SG-TRIG-001 — require an activation anchor, not just a universal noun ([#129](https://github.com/SVGreg/skill-guard/issues/129)) ([3d5b428](https://github.com/SVGreg/skill-guard/commit/3d5b428d5bb5cc3cc8153213d04ce0156b7ea212))
+* **rules:** polish SG-INJ-010 — directive vs description, and unbreak its headline leaves ([#142](https://github.com/SVGreg/skill-guard/issues/142)) ([f371663](https://github.com/SVGreg/skill-guard/commit/f3716631b320010e5d2c818edff5de8f70e5c9cc))
+* **rules:** polish SG-MTA-001 — widen the deserialization family, unbreak its own suppress ([#152](https://github.com/SVGreg/skill-guard/issues/152)) ([e4ea726](https://github.com/SVGreg/skill-guard/commit/e4ea7268081eed02c8dfefbadfcfac26af16e960))
+* **rules:** SG-ANTI-001 no longer flags the MIT license as jailbreak framing ([#136](https://github.com/SVGreg/skill-guard/issues/136)) ([6711d85](https://github.com/SVGreg/skill-guard/commit/6711d8580d3e570767e8a38f48d57f9b94fba94d))
+* **verify:** a revoked key and an expired attestation now fail verification ([#151](https://github.com/SVGreg/skill-guard/issues/151)) ([ccb06bb](https://github.com/SVGreg/skill-guard/commit/ccb06bb6dce41ba1ab2c006aff1410347054b7a6))
+
 ## [0.1.16](https://github.com/SVGreg/skill-guard/compare/v0.1.15...v0.1.16) (2026-08-04)
 
 
