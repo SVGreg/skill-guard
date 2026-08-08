@@ -270,6 +270,64 @@ rules:
     rationale: An instruction to carry behaviour into future sessions poisons the agent's persistent context — it keeps acting on the skill's directive long after the skill is done, without the user re-invoking it (AST01/AST03).
     fix: Keep a skill's influence inside its own invocation. Do not instruct the agent to remember directives across sessions or to permanently alter how it responds.
 
+  - id: SG-MEM-003
+    title: Persisted state re-loaded to govern future behaviour
+    ast: [AST01, AST03]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest, scripts]
+    match:
+      # The read side of memory poisoning. SG-MEM-001 catches the instruction to
+      # *remember* across sessions and SG-INJ-004 the write to a memory file;
+      # neither sees the other half, which is what makes poisoned memory matter:
+      # something has to load it back and let it steer the run. SG-REF-005 owns
+      # the log/transcript/prior-tool-output carriers, so `history`, `log` and
+      # `transcript` are deliberately absent from the state nouns here.
+      #
+      # The FP population to beat is memory-management skills, which are a real
+      # category in the corpus (`memory`, `superlocalmemory`, `cognitive-memory`,
+      # `ai-persona-os`). Measured: they describe *tool calls* ("call
+      # `session_init` at session start to load context"), not "read the file and
+      # adopt what it says" — so gating on a behaviour-adoption clause separates
+      # the two. All four leaves measure 0 occurrences across 777 bundles.
+      any:
+        # load a persisted-state noun … and adopt it as behaviour
+        - regex: '(?i)\b(load|re-?load|read|restore|replay|retrieve|re-?apply|pull\s+in|check|consult)\b[^\n]{0,30}\b(memor(y|ies)|state|persona|profile|preferences?|saved\s+context|stored\s+context|notes?\s+file|cache[d]?\s+(state|context|configuration|settings)|(previous|prior|last)\s+session''?s?\s+(context|state|memor(y|ies)|settings)|MEMORY\.md|CLAUDE\.md|AGENTS\.md)\b[^\n]{0,70}\b(appl(y|ies)|adopt|carry\s+over|behave\s+accordingly|continue\s+following|persist\w*\s+across|govern\w*|obey|honou?r\s+(them|it)|follow\s+(them|it|the\s+(directives?|instructions?|preferences?))|so\s+your\s+behaviou?r)'
+          confidence: 0.8
+        # a startup/recurrence trigger + load + persisted state. No adoption
+        # clause needed: "at the start of every session, read <state file>" is
+        # already the reload mechanism, and the trigger is what separates it from
+        # an ordinary one-off read.
+        - regex: '(?i)(at\s+the\s+(start|beginning)\s+of\s+(every|each|any|the)\s+(session|conversation|chat|run|task|interaction)|on\s+startup|before\s+(answering|responding|you\s+(answer|respond|begin))|each\s+time\s+you\s+(start|run|begin)|every\s+(session|run|conversation)|all\s+future\s+runs?|future\s+sessions?)[^\n]{0,55}\b(load|re-?load|read|restore|replay|retrieve|re-?apply|pull\s+in|check|consult)\b[^\n]{0,30}\b(memor(y|ies)|state|persona|profile|preferences?|saved\s+context|stored\s+context|notes?\s+file|cache[d]?\s+(state|context|configuration|settings)|MEMORY\.md|CLAUDE\.md|AGENTS\.md)\b'
+          confidence: 0.8
+        # concealed reload — the "silently" in this rule's own threat statement.
+        # The gaps forbid a sentence boundary (a dot must be followed by a word
+        # char) so the match cannot span two sentences while still allowing
+        # dotted filenames like `profile.json`. Without that bound the leaf
+        # matched "Read SOUL.md and USER.md silently via the `read` tool. Use
+        # `memory_get` for MEMORY.md" — a clause-spanning match, the same
+        # register error SG-INJ-010's polish fixed.
+        - regex: '(?i)(\b(silently|quietly|without\s+(telling|mentioning|informing|notifying|saying))\b([^.\n]|\.\w){0,25}\b(load|re-?load|read|restore|replay|retrieve|re-?apply)\b([^.\n]|\.\w){0,30}\b(memor(y|ies)|state|persona|profile|preferences?|saved\s+context|stored\s+context|(previous|prior|last)\s+session''?s?\s+(context|state|memor(y|ies)))\b|\b(load|re-?load|read|restore|replay|retrieve|re-?apply)\b([^.\n]|\.\w){0,30}\b(memor(y|ies)|state|persona|profile|preferences?|saved\s+context|stored\s+context)\b([^.\n]|\.\w){0,55}\b(silently|quietly|without\s+(telling|mentioning|informing|notifying|saying))\b)'
+          confidence: 0.8
+        # state file → adopt → explicitly across future runs, with no load verb
+        # ("if state.yaml exists, apply the settings it contains to this and all
+        # future runs")
+        - regex: '(?i)\b(memor(y|ies)|state|persona|profile|preferences?|saved\s+context|stored\s+context|notes?\s+file)\b[^\n]{0,45}\b(appl(y|ies)|adopt|carry\s+over|behave\s+accordingly|continue\s+following|persist\w*\s+across|govern\w*|obey)[^\n]{0,60}\b(all\s+future|future\s+(runs?|sessions?|conversations?)|every\s+(future\s+)?(run|session|conversation)|subsequent\s+(runs?|sessions?))\b'
+          confidence: 0.8
+    rationale: >-
+      Memory poisoning only pays off when something reads the memory back. A skill that tells the agent
+      to re-load persisted state — a memory file, a saved persona, stored preferences — and to let it
+      govern how it behaves closes that loop: text written once, by this skill or by anything else with
+      access to the file, steers every later run without appearing in the reviewed bundle. SG-MEM-001
+      catches the instruction to remember and SG-INJ-004 the write itself; this is the read half
+      (AST01/AST03).
+    fix: >-
+      Keep a skill's influence inside its own invocation. Read persisted state as data to report on, not
+      as directives to adopt, and never instruct the agent to restore a persona or preferences silently
+      or to carry them into future sessions.
+
   - id: SG-MCP-001
     title: MCP tool-description poisoning in a bundled config
     ast: [AST04, AST01]
