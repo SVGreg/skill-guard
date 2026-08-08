@@ -12,17 +12,49 @@ rules:
     confidence: 0.95
     targets: [manifest, configs, scripts]
     match:
+      # Targets are deliberately manifest/configs/scripts and NOT body/refs: this
+      # is a *code* sink, and the prose that mentions it is overwhelmingly
+      # security education. Measured — adding the prose targets would pull in ~35
+      # occurrences of `pickle.loads()`/`yaml.load()` from Trail of Bits'
+      # vulnerability-reference skills, which teach these exact sinks.
       any:
         - regex: '!!python/(object|apply|name|module)'
           confidence: 0.95
         - regex: '!ruby/object|!!java'
           confidence: 0.9
+        # 0.8 per rule-verification.md §SG-MTA-001 ("yaml.load no SafeLoader
+        # 0.8"); the pack had drifted to 0.7.
         - regex: '(?i)\byaml\.load\s*\('
-          confidence: 0.7
+          confidence: 0.8
+        # Ruby's `Marshal.load(` is caught here too — the alternation is
+        # case-insensitive, which is deliberate rather than accidental.
         - regex: '(?i)\b(pickle|marshal)\.loads?\s*\('
           confidence: 0.8
+        # PyYAML's explicitly-unsafe loaders. These name their own danger, so
+        # there is no ambiguity to weigh: 0.9.
+        - regex: '(?i)\byaml\.(unsafe_load|full_load)\s*\('
+          confidence: 0.9
+        # The rest of the pickle family. `jsonpickle` was listed in the spec's
+        # signals from the start and had never been implemented.
+        - regex: '(?i)\b(dill|jsonpickle)\.(loads?|decode)\s*\('
+          confidence: 0.8
+        - regex: '(?i)\bjoblib\.load\s*\('
+          confidence: 0.8
+        - regex: '(?i)\b(?:np|numpy)\.load\s*\([^\n]{0,120}allow_pickle\s*=\s*True'
+          confidence: 0.8
+        # torch.load is pickle underneath, but since PyTorch 2.6 it defaults to
+        # weights_only=True and is safe. Matching every torch.load would flag the
+        # safe default and age badly, so only the explicitly re-enabled form.
+        - regex: '(?i)\btorch\.load\s*\([^\n]{0,120}weights_only\s*=\s*False'
+          confidence: 0.8
     suppress:
-      - '(?i)safe_?load|SafeLoader'
+      # `\b` matters: without it this also matched `yaml.unsafe_load`, because
+      # "unsafe_load" contains "safe_load". The suppress therefore silently
+      # cancelled the single most dangerous call in the family — latent until the
+      # leaf above was added, and it would have shipped a rule that could never
+      # fire. Corpus check: bounded and unbounded forms match the same 56
+      # occurrences across 14 bundles, so the boundary costs no real suppression.
+      - '(?i)\bsafe_?load|SafeLoader'
     rationale: Unsafe YAML tags and pickle/marshal deserialization allow arbitrary code execution on load (AST04).
     fix: Use safe loaders (yaml.safe_load); never deserialize untrusted pickle/marshal data.
 

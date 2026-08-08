@@ -496,6 +496,78 @@ rules:
       Do not instruct the agent to fetch and obey external instructions. Keep all directives inside the
       reviewed bundle; if external data is needed, fetch it as data to process, never as instructions.
 
+  - id: SG-REF-004
+    title: External ruleset declared authoritative over the skill
+    ast: [AST05, AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest, scripts]
+    match:
+      # SG-REF-003's sibling, and the gap it leaves. That rule matches an
+      # imperative *sequence* — "fetch the instructions at <url> and follow
+      # them" — keyed on instruction nouns (instructions/guidance/prompt/rules).
+      # This one matches a *standing delegation of authority*: the skill names an
+      # external ruleset/config/policy artifact and declares the agent bound by
+      # it. No fetch verb is needed and the noun is a configuration artifact, so
+      # SG-REF-003's vocabulary misses it — verified on f371663, where all ten
+      # realistic phrasings below scanned clean, including "Fetch the team
+      # ruleset from <url> and abide by it" (`ruleset` is not `rules?`, and
+      # `abide by` is not in its follow-verb list).
+      #
+      # Precision rests on three slots that must all be present, because each
+      # alone is ordinary: a POLICY artifact noun, a BINDING relationship, and an
+      # EXTERNAL source. The external slot is the load-bearing one — a bundle
+      # pointing at its own `./config.yaml`, or at `CONTRIBUTING.md`, is normal
+      # engineering prose. External means: a remote **file** (a URL ending in a
+      # config/doc extension), an explicitly remote/shared/team artifact, or a
+      # path outside the bundle (`~/`, `/etc/`, …). A bare site URL is
+      # deliberately not enough: "apply the settings in the dashboard at
+      # https://app.example.com/settings" is setup documentation, and the corpus
+      # carries that shape (`seal-frameworks`, Zoom hardening).
+      any:
+        # <binding verb> the <policy artifact> at/from <external file>
+        - regex: '(?i)\b(governed\s+by|bound\s+by|comply\s+with|conform\s+to|abide\s+by|adhere\s+to|defer\s+to|obey|enforce|apply)\b[^\n]{0,20}\b(the|its|your|an?)\s+(remote\s+|external\s+|shared\s+|team\s+|org\s+|company\s+|central\s+)?(rule\s?set|rule\s?book|rules?\s+file|polic(y|ies)|configuration|config|settings|profile|\.cursorrules|\.clinerules|\.windsurfrules|agent[-\s]?rules)\b[^\n]{0,12}\b(at|from|hosted\s+at|located\s+at|available\s+at|defined\s+in|specified\s+in|stored\s+in)\b[^\n]{0,25}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)'
+          confidence: 0.8
+        # your/this skill's rules ARE DEFINED at <external source>
+        - regex: '(?i)\b(your|the\s+agent''?s?|this\s+skill''?s?)\b[^\n]{0,25}\b(rule\s?set|rule\s?book|polic(y|ies)|configuration|config|settings|profile|behaviou?r|operating\s+rules)\b[^\n]{0,25}\b(is|are)\s+(defined|specified|maintained|hosted|stored|governed|controlled|set)\b[^\n]{0,25}\b(at|in|by|from)\b[^\n]{0,25}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)'
+          confidence: 0.8
+        # load the <policy artifact> … and comply with / follow whatever it says
+        - regex: '(?i)\b(load|fetch|download|read|pull|retrieve|consult|import|sync)\b[^\n]{0,30}\b(rule\s?set|rule\s?book|rules?\s+file|polic(y|ies)|configuration|config|settings|profile|\.cursorrules|\.clinerules|\.windsurfrules|agent[-\s]?rules)\b[^\n]{0,45}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)?[^\n]{0,45}\b(and|then|;)\b[^\n]{0,15}\b(comply\s+with|conform\s+to|abide\s+by|obey|adhere\s+to|enforce|follow\s+(whatever|what|its|their|the\s+(rules?|directives?|instructions?|polic)))\b'
+          confidence: 0.8
+        # <external source> … treat it as binding / as your rules
+        - regex: '(?i)(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)[^\n]{0,60}\b(treat|use)\s+(it|its\s+\w+|them|the\s+\w+)\s+as\s+(binding|authoritative|your\s+(rules?|polic|instructions?)|the\s+(rules?|polic|source\s+of\s+truth))'
+          confidence: 0.8
+        # <external source> … overrides/supersedes THIS document — the strongest
+        # form: an unreviewed file is declared to outrank the reviewed bundle.
+        - regex: '(?i)(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)[^\n]{0,80}\b(overrides?|takes?\s+precedence\s+over|supersedes?|outranks?|instead\s+of)\b[^\n]{0,30}\b(th(is|ese)|the)\s+(document|skill|file|instructions?|notes?|guidance|guidelines?|prose|SKILL\.md)\b'
+          confidence: 0.85
+        # defer to it OVER this document (the same precedence claim, other order)
+        - regex: '(?i)\b(governed\s+by|bound\s+by|comply\s+with|conform\s+to|abide\s+by|adhere\s+to|defer\s+to|obey|enforce|apply|defer)\b[^\n]{0,25}\b(it|them|that\s+file|the\s+(rule\s?set|rule\s?book|polic(y|ies)|configuration|config|settings|profile))\b[^\n]{0,25}\b(over|rather\s+than|instead\s+of|above)\b[^\n]{0,20}\b(th(is|ese)|the)\s+(document|skill|file|instructions?|notes?|guidance|guidelines?)\b'
+          confidence: 0.85
+        # "the authoritative/canonical <policy artifact> … <external source>"
+        - regex: '(?i)\b(authoritative|canonical|binding)\b[^\n]{0,30}\b(rule\s?set|rule\s?book|rules?\s+file|polic(y|ies)|configuration|config|settings|profile)\b[^\n]{0,40}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)'
+          confidence: 0.8
+    suppress:
+      # Copying a sample/template config as a starting point is not delegating
+      # authority to it — the file is a seed, not a standing rule source.
+      - '(?i)\b(sample|example|template|starter|reference|default)\s+(config|configuration|profile|settings|polic)'
+      # Installing a tool's own config into place (the artifact is the tool's, and
+      # the skill is the thing configuring it, not the thing obeying it).
+      - '(?i)\b(copy|install|write|create|generate|scaffold)\b[^\n]{0,25}\b(config|configuration|profile|settings)\b[^\n]{0,20}\b(to|into)\b'
+    rationale: >-
+      A skill that names an external ruleset, policy or config file and declares the agent bound by it
+      moves the real directives outside the reviewed bundle: the `SKILL.md` stays clean while whoever
+      controls that file controls the agent, and the file can change after review with no signature,
+      no diff and no re-scan. Distinct from SG-REF-003, which matches fetching *instructions* at use
+      time; here the artifact is a configuration object and the binding is a standing claim of
+      authority — often explicitly ranked above the skill's own prose (OWASP AST05).
+    fix: >-
+      Keep the rules the agent obeys inside the reviewed, signed bundle. If external configuration is
+      genuinely needed, load it as data to act on rather than as directives to obey, never let it
+      override the bundle's own instructions, and pin it by hash if it must be remote.
+
   - id: SG-REF-005
     title: Self-ingested instructions (agent's own log/output as an injection channel)
     ast: [AST05, AST01]

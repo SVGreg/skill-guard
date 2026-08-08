@@ -48,6 +48,13 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 		fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %q --key <key>\n", skillPath)
 	case res.SignatureValid && res.Trusted:
 		fmt.Printf("attestation: present, signature %sVALID%s (trusted key)\n", c(green), c(reset))
+	case res.SignatureValid && res.Revoked:
+		// Distinct from the arm below: the key *is* in the roster, listed under
+		// `revoked`. Saying "not in trust roster" here contradicted the
+		// SG-PRV-004 line printed directly underneath, and understated the
+		// state — an unknown key is a decision the consumer has not made, a
+		// revoked one is a decision they made against this key.
+		fmt.Printf("attestation: present, signature VALID but key %sREVOKED%s\n", c(red), c(reset))
 	case res.SignatureValid:
 		fmt.Printf("attestation: present, signature VALID (key not in trust roster — identity unverified)\n")
 	case hasFinding("SG-PRV-002"):
@@ -80,12 +87,33 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 	}
 }
 
+// verificationFailed decides exit code 2. The set of failing states is the
+// design's exit-code table (design §, "Verification failure: invalid signature,
+// Merkle mismatch, revoked/expired key, or attestation absent while
+// policy.attestation.required"), which is why SG-PRV-004 belongs here:
+//
+//   - SG-PRV-002 invalid/malformed/foreign-payload-type signature
+//   - SG-PRV-003 Merkle mismatch
+//   - SG-PRV-004 revoked key, expired attestation, or an expiry that cannot be
+//     read — the same fail-closed reasoning pkg/verify already applies when it
+//     sets Expired for a missing or unparseable expires_at
+//
+// SG-PRV-004 was previously absent, so `verify` exited 0 — success — on a
+// bundle signed by a key the consumer had explicitly revoked, and on an
+// attestation whose expiry had passed. A revocation list that does not fail the
+// command is decoration: CI gating on `skill-guard verify` would have accepted
+// exactly the bundle the roster was edited to reject.
+//
+// SG-PRV-005 (no roster configured) and SG-PRV-006 (integrity-only) stay
+// non-failing: they report what could not be established, not something that
+// was established and is bad.
 func verificationFailed(res *sgverify.Result, pol policy.Policy) bool {
 	if pol.Attestation.Required && !res.Present {
 		return true
 	}
 	for _, f := range res.Findings {
-		if f.RuleID == "SG-PRV-002" || f.RuleID == "SG-PRV-003" {
+		switch f.RuleID {
+		case "SG-PRV-002", "SG-PRV-003", "SG-PRV-004":
 			return true
 		}
 	}
