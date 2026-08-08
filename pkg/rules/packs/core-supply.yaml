@@ -412,3 +412,63 @@ rules:
       runs (AST08 poor scanning, AST02 supply chain). The sibling of SG-EVA-001, which hides the payload by
       location rather than by encoding.
     fix: Ship the payload in the clear so it can be reviewed and hashed. If an artifact genuinely must be encrypted at rest, do not put the passphrase in the bundle, and record the plaintext artifact's checksum so a reviewer can verify what will actually run.
+
+  - id: SG-EVA-003
+    title: Bundled image or PDF used as an instruction carrier
+    ast: [AST08, AST01]
+    severity: high
+    engine: static
+    layer: content
+    confidence: 0.8
+    targets: [body, manifest, scripts]
+    match:
+      # Third member of the evasion family: SG-EVA-001 hides the payload by
+      # LOCATION (a scanner-skipped directory), SG-EVA-002 by ENCODING (an
+      # encrypted container), and this one by MODALITY — the instructions are
+      # rendered inside a bundled image or PDF, which pkg/skill.classify files as
+      # an inert `asset` that no rule ever reads. OCR is not this scanner's job,
+      # so as with its siblings the rule matches the *pointer*, never the payload.
+      #
+      # SCOPE, STATED PLAINLY: this catches the explicit imperative — "read
+      # foo.png and run what it says" — and it does NOT catch SkillCamo (arXiv
+      # 2606.18198), whose whole method is to rewrite the surrounding prose so the
+      # image reads as an ordinary figure caption and the agent opens it on its
+      # own initiative. Triage measured that trade-off on 703 corpus bundles:
+      # "ingest verb + image noun" alone matches 86 bundles (12%) and is unusable,
+      # while adding the follow verb leaves 1 — a false positive on the *container*
+      # sense of "image". The unsophisticated half is what static text analysis can
+      # honestly reach; the rest is a T3/multimodal problem (docs/planned-rules.md).
+      #
+      # `image` is polysemous and the corpus is full of the other sense (Docker /
+      # sandbox / base images), which is why every leaf requires a file extension
+      # or an explicit bundling word ("the attached/bundled/included image"), never
+      # a bare "image".
+      any:
+        # ingest verb → bundled asset → follow/execute verb
+        - regex: '(?i)\b(open|read|view|look\s+at|inspect|examine|scan|transcribe|decode|extract|use\s+your\s+vision(\s+tool)?\s+(on|to\s+read))\b[^\n]{0,45}([\w./-]*\.(png|jpe?g|webp|gif|bmp|svg|pdf)\b|\b(the|this|that|attached|bundled|included|enclosed)\s+(image|picture|photo|screenshot|diagram|figure|chart|qr[\s-]?code|pdf)\b)[^\n]{0,45}\b(follow|obey|execute|run|carry\s+(it|them|these|those)?\s*out|do\s+what\s+it|apply\s+(it|them|the\s+steps)|comply|perform\s+the\s+(steps|commands|instructions))\b'
+          confidence: 0.8
+        # instruction noun located IN the asset → follow/execute verb ("the
+        # commands are in the attached image; run them exactly")
+        - regex: '(?i)\b(instructions?|steps?|commands?|directives?)\b[^\n]{0,30}\b(in|inside|within|from)\b[^\n]{0,20}([\w./-]*\.(png|jpe?g|webp|gif|bmp|svg|pdf)\b|\b(the|this|that|attached|bundled|included|enclosed)\s+(image|picture|photo|screenshot|diagram|figure|chart|qr[\s-]?code|pdf)\b)[^\n]{0,45}\b(follow|obey|execute|run|carry\s+(it|them|these|those)?\s*out|do\s+what\s+it|apply\s+(it|them|the\s+steps)|comply|perform\s+the\s+(steps|commands|instructions))\b'
+          confidence: 0.8
+        # asset → "treat its contents as your instructions" (the promotion form;
+        # SG-REF-005 catches the carrier-agnostic version of this sentence, but
+        # only when the wording matches its own leaf — this one is anchored on the
+        # asset, so it survives rewording of the promotion clause)
+        - regex: '(?i)([\w./-]*\.(png|jpe?g|webp|gif|bmp|svg|pdf)\b|\b(the|this|that|attached|bundled|included|enclosed)\s+(image|picture|photo|screenshot|diagram|figure|chart|qr[\s-]?code|pdf)\b)[^\n]{0,40}\b(treat|use)\s+(it|its\s+\w+|them|the\s+text|the\s+contents?)[^\n]{0,15}\bas\s+(your\s+)?(instructions?|directives?|commands?|the\s+steps)'
+          confidence: 0.8
+    suppress:
+      # The other sense of "image": containers. Build/pull/push an image and run
+      # it is ordinary tooling prose, and it is the dominant sense in the corpus.
+      - '(?i)\b(docker|podman|container|base|sandbox|oci|registry|dockerfile)\b[^\n]{0,20}\bimage\b'
+      - '(?i)\bimage\b[^\n]{0,20}\b(registry|repository|tag|digest|layer|pull|push|build)\b'
+    rationale: >-
+      Instructions rendered inside a bundled image or PDF are invisible to every text-based scanner —
+      the file is an inert asset no rule reads — while a multimodal agent reads them at run time and
+      acts on them. A skill that tells the agent to open such a file and carry out what it finds is
+      routing its real directives around review (AST08 poor scanning, AST01 injection). The payload
+      cannot be inspected; the instruction to fetch it can.
+    fix: >-
+      Keep every instruction the agent is meant to follow in reviewable text. Bundled images are fine as
+      illustrations — do not tell the agent to read one and act on its contents, and never place
+      commands, credentials or steps inside an image, a PDF or a QR code.
