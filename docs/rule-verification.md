@@ -1175,10 +1175,43 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
 ## 4. Per-rule verification — metadata, supply chain, triggers, provenance
 
 ### SG-MTA-001 — Unsafe YAML/deserialization  (AST04, critical) — **T0** — **implemented** (`core-metadata`)
-- **Signals:** front-matter or bundled YAML containing `!!python/object, !!python/apply, !!python/name, !!python/module`, Ruby `!ruby/object`, `!!java`, or code calling `yaml.load` without `SafeLoader`, `pickle.loads`, `marshal.loads`, `jsonpickle` on untrusted input.
-- **FP carve-outs:** our own parser already uses a safe loader; documentary mentions of these tags in a security doc → −0.4 (but still surface — a real tag in real front-matter is critical).
-- **Confidence:** unsafe tag in front-matter 0.95; `yaml.load` no SafeLoader 0.8.
-- **Fixtures:** TP: `!!python/object/apply:os.system ['id']`. FP: a doc explaining "avoid `!!python/object`".
+- **Signals:** unsafe YAML tags (`!!python/object|apply|name|module`, `!ruby/object`, `!!java`) and the
+  deserialization sinks — `yaml.load(` without a safe loader, `yaml.unsafe_load(`/`yaml.full_load(`,
+  `pickle`/`marshal`.`load(s)`, `dill`/`jsonpickle`, `joblib.load(`, `np.load(…, allow_pickle=True)`,
+  and `torch.load(…, weights_only=False)`. Ruby's `Marshal.load(` is caught by the same
+  case-insensitive alternation as `marshal.loads(`, which is deliberate rather than accidental.
+- **Scope: code targets only** (`manifest`, `configs`, `scripts`) — deliberately **not** `body`/`refs`.
+  This is a code sink, and the prose that mentions it is overwhelmingly security education: measured,
+  adding the prose targets pulls in ~35 occurrences of `pickle.loads()` / `yaml.load()` from Trail of
+  Bits' vulnerability-reference skills, which exist to teach these exact sinks.
+- **`torch.load` is matched only in its unsafe form.** Since PyTorch 2.6 it defaults to
+  `weights_only=True`; flagging the bare call would flag the *safe* default and age badly, so the leaf
+  requires `weights_only=False`. Same logic for `np.load`, whose default is `allow_pickle=False`.
+- **FP carve-outs:** safe loaders (`safe_load`, `SafeLoader`). **The word boundary in that carve-out is
+  load-bearing** — see below.
+- **The suppress bug this rule carried (found 2026-08-08).** The carve-out was `safe_?load` with no
+  `\b`, so it also matched **`yaml.unsafe_load`**: "unsafe_load" contains "safe_load". While no leaf
+  matched that call the bug was invisible; the moment the unsafe-loader leaf was added it would have
+  been cancelled on every line, shipping a leaf that could never fire, with nothing failing to say so.
+  Corpus check: bounded and unbounded forms suppress the **same 56 occurrences across 14 bundles**, so
+  the boundary costs no real suppression. Generalise: a suppress pattern is a *substring* match, and
+  the dangerous variant of an API is often the safe one with a prefix.
+- **Confidence:** unsafe tag 0.95; `!ruby/object`/`!!java` 0.9; explicitly-unsafe YAML loaders 0.9;
+  `yaml.load` and the pickle family 0.8. (`yaml.load` was 0.7 in the pack against 0.8 in this spec —
+  realigned to the spec.)
+- **Corpus:** **19 findings / 777 bundles, unchanged by the polish** — 18 are `pickle.load(` inside
+  *vendored* `mesonbuild` build tooling in one bundle, plus one in `superlocalmemory`. True by pattern:
+  the bundle does ship that code. Every widening above measured **0** corpus occurrences before it was
+  written, which is why recall grew with no precision cost.
+- **Fixtures:** `TestUnsafeDeserializationCovered` in `pkg/rules/rules_test.go` — 14 TP (6 pre-existing
+  shapes + 8 added, each verified uncovered beforehand) and 7 benign rows pinning the safe forms
+  (`yaml.safe_load`, `Loader=yaml.SafeLoader`, bare `torch.load`, `torch.load(weights_only=True)`, bare
+  `np.load`, `json.loads`). Bundle fixture: a `yaml.unsafe_load` of an attacker-reachable state file
+  mid-`testdata/malicious/setup.sh`, asserted by `TestMaliciousFixtureTriggersUnsafeDeserialization`.
+- **Not added, and why:** PHP `unserialize(` (6 corpus occurrences, all in Trail of Bits' PHP security
+  reference) and Java `ObjectInputStream`/`readObject` (21, all in semgrep-rule and security docs).
+  Both languages are effectively absent from the Agent Skills ecosystem, so the only thing those leaves
+  would have matched in 777 real bundles is documentation teaching people to avoid them.
 
 ### SG-MTA-002 — Front-matter schema violation  (AST04, medium/low)
 - **Signals (T0):** validate against pinned agentskills.io schema — missing/empty `name` or `description`, `name` not `^[a-z0-9-]+$`, wrong types, duplicate keys, front-matter not closed. Unknown **top-level** keys → low (spec evolves). `metadata.*` is open by spec → never flagged. Recognize reserved `signature`/`content_hash` and `metadata.skillguard.*`.
