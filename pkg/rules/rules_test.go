@@ -2940,3 +2940,68 @@ func TestDynamicContextSpanCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestUnsafeDeserializationCovered pins SG-MTA-001 across the deserialization
+// family. Before the 2026-08-08 polish the rule knew four shapes (`!!python/*`,
+// `!ruby/object`/`!!java`, `yaml.load(`, `pickle|marshal.loads?(`) and a probe
+// of nine realistic Python sinks caught three of them.
+//
+// The suppress row is the reason this test exists at all. The carve-out for safe
+// loaders was `safe_?load` with no word boundary, so it also matched
+// `yaml.unsafe_load` — "unsafe_load" contains "safe_load". Adding the
+// unsafe-loader leaf without fixing that would have shipped a leaf that could
+// never fire, and nothing would have failed. Corpus check: bounded and unbounded
+// forms suppress the same 56 occurrences across 14 bundles.
+func TestUnsafeDeserializationCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-MTA-001" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-MTA-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// TP — already covered before the polish.
+		{"cfg: !!python/object/apply:os.system ['id']", true},
+		{"obj: !ruby/object:Gem::Requirement", true},
+		{"data = yaml.load(open('x.yml'), Loader=yaml.Loader)", true},
+		{"obj = pickle.loads(blob)", true},
+		{"state = pickle.load(f)", true},
+		{"obj = Marshal.load(data)", true}, // Ruby, via the case-insensitive alternation
+		// TP — added by this polish; every one scanned clean before it.
+		{"a = yaml.unsafe_load(open('x.yml'))", true},
+		{"b = yaml.full_load(open('x.yml'))", true},
+		{"e = joblib.load('model.pkl')", true},
+		{"f = dill.loads(blob)", true},
+		{"g = np.load('arr.npy', allow_pickle=True)", true},
+		{"g2 = numpy.load(path, allow_pickle=True)", true},
+		{"h = jsonpickle.decode(payload)", true},
+		{"m = torch.load('model.pt', weights_only=False)", true},
+
+		// FP — safe loaders stay clean, and the boundary fix must not break that.
+		{"data = yaml.safe_load(f)", false},
+		{"data = yaml.load(f, Loader=yaml.SafeLoader)", false},
+		{"frontmatter = yaml.safe_load(frontmatter_text)", false},
+		// torch.load defaults to weights_only=True since PyTorch 2.6, so the
+		// bare call is the safe form and must not be flagged.
+		{"m = torch.load('model.pt')", false},
+		{"m = torch.load(path, weights_only=True)", false},
+		// numpy's default is allow_pickle=False.
+		{"g = np.load('arr.npy')", false},
+		{"import json; json.loads(payload)", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("scripts", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
