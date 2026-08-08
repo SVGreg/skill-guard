@@ -450,7 +450,7 @@ out-of-band with what they published) — the roster *is* the trust decision.
 | No trust roster (no `--policy`, or empty `trust.keys`) | `signature UNVERIFIED` | `SG-PRV-005` medium |
 | Publisher's key **in** roster, signature valid | `signature VALID (trusted key)` | none |
 | Roster has keys, but **not** this publisher's | `signature INVALID` | `SG-PRV-002` critical |
-| Key in roster but listed under `revoked` | valid but untrusted | `SG-PRV-004` high |
+| Key in roster but listed under `revoked` | `signature VALID but key REVOKED` | `SG-PRV-004` high — **exit 2** |
 | Content changed after signing | `merkle root: MISMATCH` | `SG-PRV-003` critical |
 
 > Practical takeaway for publishers: it isn't enough that *a* roster exists on
@@ -474,7 +474,7 @@ the trust anchor. See [`docs/skill-guard-design.md`](docs/skill-guard-design.md)
 |------|---------|
 | `0` | ok — scan passed/warned, or verify succeeded |
 | `1` | scan **verdict: fail** (a finding met the fail threshold) |
-| `2` | **verification failed** — invalid signature or tampered/drifted content |
+| `2` | **verification failed** — invalid signature, tampered/drifted content, a **revoked** signing key, or an attestation that is **expired** (or carries an expiry that cannot be read) |
 | `3` | usage error (bad arguments, missing file, invalid flag value) |
 | `4` | internal error |
 
