@@ -201,3 +201,36 @@ func TestVerifyMalformedPayloadIsReportedAsMalformed(t *testing.T) {
 		t.Errorf("want a malformed-attestation finding, got %+v", res.Findings)
 	}
 }
+
+// TestVerifyMarksRevokedDistinctlyFromUnknown pins Revoked as its own state
+// rather than "not Trusted". The CLI needs the distinction: revocation clears
+// Trusted, so without this field a revoked key rendered as "key not in trust
+// roster", which contradicted the SG-PRV-004 line printed underneath it. An
+// unknown key is a decision the consumer has not made; a revoked key is one
+// they made against this key.
+func TestVerifyMarksRevokedDistinctlyFromUnknown(t *testing.T) {
+	b, env, signer, roster := signedFixture(t)
+
+	revokedRoster := roster
+	revokedRoster.Revoked = []string{signer.KeyID()}
+	res := Verify(b, env, revokedRoster)
+	if !res.SignatureValid {
+		t.Fatal("signature should still verify cryptographically when the key is revoked")
+	}
+	if res.Trusted {
+		t.Error("a revoked key must not be Trusted")
+	}
+	if !res.Revoked {
+		t.Error("a revoked key must set Revoked")
+	}
+	if !hasFinding(res, "Signing key revoked") {
+		t.Error("expected SG-PRV-004 for the revoked key")
+	}
+
+	// A key that is simply absent from the roster is a different state: not
+	// trusted, but not revoked either.
+	res = Verify(b, env, policy.Trust{})
+	if res.Revoked {
+		t.Error("an unknown key must not be reported as revoked")
+	}
+}
