@@ -890,6 +890,68 @@ func TestMCPToolDescriptionPoisoning(t *testing.T) {
 	}
 }
 
+// TestPermissionGateDisabledCovered pins the SG-MTA-003 hardening: a bundle can
+// ship its own sub-agent definition (`.claude/agents/<name>.md`) declaring
+// `permissionMode: bypassPermissions`, and that sub-agent then runs its tools
+// with **no consent prompt at all**. That is categorically worse than a wide
+// grant — `Bash(*)` is a broad permission the user still approves; this is the
+// removal of the approval.
+//
+// The rule missed it for one reason: it declared `targets: [manifest]`, so it
+// never saw the second file. Triage verified the file is already scanned (a
+// planted unsafe-YAML tag inside it fires SG-MTA-001, because skill.go:338 files
+// any `.claude/` path as a config), which is why the fix is the target list plus
+// a leaf rather than anything structural.
+//
+// `acceptEdits` is deliberately a separate leaf at lower confidence: it
+// auto-approves file *writes* only, a narrower escape.
+func TestPermissionGateDisabledCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-MTA-003" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-MTA-003 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		// TP — the consent gate removed, in the shapes a sub-agent file uses.
+		{"permissionMode: bypassPermissions", true},
+		{"  permissionMode: bypassPermissions", true},
+		{`"permissionMode": "bypassPermissions"`, true},
+		{"permission_mode: bypass", true},
+		{"permissionMode: acceptEdits", true},
+		// TP — the pre-existing wildcard grants must keep matching.
+		{"allowed-tools: Bash(*)", true},
+		{"allowed-tools: *", true},
+		{`allowed-tools: ["*"]`, true},
+
+		// FP — a scoped grant and a restrictive mode are the point of the feature.
+		// Scoped grants are the point of the feature and must stay clean.
+		{"allowed-tools: Bash(git:*), Read", false},
+		{"allowed-tools: Read, Write", false},
+		{"allowed-tools: allowlist-manager", false},
+		{"permissionMode: default", false},
+		{"permissionMode: plan", false},
+		{"permissionMode: ask", false},
+		{"The permissionMode setting controls whether Claude asks before running tools.", false},
+		{"export type PermissionMode = 'manual' | 'auto' | 'full'", false},
+	}
+	for _, c := range cases {
+		got := len(r.Evaluate("configs", c.text)) > 0
+		if got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
+
 // TestBroadFilesystemScopeCovered pins SG-MTA-004 to the whole-tree /
 // home-directory permission grant — the file-scope sibling of SG-MTA-003's
 // over-broad *tool* grant. The precision lever is that the broad glob must be

