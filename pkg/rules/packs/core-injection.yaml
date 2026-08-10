@@ -63,7 +63,23 @@ rules:
           confidence: 0.9
         - regex: '(?is)<!--[^>]*?(system|instructions?|ignore|exfiltrat|POST|send|transmit)[^>]*?-->'
           confidence: 0.7
-    rationale: Non-printing characters, bidi controls, Unicode-tag ASCII smuggling, or instruction-bearing comments are invisible to human review but parsed by the agent (AST04/AST01).
+        # Signal (d), finally implemented (issue #18). SkillCloak's "Reify"
+        # operator swaps Cyrillic/Greek lookalikes into otherwise-Latin words —
+        # `ignоre previous instructions` with one Cyrillic о — so that every
+        # regex leaf in every pack stops matching while the model still reads the
+        # intended word. This is the leaf that notices the *other* leaves have
+        # been disarmed, which is why it earns a place in a rule that is
+        # otherwise about invisible characters: a homoglyph is not invisible, it
+        # is worse — it is visible and wrong.
+        #
+        # `min_count: 1` rather than the design note's `gt: 0.15`. The threshold
+        # in the note cannot fire: the attack needs one poisoned word, and across
+        # 9938 corpus files the four that carry one produce ratios of 0.0006 to
+        # 0.0048 — the densest real file is 31x below 0.15. See homoglyph.go for
+        # the measurement and the carrier predicate's three FP clauses.
+        - homoglyph_ratio: { min_count: 1 }
+          confidence: 0.65
+    rationale: Non-printing characters, bidi controls, Unicode-tag ASCII smuggling, homoglyph-substituted words, or instruction-bearing comments are invisible (or misleading) to human review but parsed by the agent (AST04/AST01).
     fix: Remove non-printing/format characters and any hidden instructions; keep content in plain, visible text.
 
   - id: SG-INJ-007

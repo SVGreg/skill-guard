@@ -41,17 +41,18 @@ type ruleDTO struct {
 }
 
 type condDTO struct {
-	Any             []condDTO `yaml:"any"`
-	All             []condDTO `yaml:"all"`
-	Not             []condDTO `yaml:"not"`
-	Regex           string    `yaml:"regex"`
-	Substring       string    `yaml:"substring"`
-	UnicodeCategory []string  `yaml:"unicode_category"`
-	BidiControl     bool      `yaml:"bidi_control"`
-	TagBlock        bool      `yaml:"tag_block"`
-	EscapeSequence  bool      `yaml:"escape_sequence"`
-	URLHost         []string  `yaml:"url_host"`
-	Confidence      *float64  `yaml:"confidence"`
+	Any             []condDTO     `yaml:"any"`
+	All             []condDTO     `yaml:"all"`
+	Not             []condDTO     `yaml:"not"`
+	Regex           string        `yaml:"regex"`
+	Substring       string        `yaml:"substring"`
+	UnicodeCategory []string      `yaml:"unicode_category"`
+	BidiControl     bool          `yaml:"bidi_control"`
+	TagBlock        bool          `yaml:"tag_block"`
+	EscapeSequence  bool          `yaml:"escape_sequence"`
+	URLHost         []string      `yaml:"url_host"`
+	HomoglyphRatio  *homoglyphDTO `yaml:"homoglyph_ratio"`
+	Confidence      *float64      `yaml:"confidence"`
 }
 
 // LoadPack parses and compiles a rule-pack from YAML bytes.
@@ -115,6 +116,7 @@ func compileCond(cd condDTO) (Condition, error) {
 		tagBlock:        cd.TagBlock,
 		escapeSequence:  cd.EscapeSequence,
 		urlHost:         cd.URLHost,
+		homoglyph:       compileHomoglyph(cd.HomoglyphRatio),
 		confidence:      cd.Confidence,
 	}
 	if cd.Regex != "" {
@@ -153,4 +155,24 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// homoglyphDTO is the YAML shape of the homoglyph_ratio primitive:
+//
+//   - homoglyph_ratio: { min_count: 1 }
+//   - homoglyph_ratio: { gt: 0.15, min_count: 2 }
+//
+// `gt` is the density gate the design note specifies; `min_count` is the one
+// that actually fires on a real document (see the measurement in homoglyph.go).
+// An empty mapping means min_count: 1 — presence.
+type homoglyphDTO struct {
+	Gt       float64 `yaml:"gt"`
+	MinCount int     `yaml:"min_count"`
+}
+
+func compileHomoglyph(d *homoglyphDTO) *homoglyphCond {
+	if d == nil {
+		return nil
+	}
+	return &homoglyphCond{Gt: d.Gt, MinCount: d.MinCount}
 }

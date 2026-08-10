@@ -40,6 +40,7 @@ type Condition struct {
 	tagBlock        bool
 	escapeSequence  bool
 	urlHost         []string
+	homoglyph       *homoglyphCond
 
 	confidence *float64 // per-pattern override
 }
@@ -52,7 +53,7 @@ func (c Condition) isLeaf() bool {
 // (an invisible char in "documentation" is still an invisible char).
 func (c Condition) structural() bool {
 	return c.unicodeCategory != nil || c.bidiControl || c.tagBlock ||
-		c.escapeSequence || c.urlHost != nil
+		c.escapeSequence || c.urlHost != nil || c.homoglyph != nil
 }
 
 // Rule is a compiled rule ready to evaluate.
@@ -242,6 +243,8 @@ func (r *Rule) evalLeaf(c Condition, text string) []match {
 		return scanEscapeSequence(text, conf)
 	case c.urlHost != nil:
 		return scanURLHost(text, c.urlHost, conf)
+	case c.homoglyph != nil:
+		return scanHomoglyph(text, c.homoglyph, conf)
 	}
 	return nil
 }
