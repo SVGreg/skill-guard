@@ -92,12 +92,22 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 
 			w := outputWriter(out)
 			defer closeWriter(w)
-			opt := report.Options{NoColor: noColor, Verbose: verbose, Source: args[0], Version: Version}
+			// Resolved per writer, not once: with --out these are two different
+			// destinations, and the file must stay escape-free even when the
+			// mirrored copy on stdout is a terminal that should be coloured.
+			// A path the user named with --out is an artifact, never a terminal,
+			// so it is unconditional there rather than a device check.
+			opt := report.Options{
+				NoColor: noColor || out != "" || report.ColorDisabled(w),
+				Verbose: verbose, Source: args[0], Version: Version,
+			}
 			if err := emit(w, rep, format, opt); err != nil {
 				return fail(4, "%v", err)
 			}
 			if !quiet && out != "" {
-				report.Text(os.Stdout, rep, opt)
+				stdoutOpt := opt
+				stdoutOpt.NoColor = noColor || report.ColorDisabled(os.Stdout)
+				report.Text(os.Stdout, rep, stdoutOpt)
 			}
 			if rep.Verdict == model.Fail {
 				return exitErr{code: 1, msg: "verdict: fail"}
@@ -255,7 +265,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 				return fail(3, "cannot read attestation %q: %v\n  re-create it with: skill-guard sign %s --key <key>", sigPath, err, args[0])
 			}
 			res := verifyBundle(b, env, pol)
-			printVerify(res, noColor, sigPath, args[0])
+			printVerify(res, noColor || report.ColorDisabled(os.Stdout), sigPath, args[0])
 
 			// Exit 2 on verification failure (design §10.5).
 			if verificationFailed(res, pol) {
@@ -273,7 +283,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 
 func keygenCmd() *cobra.Command {
 	var out, keyID, pubOut string
-	var noPub bool
+	var noPub, force bool
 	cmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate a local Ed25519 signing key",
@@ -302,15 +312,27 @@ EXIT CODES: 0 success · 4 internal error.`,
 			if out == "" {
 				out = "skill-guard.key"
 			}
+			if pubOut == "" {
+				pubOut = attest.PubPath(out)
+			}
+			// Both paths are checked BEFORE either is written, so a refusal
+			// leaves the filesystem untouched rather than half-updated.
+			if !force {
+				if err := refuseOverwrite(out, "private key"); err != nil {
+					return err
+				}
+				if !noPub {
+					if err := refuseOverwrite(pubOut, "public key"); err != nil {
+						return err
+					}
+				}
+			}
 			if err := attest.SaveKey(signer, out); err != nil {
 				return fail(4, "cannot write key to %q: %v", out, err)
 			}
 			fmt.Printf("wrote %q (mode 0600, private — keep secret)\n  keyid: %s\n  public_key: %s\n",
 				out, signer.KeyID(), signer.PublicKeyBase64())
 			if !noPub {
-				if pubOut == "" {
-					pubOut = attest.PubPath(out)
-				}
 				if err := attest.SavePub(signer, pubOut); err != nil {
 					return fail(4, "cannot write public key to %q: %v", pubOut, err)
 				}
@@ -329,6 +351,7 @@ EXIT CODES: 0 success · 4 internal error.`,
 	f.StringVar(&keyID, "keyid", "", "key identifier recorded in signatures (default derived from public key)")
 	f.StringVar(&pubOut, "pub", "", "output public key file path (default <name>.pub)")
 	f.BoolVar(&noPub, "no-pub", false, "do not write the .pub public-key file")
+	f.BoolVar(&force, "force", false, "overwrite an existing key file (DESTROYS the old private key)")
 	return cmd
 }
 

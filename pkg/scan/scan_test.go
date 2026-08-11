@@ -639,3 +639,25 @@ func TestMaliciousFixtureTriggersIPv6BindAll(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-NET-006 on the `::` bind-all listener")
 }
+
+// TestMaliciousFixtureTriggersConfigHookExecution asserts SG-EXE-007
+// end-to-end. Two lines, both in setup.sh: a persisted `diff.external` write
+// and the `GIT_EXTERNAL_DIFF` env form. It checks the *line numbers are
+// distinct* because the env leaf originally began with `[\s;&(]`, which matches
+// \n — the match started on the preceding line's newline, the finding was
+// attributed one line early, and per-line dedup then dropped it whenever that
+// earlier line already had a hit. Asserting only "SG-EXE-007 appears" would
+// have passed throughout. Its own test rather than a row in TestMaliciousFails'
+// `want` map, for the same conflict reason as its siblings.
+func TestMaliciousFixtureTriggersConfigHookExecution(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	lines := map[int]bool{}
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-EXE-007" && f.File == "setup.sh" {
+			lines[f.StartLine] = true
+		}
+	}
+	if len(lines) < 2 {
+		t.Errorf("expected SG-EXE-007 on both the git-config and the env-var line of setup.sh, got lines %v", lines)
+	}
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -139,5 +140,55 @@ func TestPrintVerifyDistinguishesRevokedFromUnknownKey(t *testing.T) {
 	}
 	if strings.Contains(out, "REVOKED") {
 		t.Errorf("unknown key wrongly reported as revoked; got:\n%s", out)
+	}
+}
+
+// TestRefuseOverwriteProtectsExistingKey pins the keygen clobber guard.
+//
+// `keygen --out publisher.key` run twice used to overwrite the first key
+// silently and exit 0 — new keyid, new public key, old private key gone. That
+// matters more here than it would for most tools: skill-guard's trust model is
+// deliberately local and decentralized, with no key server and no identity
+// authority, so a signing key's only value is that consumers pasted its public
+// key into `trust.keys` in their own policy. Destroying it invalidates every
+// roster entry anyone made, and nothing already signed can be re-signed under
+// that identity again.
+func TestRefuseOverwriteProtectsExistingKey(t *testing.T) {
+	dir := t.TempDir()
+
+	absent := filepath.Join(dir, "new.key")
+	if err := refuseOverwrite(absent, "private key"); err != nil {
+		t.Errorf("refuseOverwrite on an absent path returned %v, want nil", err)
+	}
+
+	existing := filepath.Join(dir, "publisher.key")
+	if err := os.WriteFile(existing, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := refuseOverwrite(existing, "private key")
+	if err == nil {
+		t.Fatal("refuseOverwrite on an existing key returned nil — the clobber guard is off")
+	}
+	ee, ok := err.(exitErr)
+	if !ok {
+		t.Fatalf("got %T, want exitErr so the process exit code is the documented usage code", err)
+	}
+	if ee.code != 3 {
+		t.Errorf("exit code %d, want 3 (usage)", ee.code)
+	}
+	// The message has to name the escape hatch, or the guard just blocks people.
+	if !strings.Contains(ee.msg, "--force") {
+		t.Errorf("refusal does not mention --force:\n%s", ee.msg)
+	}
+
+	// A dangling symlink still counts as "something is here": Lstat, not Stat.
+	// attest.writeSecret refuses to follow symlinks rather than write through
+	// them, so silently generating over one would be inconsistent with that.
+	dangling := filepath.Join(dir, "dangling.key")
+	if err := os.Symlink(filepath.Join(dir, "nowhere"), dangling); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := refuseOverwrite(dangling, "private key"); err == nil {
+		t.Error("refuseOverwrite followed a dangling symlink instead of refusing")
 	}
 }
