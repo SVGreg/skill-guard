@@ -89,15 +89,14 @@ For each genuinely-new, uncovered threat:
 The backlog doc is committed, so its change rides a PR (issues are created directly; the doc edit
 is the PR):
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b research/<slug>
-git add docs/planned-rules.md
-git commit -m "docs(backlog): add <SG-ID> — <threat> from research"
-git push -u origin HEAD
-gh pr create --label automated --label research \
-  --title "docs(backlog): <SG-ID> — <threat>" \
-  --body "Automated threat-research cycle. New backlog entry + tracking issue #<n>. Source: <url>. Bot-generated; needs review."
-```
+Ship per **`sg-maintain` §Ship it**, with:
+
+- **branch** `research/<slug>` · **label** `research` · **paths** `docs/planned-rules.md`
+- **commit** `docs(backlog): add <SG-ID> — <threat> from research`
+- **evidence** for the body: the threat, the source URL, the tracking issue number, and what
+  skill-guard does with it today (the coverage check from §3)
+
+This is a **non-code** PR, so merge it once CI is green rather than leaving it for the owner.
 
 Insert the new backlog row in a *distinct* region of the table (not always the end) so it does not
 collide with another open backlog PR. The tracking issue stays open until `sg-rule-implement` ships

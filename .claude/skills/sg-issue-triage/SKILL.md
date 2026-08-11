@@ -144,19 +144,15 @@ pick it up later. **That file has two tables — pick the one that fits:**
 | an engine, CLI, parsing, or resource change | `## Engine & hardening backlog (not detection rules)` | `Area \| Item \| Priority \| Status \| Source` — **no** `SG-` id |
 
 A code-hygiene or engine issue has no AST id and no rule id; forcing it into the rule table (or
-skipping the backlog because it doesn't fit there) is the failure mode to avoid. Commit the doc
-change on a branch and open a small PR:
+skipping the backlog because it doesn't fit there) is the failure mode to avoid.
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b triage/backlog-$(date +%Y%m%d)
-git add docs/planned-rules.md
-git commit -m "docs(backlog): track issues #<a>,#<b> from triage"
-git push -u origin HEAD
-gh pr create --label automated --label triage \
-  --title "docs(backlog): track triaged issues" \
-  --body "Backlog rows for must-have/useful issues surfaced during triage. Bot-generated; needs review."
-```
+Ship the doc change per **`sg-maintain` §Ship it**, with:
 
-If no backlog change was needed this cycle, skip the PR — triage comments alone are the output.
+- **branch** `triage/backlog-$(date +%Y%m%d)` · **label** `triage` · **paths** `docs/planned-rules.md`
+- **commit** `docs(backlog): track issues #<a>,#<b> from triage`
+- **evidence** for the body: which issues got rows, in which of the two tables, and why
+
+This is a **non-code** PR, so merge it once CI is green. If no backlog change was needed this cycle,
+skip the PR — triage comments alone are the output.
 
 Report which issues were graded (grade + label applied) and which were closed as already-shipped.
