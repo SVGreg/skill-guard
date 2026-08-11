@@ -37,6 +37,10 @@ Add the rule block to the pack that matches its family (`core-injection`, `core-
 `engine: static`, `layer`, `confidence`, `targets`, `match`, `rationale`, `fix`. Add `suppress`
 patterns for known benign phrasings.
 
+**Bump the pack's `version:` (line 3) in the same commit** — a new rule id is a **minor** bump
+(`1.4.0` → `1.5.0`); a brand-new pack file starts at `1.0.0`. Rules for the other levels:
+`docs/skill-guard-design.md §8.1`.
+
 ## 4. Test it
 
 - **Rule-level table test** in `pkg/rules/rules_test.go` (model:

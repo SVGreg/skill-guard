@@ -44,7 +44,8 @@ steps. If it's docs/tooling, scope it accordingly. If the ask is genuinely ambig
 - Add/extend tests that fail before and pass after.
 - Preflight: `gofmt -l .` empty · `go vet ./...` · `go test ./...` · exit-code smoke
   (`scan testdata/malicious`→1, `scan testdata/benign`→0) · dogfood any skill touched.
-- If a rule pack changed, regenerate evaluation and cross-check (see `sg-rule-polish` §6).
+- If a rule pack changed: bump its `version:` in the same commit (`docs/skill-guard-design.md §8.1`),
+  then regenerate evaluation and cross-check (see `sg-rule-polish` §7).
 
 ## 4. Open the PR and link back
 
