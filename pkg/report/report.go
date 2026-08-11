@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -244,14 +245,70 @@ func sanitize(s string) string {
 // needsEscape reports whether a rune can forge or reorder terminal output:
 // the C0 controls and DEL, the C1 controls, and the bidi formatting characters
 // (which can visually reverse an entire line without emitting any escape).
+//
+// The bidi arm is Unicode's Bidi_Control property in full — ALM, LRM, RLM, the
+// LRE/RLE/PDF/LRO/RLO embeddings, and the LRI/RLI/FSI/PDI isolates. U+061C ALM
+// was the one member missing: the set was written as "LRM/RLM plus the
+// embeddings and isolates", which reads complete but silently omits the Arabic
+// mark, and a filename may contain it as readily as any other. It is escaped
+// for the same reason LRM and RLM already are — it is a formatting control that
+// changes how neighbouring characters are ordered on screen, not a glyph.
 func needsEscape(r rune) bool {
 	switch {
 	case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
 		return true
-	case r == 0x200e || r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+	case r == 0x061c, r == 0x200e || r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
 		return true
 	}
 	return false
+}
+
+// ColorDisabled reports whether ANSI color must be suppressed when writing to w.
+// Callers combine it with any explicit --no-color flag; Options.NoColor stays
+// the single authority inside this package, so Text remains a pure function of
+// its inputs and tests never depend on the environment.
+//
+// This exists because the package took considerable trouble to keep *foreign*
+// escape sequences off the terminal (see sanitize) while unconditionally writing
+// its *own* into every redirected file: `scan x > report.txt` and, worse,
+// `scan x --format text --out report.txt` — where the user explicitly asked for
+// a file artifact — both produced 66 raw ESC bytes. CI logs got the same soup.
+//
+// Two rules only: NO_COLOR (no-color.org — set and non-empty disables, whatever
+// its value) wins, then the writer itself must be a character device. Anything
+// that is not an *os.File — a bytes.Buffer, a network conn — cannot be shown to
+// be a terminal, so it is treated as not one.
+//
+// FORCE_COLOR is deliberately NOT honoured, and this was measured rather than
+// assumed. It was in the first cut of this function as the escape hatch for a
+// deliberate `| less -R`; the environment this was developed in exports
+// FORCE_COLOR=3, so the redirect that motivated the whole fix still produced 66
+// ESC bytes. Agent harnesses and CI runners set it routinely, which means
+// honouring it silently reverses the fix in exactly the environments where a
+// text report is most likely to be redirected into a file or a log. NO_COLOR is
+// a documented cross-language convention; FORCE_COLOR is a Node/chalk one that
+// few Go CLIs implement. If the `| less -R` case needs an escape hatch it should
+// be an explicit --color=always flag, which is a UX decision, not an env var
+// that can be set three layers up the process tree.
+//
+// Known limitation: os.ModeCharDevice is true for /dev/null, which isatty(3)
+// would reject. Writing color to /dev/null is harmless, and the two cases that
+// actually matter — regular files and pipes — are both classified correctly
+// without taking golang.org/x/term as a dependency (the project is cobra +
+// yaml.v3 and stdlib, deliberately).
+func ColorDisabled(w io.Writer) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return true
+	}
+	f, ok := w.(interface{ Stat() (os.FileInfo, error) })
+	if !ok {
+		return true
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return true
+	}
+	return fi.Mode()&os.ModeCharDevice == 0
 }
 
 func colorer(noColor bool) func(string) string {

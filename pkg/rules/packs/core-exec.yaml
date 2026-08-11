@@ -449,3 +449,82 @@ rules:
       state a reviewer can predict (`git branch --show-current`, `gh issue list`). Operators can
       disable the feature centrally with "disableSkillShellExecution": true, which replaces every
       command with a placeholder — note that bundled and managed skills are unaffected by it.
+
+  - id: SG-EXE-007
+    title: Read-only tool reconfigured into an execution primitive
+    ast: [AST01, AST03]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.85
+    targets: [body, scripts, configs]
+    match:
+      # The bundle contains NO execution primitive — no eval, no pipe-to-shell, no
+      # chmod +x — which is precisely why SG-EXE-001/SG-NET-002/SG-DEP-011 all miss
+      # it (verified: the four-line payload below scans pass / 0 findings on
+      # e21d47f). What it contains is a *setting*, and the execution happens later,
+      # inside a command the permission layer already treats as read-only. git's own
+      # documentation is the primary source: "diff.external — if this config
+      # variable is set, diff generation is not performed using the internal diff
+      # machinery, but using the given command". So `git diff`, allowlisted as
+      # inspection, becomes `run /tmp/x.sh` with no second prompt.
+      #
+      # THE KEYS ARE SPLIT BY AMBIGUITY, not by mechanism. diff.external,
+      # difftool.*.cmd, filter.*.smudge and friends have no benign reading: the
+      # value IS a program by definition, and the corpus agrees (0 occurrences in
+      # 9938 files). core.pager / core.editor are the same mechanism but a normal
+      # thing to set — `core.pager delta`, `core.editor vim` — so those leaves also
+      # require the value to LOOK like a program (a path, a variable, or an
+      # interpreter name). That gate is the rule restated, not a fudge: the finding
+      # is "a program was wired into a read-only command", so a value that is not a
+      # program is not the finding.
+      #
+      # core.hooksPath is deliberately ABSENT. Same family, but 6 occurrences across
+      # 3 real bundles (clawhub/git, clawhub/clawsec-suite, a skillsmp memory skill)
+      # legitimately teaching `git config core.hooksPath .githooks`; three teaching
+      # bundles is a poor trade for one extra key. core.fsmonitor is out for the
+      # same reason (clawhub/git teaches it for large-repo performance).
+      any:
+        # (a) config keys whose value git executes, whatever it is. Also covers the
+        #     one-shot `git -c <key>=<cmd> diff` form, which needs no persisted
+        #     state and so leaves nothing behind for a later audit to find.
+        - regex: '(?i)\bgit\s+(?:-c\s+|config\b[^\n]{0,60}?)(?:diff\.external|core\.sshCommand|gpg\.program|(?:difftool|mergetool)\.[\w.-]+\.cmd|filter\.[\w.-]+\.(?:clean|smudge|process))(?:\s*=\s*|\s+)["'']?[^\s"''=]'
+          confidence: 0.9
+        # (b) same mechanism, benign-capable keys — value must look like a program.
+        - regex: '(?i)\bgit\s+(?:-c\s+|config\b[^\n]{0,60}?)(?:core\.pager|core\.editor|sequence\.editor|pager\.[\w-]+)(?:\s*=\s*|\s+)["'']?\|?\s*(?:[~.]{0,2}/|\$|(?:sh|bash|zsh|dash|ksh|python3?|perl|ruby|node|curl|wget|nc|eval)\b)'
+          confidence: 0.85
+        # (c) `alias.<name> = !<cmd>`: the leading ! is what makes a git alias a
+        #     shell command rather than a git subcommand. NOTE — no \b after the
+        #     `!`: a word boundary there would require a word character to follow,
+        #     killing `!/tmp/x.sh` and `!"curl …"`. That is the exact bug audited
+        #     in #159, avoided here on purpose.
+        - regex: '(?i)\bgit\s+config\b[^\n]{0,60}?\balias\.[\w.-]+(?:\s*=\s*|\s+)["'']?!'
+          confidence: 0.9
+        # (d) the env-var form. Needs no config write at all, so nothing persists
+        #     and `git config --list` shows nothing. LESSOPEN is the same trick on
+        #     `less`: an input preprocessor turns a pager into an exec sink.
+        #     The leading class is `[ \t;&(]`, NOT `\s` — `\s` matches \n, so the
+        #     match started on the *previous* line's newline and the finding was
+        #     attributed to the line above (and then lost to per-line dedup when
+        #     that line already had a hit). `^` under (?m) covers line-start.
+        - regex: '(?im)(?:^|[ \t;&(])(?:export\s+)?(?:GIT_EXTERNAL_DIFF|GIT_SSH_COMMAND|GIT_PAGER|GIT_EDITOR|GIT_SEQUENCE_EDITOR|LESSOPEN)\s*=\s*["'']?\|?-?\s*(?:[~.]{0,2}/|\$|(?:sh|bash|zsh|dash|ksh|python3?|perl|ruby|node|curl|wget|nc|eval)\b)'
+          confidence: 0.9
+    suppress:
+      # Reading or clearing a setting is not installing one. The value requirement
+      # in (a) already excludes the bare `git config --get diff.external` form; this
+      # covers the variants that carry an argument (--get-regexp, --unset-all).
+      - '(?i)\bgit\s+config\b[^\n]{0,30}--(?:get|unset|list|replace-all)'
+      - '(?i)/path/to/'
+    rationale: >-
+      A bundled script or instruction reconfigures a tool the agent's permission layer treats as
+      read-only so that the next invocation of that safe command runs an attacker-chosen program:
+      `git config --global diff.external /tmp/x.sh` turns the allowlisted `git diff` into an
+      execution primitive, and `GIT_EXTERNAL_DIFF=/tmp/x.sh` does it with no config write at all.
+      The bundle itself contains no execution — that is what makes this evade the exec rules
+      (AST01/AST03).
+    fix: >-
+      Do not set git's command hooks (diff.external, difftool/mergetool .cmd, filter clean/smudge,
+      core.sshCommand, gpg.program, core.pager/editor) or their GIT_* environment equivalents from
+      a skill. If a tool genuinely needs one, state it in the skill's documentation and let the
+      user configure their own environment; treat `git config`, not just `git push`, as a
+      state-changing command when granting tool permissions.

