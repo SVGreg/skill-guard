@@ -3,6 +3,8 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -134,5 +136,101 @@ func TestJSONEscapesControlChars(t *testing.T) {
 	}
 	if len(back.Findings) != 1 || back.Findings[0].File != name {
 		t.Errorf("filename did not round-trip: %+v", back.Findings)
+	}
+}
+
+// TestSanitizeEscapesArabicLetterMark pins U+061C. The bidi arm of needsEscape
+// was written as "LRM/RLM plus the embeddings and isolates", which reads
+// complete but omits the one remaining member of Unicode's Bidi_Control
+// property. A filename can carry it as readily as any other formatting control.
+func TestSanitizeEscapesArabicLetterMark(t *testing.T) {
+	for _, r := range []rune{
+		0x061c,         // ALM — the one that was missing
+		0x200e, 0x200f, // LRM, RLM
+		0x202a, 0x202b, 0x202c, 0x202d, 0x202e, // LRE, RLE, PDF, LRO, RLO
+		0x2066, 0x2067, 0x2068, 0x2069, // LRI, RLI, FSI, PDI
+	} {
+		if !needsEscape(r) {
+			t.Errorf("Bidi_Control %#U is not escaped", r)
+		}
+	}
+	if got := sanitize("notes\u061cgnp.sh"); got != `notes\u061cgnp.sh` {
+		t.Errorf("sanitize(ALM) = %q, want the escaped form", got)
+	}
+}
+
+// TestColorDisabled pins the destinations that must never receive ANSI escapes.
+// Before this, pkg/report took considerable trouble to keep *foreign* escapes
+// off the terminal (sanitize) while unconditionally writing its *own* into
+// every redirected file: `scan x > report.txt` and `scan x --out report.txt`
+// each produced 66 raw ESC bytes.
+//
+// The FORCE_COLOR row is the load-bearing one. An earlier cut honoured
+// FORCE_COLOR as the escape hatch for a deliberate `| less -R`, and the
+// environment this was written in exports FORCE_COLOR=3 — so the redirect that
+// motivated the fix still came out with all 66 escapes. Agent harnesses and CI
+// runners set it routinely; honouring it silently reverses the fix exactly
+// where a text report is most likely to be redirected.
+func TestColorDisabled(t *testing.T) {
+	regular, err := os.CreateTemp(t.TempDir(), "report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer regular.Close()
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	defer pw.Close()
+
+	cases := []struct {
+		name string
+		w    io.Writer
+		env  map[string]string
+		want bool
+	}{
+		{"regular file", regular, nil, true},
+		{"pipe", pw, nil, true},
+		{"non-file writer", &bytes.Buffer{}, nil, true},
+		{"NO_COLOR set", &bytes.Buffer{}, map[string]string{"NO_COLOR": "1"}, true},
+		// no-color.org: presence disables, whatever the value.
+		{"NO_COLOR with an odd value", &bytes.Buffer{}, map[string]string{"NO_COLOR": "0"}, true},
+		{"FORCE_COLOR does not resurrect colour on a file", regular,
+			map[string]string{"FORCE_COLOR": "3"}, true},
+		{"FORCE_COLOR does not resurrect colour on a pipe", pw,
+			map[string]string{"FORCE_COLOR": "3"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("NO_COLOR", "")
+			t.Setenv("FORCE_COLOR", "")
+			os.Unsetenv("NO_COLOR")
+			os.Unsetenv("FORCE_COLOR")
+			for k, v := range c.env {
+				t.Setenv(k, v)
+			}
+			if got := ColorDisabled(c.w); got != c.want {
+				t.Errorf("ColorDisabled = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestTextWritesNoEscapesWhenColorDisabled is the end-to-end half: with the
+// resolved option, a report destined for a file carries no ESC at all.
+func TestTextWritesNoEscapesWhenColorDisabled(t *testing.T) {
+	rep := &scan.Report{
+		Verdict: model.Fail, RiskScore: 100, RiskTier: "L3",
+		Findings: []model.Finding{{
+			RuleID: "SG-NET-002", AST: []string{"AST01"},
+			Severity: model.SevCritical, Title: "Pipe-to-shell execution",
+			File: "setup.sh", StartLine: 3,
+		}},
+	}
+	var buf bytes.Buffer
+	Text(&buf, rep, Options{NoColor: ColorDisabled(&buf)})
+	if strings.ContainsRune(buf.String(), 0x1b) {
+		t.Errorf("ESC reached a non-terminal writer:\n%q", buf.String())
 	}
 }
