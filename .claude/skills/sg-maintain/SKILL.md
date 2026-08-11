@@ -74,10 +74,13 @@ enforces them.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.
-   **If you edited any file under `.claude/skills/`, re-sign that bundle and commit the updated
-   `.skillsig`** — `skill-guard sign .claude/skills/<name> --identity <yours>` — then confirm
-   `skill-guard verify .claude/skills/<name>` exits 0. An edited `SKILL.md` invalidates its
-   attestation's Merkle root, and nothing else in the repo catches that yet.
+   **If you edited any file under `.claude/skills/`, that bundle's `.skillsig` is now stale** — an
+   edited `SKILL.md` changes the Merkle root, so `skill-guard verify` reports `MISMATCH` until the
+   bundle is re-signed. **You cannot fix this here.** Signing is done from a separate workstation
+   and the private key is deliberately absent from this machine. Never run `skill-guard keygen`, and
+   never sign with a substitute key, to make `verify` pass — that would defeat the trust model this
+   project exists to enforce. Instead, **list every skill bundle you touched in the PR body under a
+   "needs re-signing" line**, so the owner re-signs out of band.
    **If the PR touches `pkg/rules/packs/*.yaml`, that pack's `version:` (line 3) must be bumped in
    the same commit** — **minor** when the pack can now produce more or higher-severity findings
    (new rule, new match branch, new target, raised severity/confidence), **patch** when it can only
