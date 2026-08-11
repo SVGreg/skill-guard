@@ -273,7 +273,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 
 func keygenCmd() *cobra.Command {
 	var out, keyID, pubOut string
-	var noPub bool
+	var noPub, force bool
 	cmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate a local Ed25519 signing key",
@@ -302,15 +302,27 @@ EXIT CODES: 0 success · 4 internal error.`,
 			if out == "" {
 				out = "skill-guard.key"
 			}
+			if pubOut == "" {
+				pubOut = attest.PubPath(out)
+			}
+			// Both paths are checked BEFORE either is written, so a refusal
+			// leaves the filesystem untouched rather than half-updated.
+			if !force {
+				if err := refuseOverwrite(out, "private key"); err != nil {
+					return err
+				}
+				if !noPub {
+					if err := refuseOverwrite(pubOut, "public key"); err != nil {
+						return err
+					}
+				}
+			}
 			if err := attest.SaveKey(signer, out); err != nil {
 				return fail(4, "cannot write key to %q: %v", out, err)
 			}
 			fmt.Printf("wrote %q (mode 0600, private — keep secret)\n  keyid: %s\n  public_key: %s\n",
 				out, signer.KeyID(), signer.PublicKeyBase64())
 			if !noPub {
-				if pubOut == "" {
-					pubOut = attest.PubPath(out)
-				}
 				if err := attest.SavePub(signer, pubOut); err != nil {
 					return fail(4, "cannot write public key to %q: %v", pubOut, err)
 				}
@@ -329,6 +341,7 @@ EXIT CODES: 0 success · 4 internal error.`,
 	f.StringVar(&keyID, "keyid", "", "key identifier recorded in signatures (default derived from public key)")
 	f.StringVar(&pubOut, "pub", "", "output public key file path (default <name>.pub)")
 	f.BoolVar(&noPub, "no-pub", false, "do not write the .pub public-key file")
+	f.BoolVar(&force, "force", false, "overwrite an existing key file (DESTROYS the old private key)")
 	return cmd
 }
 
