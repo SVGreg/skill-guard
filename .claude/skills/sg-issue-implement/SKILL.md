@@ -42,26 +42,19 @@ steps. If it's docs/tooling, scope it accordingly. If the ask is genuinely ambig
 
 - Make the change on a feature branch, matching surrounding style.
 - Add/extend tests that fail before and pass after.
-- Preflight: `gofmt -l .` empty · `go vet ./...` · `go test ./...` · exit-code smoke
-  (`scan testdata/malicious`→1, `scan testdata/benign`→0) · dogfood any skill touched.
+- Preflight is `sg-maintain` §Ship it step 1.
 - If a rule pack changed: bump its `version:` in the same commit (`docs/skill-guard-design.md §8.1`),
   then regenerate evaluation and cross-check (see `sg-rule-polish` §7).
 
 ## 4. Open the PR and link back
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b issue/<n>-<slug>
-git add -A
-git commit -m "<type>(<scope>): <what> (closes #<n>)"
-git push -u origin HEAD
-# rule-implement type label (+ research when issue #<n> came from sg-threat-research)
-gh pr create --label automated --label rule-implement \
-  --title "<type>(<scope>): <short> (#<n>)" \
-  --body "Implements #<n> (owner-greenlit via Implement command). <summary of change + tests>. Closes #<n>. Bot-generated; needs review."
-```
+Ship per **`sg-maintain` §Ship it**, with:
 
-The `Closes #<n>` in the body is **mandatory** — it auto-closes issue #<n> when the PR merges. If the
-issue was filed by `sg-threat-research`, also pass `--label research` so the source is visible.
+- **branch** `issue/<n>-<slug>` · **label** `rule-implement` (+ `research` when issue #<n> came from
+  `sg-threat-research`) · **paths** `-A`
+- **commit** `<type>(<scope>): <what> (closes #<n>)`
+- **evidence** for the body: `Implements #<n> (owner-greenlit via Implement command)`, the change,
+  the tests, and **`Closes #<n>`** — mandatory here, it is what auto-closes the issue on merge.
 
 Then comment on the issue so the trail is clear:
 

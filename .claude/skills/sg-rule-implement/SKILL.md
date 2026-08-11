@@ -55,13 +55,12 @@ go test ./pkg/rules/ ./pkg/scan/ -v
 
 ## 5. Verify end-to-end
 
-- `gofmt -l .` empty · `go vet ./...` · `go test ./...` all green.
-- Exit-code smoke: `scan testdata/malicious`→1, `scan testdata/benign`→0.
+Standard preflight is `sg-maintain` §Ship it step 1. Beyond it, this cycle owes one thing:
+
 - Regenerate evaluation and confirm the new rule's corpus hits are ones you can defend, with no
   movement in the other rules' counts (git-ignored, local sanity check):
   `go build -o skill-guard ./cmd/skill-guard && evaluation/scripts/run_scans.sh && python3 evaluation/scripts/aggregate.py`
   — mind the parallelism cap in `CLAUDE.md`.
-- Dogfood: `go run ./cmd/skill-guard scan .claude/skills/sg-rule-implement` passes.
 
 ## 6. Update docs and backlog
 
@@ -72,18 +71,15 @@ go test ./pkg/rules/ ./pkg/scan/ -v
 
 ## 7. Open the PR
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b rule/<SG-ID>-<slug>
-git add pkg/rules/ testdata/ docs/
-git commit -m "feat(rules): add <SG-ID> — <threat> (AST0X)"
-git push -u origin HEAD
-# type label: rule-implement (+ research when the backlog row was filed by sg-threat-research)
-gh pr create --label automated --label rule-implement$( [ -n "$ISSUE" ] && echo " --label research" ) \
-  --title "feat(rules): <SG-ID> — <threat>" \
-  --body "Implements backlog entry <SG-ID> (AST0X). New pack rule + tests + docs; evaluation cross-checked, no regressions.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
-```
+Ship per **`sg-maintain` §Ship it**, with:
 
-**Close the tracking issue.** If the backlog entry was filed from a GitHub issue, `Closes #<n>` in
-the body is **mandatory** — it auto-closes the tracking issue when the PR merges. (If the row was
-filed by `sg-threat-research`, `$ISSUE` is that issue number; the second `--label research` marks the
-source.) Report the PR link and mark the cycle done.
+- **branch** `rule/<SG-ID>-<slug>` · **label** `rule-implement` (+ `research` when the backlog row
+  was filed by `sg-threat-research`)
+- **paths** `pkg/rules/ testdata/ docs/`
+- **commit** `feat(rules): add <SG-ID> — <threat> (AST0X)`
+- **evidence** for the body: what the rule detects and why that shape, the new tests, and the
+  corpus result — hits, and a defence of each one, or an explicit "0 hits on the corpus".
+
+**Close the tracking issue.** If the backlog entry came from a GitHub issue, `Closes #<n>` in the
+body is **mandatory** — it auto-closes the tracking issue on merge. Report the PR link and mark the
+cycle done.

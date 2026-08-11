@@ -168,9 +168,8 @@ Re-run the tests until every `want:true` matches and every `want:false` doesn't.
 
 ## 7. Guard against regressions
 
-- `go test ./...` — full suite green.
-- Exit-code smoke: `go run ./cmd/skill-guard scan testdata/malicious` → exit 1;
-  `... scan testdata/benign` → exit 0.
+Standard preflight is `sg-maintain` §Ship it step 1. This cycle owes two things beyond it:
+
 - **If you changed a pack**, re-run the corpus and measure the change on **both** axes. You already
   have the step-3 numbers as your before; save them first so the comparison is real:
   ```sh
@@ -187,19 +186,14 @@ Re-run the tests until every `want:true` matches and every `want:false` doesn't.
 - Check the **other** rules' counts too: a shared leaf, a `suppress` line, or a target change can
   move a rule you weren't touching. Any non-zero delta outside your rule is either explained or
   reverted.
-- Dogfood: `go run ./cmd/skill-guard scan .claude/skills/sg-rule-polish` still passes.
 
 ## 8. Open the PR
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b polish/<rule-id>-<slug>
-git add pkg/rules/ testdata/ docs/rule-verification.md
-git commit -m "fix(rules): <widen|narrow> <RULE-ID> — <what>"
-git push -u origin HEAD
-gh pr create --label automated --label rule-polish \
-  --title "fix(rules): polish <RULE-ID> — <short>" \
-  --body "..."
-```
+Ship per **`sg-maintain` §Ship it**, with:
+
+- **branch** `polish/<rule-id>-<slug>` · **label** `rule-polish`
+- **paths** `pkg/rules/ testdata/ docs/rule-verification.md`
+- **commit** `fix(rules): <widen|narrow> <RULE-ID> — <what>`
 
 The PR body must report **both axes with numbers**, since that is the evidence a reviewer needs:
 
