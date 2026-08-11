@@ -541,6 +541,18 @@ rules:
 
 Matcher primitives (`static`): `regex` (RE2 only — no backtracking ReDoS), `substring`, `glob`, `unicode_category`, `bidi_control`, `homoglyph_ratio`, `entropy` (delegates to `secret`), `ast_call` (language-aware call match), `yaml_tag`, `json_path`, `url_host`, `dep_unpinned`; combinable via `any`/`all`/`not`. Later packs may `disable:` or re-`severity:` inherited rule IDs; policy waivers are separate and audited.
 
+**Versioning (`version:`) — normative.** Each pack carries its own semver, independent of the binary version and of every other pack. It is what `skill-guard version` reports and (once `card.rulepacks[]` lands) what a scan record pins, so it is the consumer's only answer to *"which detections did this scan run?"*. It MUST be bumped in the **same commit** as the change it describes — never batched, never deferred to release time — and exactly once per PR. Pick the level by the direction the change moves detection surface:
+
+| Bump | The change can produce… | Examples |
+|---|---|---|
+| **major** | …*fewer rules by identity* — a consumer's pinned expectations break | a rule `id` removed or renamed; `apiVersion` moves to `rulepack.v2` |
+| **minor** | …*more, or higher-severity, findings* | new rule id; new `any:` branch or leaf; new `targets:` entry; raised `severity` or `confidence` |
+| **patch** | …*fewer, or lower-severity, findings — or no behaviour change at all* | new `suppress:` carve-out; tightened regex; lowered `confidence`; `rationale`/`fix`/`description` wording |
+
+A PR that both widens and narrows (the normal `sg-rule-polish` shape) takes the **higher** bump — minor. A change confined to comments or key ordering needs no bump. Adding a brand-new pack file starts it at `1.0.0`.
+
+`1.0.0` on the six `core-*` packs is a **pre-policy baseline**: pack content changed many times before this rule was written, and the count starts here rather than trying to reconstruct that history.
+
 ### 8.2 Trust model (resolves the third-party chicken-and-egg)
 
 | Pack source | Signature requirement | Behavior |

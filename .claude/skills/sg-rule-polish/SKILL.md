@@ -155,6 +155,10 @@ If a realistic payload slips through, extend the rule's `match` tree in the pack
 - Add a `suppress` entry for any benign phrasing your change now over-matches.
 - Keep RE2-compatible (no lookaround). Confirm it compiles: `go test ./pkg/rules/` runs
   `TestBuiltinPacksLoad`, which fails on a bad pattern.
+- **Bump the pack's `version:` (line 3) in the same commit**: **minor** if you widened anything
+  (new branch/leaf/target, raised severity or confidence), **patch** if the cycle was precision-only
+  (`suppress`, tightened regex, lowered confidence). A cycle that does both takes the minor. Levels:
+  `docs/skill-guard-design.md §8.1`.
 
 If step 3 found false positives, apply the narrowing you proposed there in the **same** edit, so
 the widening and the tightening are measured together rather than one masking the other.

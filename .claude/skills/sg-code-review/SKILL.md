@@ -55,7 +55,9 @@ Defer the rest: append larger items to `docs/planned-rules.md` (or open a GitHub
 - `gofmt -l .` empty · `go vet ./...` · `go test ./...` green.
 - Exit-code smoke: `scan testdata/malicious`→1, `scan testdata/benign`→0.
 - Dogfood any skill you touched: `go run ./cmd/skill-guard scan .claude/skills/<name>`.
-- If you changed a rule pack, regenerate evaluation and cross-check (see `sg-rule-polish` §6).
+- If you changed a rule pack: bump its `version:` in the same commit (`docs/skill-guard-design.md §8.1`
+  — a review fix is normally a **patch**), then regenerate evaluation and cross-check
+  (see `sg-rule-polish` §7).
 
 ## 5. Open the PR
 

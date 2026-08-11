@@ -75,6 +75,17 @@ Packs map to OWASP IDs: `core-injection`, `core-network`, `core-exec`, `core-sec
 `core-metadata`, `core-supply` (AST02 supply-chain). Every finding carries `ast` ids resolved
 through an `ast_references` map so tooling never hard-codes the taxonomy.
 
+**Every pack edit bumps that pack's `version:`, in the same commit.** Each pack carries its own
+semver (line 3 of the file), independent of the binary version and of the other packs; it is what
+`skill-guard version` reports, and the consumer's only answer to "which detections did this scan
+run?". Decide the bump by which way the change moves detection surface — **minor** if the pack can
+now produce more or higher-severity findings (new rule, new `any:` branch, new `targets:` entry,
+raised `severity`/`confidence`), **patch** if it can only produce fewer or lower-severity ones or
+none at all (new `suppress:` carve-out, tightened regex, lowered `confidence`, `rationale`/`fix`
+wording), **major** only when a rule `id` is removed/renamed or `apiVersion` changes. One bump per
+PR; a PR that both widens and narrows takes the higher one. Full table in
+`docs/skill-guard-design.md §8.1`.
+
 **`docs/rule-verification.md` (with `docs/skill-guard-design.md §5`) is the authority for what an
 `SG-` id means.** Allocate a new id by taking the next free number in its family *and* adding a
 section there — never by picking a number in a backlog row or an issue. `docs/planned-rules.md`

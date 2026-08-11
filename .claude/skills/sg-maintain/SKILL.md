@@ -74,6 +74,12 @@ enforces them.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.
+   **If the PR touches `pkg/rules/packs/*.yaml`, that pack's `version:` (line 3) must be bumped in
+   the same commit** — **minor** when the pack can now produce more or higher-severity findings
+   (new rule, new match branch, new target, raised severity/confidence), **patch** when it can only
+   produce fewer or lower-severity ones (new `suppress:`, tightened regex, lowered confidence,
+   wording). One bump per PR; widen+narrow together takes the minor. Table in
+   `docs/skill-guard-design.md §8.1`.
 6. **Idempotency.** Before creating a branch/PR/issue/comment, check whether an equivalent one
    already exists and continue it instead of duplicating.
 7. **Start every cycle from fresh `main`.** Before any selection or branch, sync the local default
