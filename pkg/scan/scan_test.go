@@ -623,6 +623,23 @@ func TestMaliciousFixtureTriggersEncryptedContainer(t *testing.T) {
 	}
 }
 
+// TestMaliciousFixtureTriggersIPv6BindAll pins the SG-NET-006 bind-all repair
+// end-to-end. The fixture line spells the address `::` rather than `0.0.0.0`
+// deliberately: that is the branch the old leaf's trailing \b silently
+// disabled, so a bundle opening a listener on every interface — including
+// IPv4-mapped addresses — scanned clean while the narrower `0.0.0.0` form was
+// caught. Its own test rather than a row in TestMaliciousFails' `want` map, for
+// the same conflict reason as its siblings.
+func TestMaliciousFixtureTriggersIPv6BindAll(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-NET-006" && f.File == "setup.sh" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-NET-006 on the `::` bind-all listener")
+}
+
 // TestMaliciousFixtureTriggersConfigHookExecution asserts SG-EXE-007
 // end-to-end. Two lines, both in setup.sh: a persisted `diff.external` write
 // and the `GIT_EXTERNAL_DIFF` env form. It checks the *line numbers are
