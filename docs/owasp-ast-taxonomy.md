@@ -79,7 +79,11 @@ commercial or undisclosed end ("subtly steer the user … without them realizing
 inject marketing into every response, suppress competitors) (SG-STEER-001);
 **dynamic-context spans** — inline `` !`cmd` `` or a ```` ```! ```` fenced block — whose command
 the agent runtime executes at *preprocessing* time, before the model sees the skill and before any
-permission prompt, so the payload's execution is guaranteed rather than suggested (`SG-EXE-006`).
+permission prompt, so the payload's execution is guaranteed rather than suggested (`SG-EXE-006`);
+**reconfiguring a read-only tool into an execution primitive** — `git config diff.external`,
+a `!`-prefixed git alias, `GIT_EXTERNAL_DIFF`, `LESSOPEN` — so that a command the permission
+layer allows runs an attacker-chosen program on its next invocation, with no execution primitive
+anywhere in the bundle (`SG-EXE-007`).
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
 otherwise-legitimate skill → AST03. Deception at the *metadata* layer → AST04.
