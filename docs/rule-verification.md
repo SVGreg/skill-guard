@@ -1127,7 +1127,7 @@ payload. One hit is not worth a broad, bypassable mechanism.
   `SessionStart`). FP: `testdata/benign/.claude/settings.json` (permissions only). See
   `TestAgentHookConfigRequiresEventAndCommand`.
 
-### SG-CFG-002 — Repo-scoped agent settings execute or redirect at load  (AST02/AST01, high) — **planned**
+### SG-CFG-002 — Repo-scoped agent settings execute or redirect at load  (AST02/AST01, high) — **implemented** (`core-exec`)
 - **Threat.** The sibling half of `SG-CFG-001`. Check Point's disclosure (**CVE-2025-59536**, CVSS
   8.7, arbitrary shell execution on tool initialisation in an untrusted directory; **CVE-2026-21852**,
   CVSS 5.3, information disclosure in the project-load flow that lets a malicious repository
@@ -1175,6 +1175,47 @@ payload. One hit is not worth a broad, bypassable mechanism.
 - **Source:** Check Point Research, *"Caught in the Hook: RCE and API Token Exfiltration Through
   Claude Code Project Files"* (CVE-2025-59536 / CVE-2026-21852), 2026-02 — reached via the OWASP
   Agentic Security Initiative rotation.
+
+#### As shipped (PR #168)
+
+Three leaves in `core-exec.yaml`, `targets: [configs]`, severity `high`. **Every one of the three
+implementation constraints below came from prototyping the leaves during triage of #165 rather than
+from pricing them, and each now has a `want:false` row in
+`TestAgentSettingsEnvExecutionCovered` so it cannot regress.**
+
+- **(a1) `NODE_OPTIONS` is split from its siblings, 0.9.** Only `--require` and `--import` execute a
+  file; the rest of the flag space is benign, and the corpus proves the distinction is load-bearing —
+  Trail of Bits' devcontainer ships `"NODE_OPTIONS": "--max-old-space-size=4096"`.
+- **(a2) Path-valued preload variables, 0.9** — `BASH_ENV`, `PYTHONSTARTUP`, `LD_PRELOAD`,
+  `DYLD_INSERT_LIBRARIES`, `PERL5OPT`, `RUBYOPT`, gated on a program-shaped value.
+  **Note the leading `\b`, and that `ENV` is absent.** The optional quote otherwise lets the match
+  start mid-token, so a bare `ENV` alternative matched `"NODE_ENV": "/x"` and
+  `"CONFIG_ENV": "/opt/conf"`. **This is the mirror of the boundary class audited in #159:** there a
+  *trailing* `\b` silently killed a live branch; here a *missing leading* one silently admits
+  unrelated keys. The audit in #159 currently inspects trailing boundaries only and should be widened.
+  `ENV` stays out on its own merits as well — its benign uses are common and `BASH_ENV` carries the
+  attack.
+- **(b) Endpoint/credential redirection, 0.85.** **RE2 has no lookahead**, so the loopback/vendor
+  carve-out cannot be inline and is the `suppress:` list. Without it the leaf fires on ordinary
+  local-proxy development (`evolver`'s tests point `ANTHROPIC_BASE_URL` at `127.0.0.1`) and on the
+  genuine `https://api.anthropic.com`.
+
+**`targets: [configs]` is a decision, not a default.** `orgs/trailofbits…/skills_atheris/SKILL.md`
+contains `export LD_PRELOAD="$(python -c 'import atheris; …')"`, which **matches leaf (a2)** and is
+entirely benign — a fuzzing skill documenting how to run its fuzzer. It costs nothing only because
+it lives in a `.md` and this rule does not read prose. Adding `scripts` or `body` reintroduces it, so
+the target list must not be widened without re-running the corpus. That dependency is recorded in the
+pack comment too, because it is exactly the kind of thing lost between cycles.
+
+**Corpus: 0 findings / 777, no delta on any other rule.** Read that as *absence of the population*
+rather than as precision: the entire corpus contains **five** agent-settings/MCP config files, all in
+one bundle — the same caveat `SG-CFG-001` records. The FP evidence that matters here is the
+`want:false` rows, which are verbatim corpus lines, not the corpus count.
+
+**The MCP-server third of CVE-2025-59536 is deliberately not shipped.** It is blocked on the
+`.mcp.json` classifier gap (engine backlog): the same bytes scan `fail` as `mcp.json` and `pass` as
+`.mcp.json`, the filename Claude Code actually uses, so a leaf here would be dead until that is
+fixed.
 
 ### SG-ROGUE-001 — Self-modification  (AST01, high) — **NEW (SkillSpector RA1)** — **implemented** (`core-exec`) — **polished 2026-08-01**
 - **Signals:** code that rewrites its own SKILL.md/scripts/config at runtime, disables its own checks, or fetches-and-replaces its own files. Correlate write-sink whose target is a path inside the skill bundle itself.

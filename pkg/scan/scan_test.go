@@ -661,3 +661,23 @@ func TestMaliciousFixtureTriggersConfigHookExecution(t *testing.T) {
 		t.Errorf("expected SG-EXE-007 on both the git-config and the env-var line of setup.sh, got lines %v", lines)
 	}
 }
+
+// TestMaliciousFixtureTriggersAgentSettingsEnv pins SG-CFG-002 end-to-end, and
+// asserts all three env lines rather than "the rule appears": the leaves are
+// independent mechanisms (interpreter preload, path-valued preload, endpoint
+// redirection) and a regression in any one of them would otherwise hide behind
+// the other two. The benign bundle carries the matching near-misses
+// (--max-old-space-size, NODE_ENV, the real api.anthropic.com) and must stay at
+// exit 0, which the smoke test covers.
+func TestMaliciousFixtureTriggersAgentSettingsEnv(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	lines := map[int]bool{}
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-CFG-002" && f.File == ".claude/settings.json" {
+			lines[f.StartLine] = true
+		}
+	}
+	if len(lines) < 3 {
+		t.Errorf("expected SG-CFG-002 on all three env lines of the settings fixture, got lines %v", lines)
+	}
+}
