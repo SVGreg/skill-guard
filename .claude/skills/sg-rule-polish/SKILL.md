@@ -9,14 +9,12 @@ Goal: improve one existing rule on **both** axes — catch real-world variants i
 (recall), and stop firing on benign content it should never have flagged (precision) — without
 losing true positives. One rule, one PR.
 
-Precision is not a secondary concern here. A rule can ship with false positives **from day one**:
-it was written against synthetic fixtures, and the corpus was only ever checked for *regressions*
-after a change, never audited for what the rule was already getting wrong. So every polish cycle
-starts by looking at what the rule actually does to 777 real skills — before touching anything.
+Every cycle starts at step 3 — what the rule does to the real corpus today — before touching
+anything. A rule can carry false positives from the day it shipped: it was written against synthetic
+fixtures, and the corpus has only ever been checked for *regressions*, never audited.
 
-Rules are data: `pkg/rules/packs/*.yaml`, compiled via `//go:embed`. Regex is Go **RE2** — no
-lookaround/backreferences (`(?<`, `(?=`, `(?!`) — they won't compile. Read `docs/rule-verification.md`
-for the detection approach and confidence math behind each rule.
+Read `docs/rule-verification.md` for the detection approach and confidence math behind each rule.
+(Pack layout and the RE2 constraint are in `CLAUDE.md`.)
 
 ## Guardrails
 
@@ -45,12 +43,12 @@ a specific rule, use that instead.
 
 ## 3. Audit its real false positives on the corpus
 
-The `evaluation/` corpus is ~777 **real, unlabeled** skills. Almost none of them are attacks, so
-essentially every hit the rule produces there is a false-positive candidate until you read it. This
-step is what catches an FP the rule has carried since the day it shipped.
+The `evaluation/` corpus is **real, unlabeled** skills (current count is reported by
+`aggregate.py`). Almost none of them are attacks, so essentially every hit the rule produces there
+is a false-positive candidate until you read it.
 
 Make sure the raw reports reflect current `main` (they are git-ignored, so they may be stale or
-absent). Regenerate only if needed — a full run is ~9 minutes:
+absent). Regenerate only if needed — a full run takes several minutes:
 
 ```sh
 go build -o skill-guard ./cmd/skill-guard
@@ -116,9 +114,7 @@ Also include **negative** cases: benign near-misses that must NOT match, mirrori
 carve-outs (e.g. documentation phrasing). This is what keeps polishing from causing false positives.
 
 **Seed the negatives from step 3.** Every false positive you confirmed on the corpus is a
-real-world negative case, already proven to occur in the wild — use the actual excerpt, not an
-invented paraphrase. These are worth more than any negative you could make up, and turning them
-into tests is what stops the FP coming back.
+real-world negative case — use the actual excerpt, not an invented paraphrase.
 
 Keep the literal payload strings inside fenced code blocks in your working notes so they stay inert
 and don't trip the scanner on this skill itself.
@@ -184,11 +180,10 @@ Re-run the tests until every `want:true` matches and every `want:false` doesn't.
   python3 evaluation/scripts/aggregate.py
   evaluation/scripts/rule_findings.py <RULE-ID> --all      # what survives
   ```
-  Then state, for this rule: hits before → after, which FP clusters are gone, and **which true
-  positives are still caught**. A drop in the count is only good if you can name what left.
-  Compare against `evaluation/reports/CROSS_VERIFICATION.md` — a "fix" must not silently drop
-  detections. (Note: `evaluation/` is git-ignored; regeneration is a local sanity check, not part
-  of the PR.)
+  Then state, for this rule: hits before → after, which FP clusters are gone, and **name which true
+  positives are still caught** — a drop in the count is only good if you can say what left, since a
+  "fix" must not silently drop detections. (`evaluation/` is git-ignored; regeneration is a local
+  sanity check, not part of the PR.)
 - Check the **other** rules' counts too: a shared leaf, a `suppress` line, or a target change can
   move a rule you weren't touching. Any non-zero delta outside your rule is either explained or
   reverted.
