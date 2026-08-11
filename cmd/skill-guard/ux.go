@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
@@ -91,4 +92,35 @@ func validateSeverity(flag, value string) error {
 		return fail(3, "unknown %s %q\n  valid severities: critical, high, medium, low, info", flag, value)
 	}
 	return nil
+}
+
+// refuseOverwrite stops a keygen that would destroy existing key material.
+//
+// `skill-guard keygen --out publisher.key` run a second time used to overwrite
+// the first key silently and exit 0 — new keyid, new public key, old private
+// key gone. That is unrecoverable in a way it would not be for most tools,
+// because skill-guard's trust model is deliberately **local and decentralized**:
+// there is no key server and no identity authority, so a signing key's only
+// value is that consumers have pasted its public key into `trust.keys` in
+// *their* `.skillguard.yaml`. Destroying it silently invalidates every roster
+// entry anyone made, and no already-signed bundle can be re-signed under that
+// identity again.
+//
+// Refusing rather than prompting: the CLI is meant to run unattended in CI, and
+// a prompt there is either ignored or hangs. `--force` is the deliberate opt-in,
+// and it says what it destroys.
+//
+// Lstat, not Stat, so a dangling symlink still counts as "something is here" —
+// consistent with attest.writeSecret, which refuses to follow symlinks rather
+// than write through them.
+func refuseOverwrite(path, what string) error {
+	if _, err := os.Lstat(path); err != nil {
+		return nil // absent (or unreadable) — let the writer report any real error
+	}
+	return fail(3, "refusing to overwrite the existing %s %q\n"+
+		"  generating over it would destroy the old key permanently, and skill-guard has no\n"+
+		"  key server to recover from — consumers trust a key only by having added it to\n"+
+		"  trust.keys in their own .skillguard.yaml.\n"+
+		"  choose another path:  skill-guard keygen --out <new-name>.key\n"+
+		"  or, if you are certain the old key is retired:  --force", what, path)
 }

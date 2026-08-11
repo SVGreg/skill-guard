@@ -79,7 +79,11 @@ commercial or undisclosed end ("subtly steer the user … without them realizing
 inject marketing into every response, suppress competitors) (SG-STEER-001);
 **dynamic-context spans** — inline `` !`cmd` `` or a ```` ```! ```` fenced block — whose command
 the agent runtime executes at *preprocessing* time, before the model sees the skill and before any
-permission prompt, so the payload's execution is guaranteed rather than suggested (`SG-EXE-006`).
+permission prompt, so the payload's execution is guaranteed rather than suggested (`SG-EXE-006`);
+**reconfiguring a read-only tool into an execution primitive** — `git config diff.external`,
+a `!`-prefixed git alias, `GIT_EXTERNAL_DIFF`, `LESSOPEN` — so that a command the permission
+layer allows runs an attacker-chosen program on its next invocation, with no execution primitive
+anywhere in the bundle (`SG-EXE-007`).
 
 **Boundary.** Compromised *delivery* → AST02. Excess *permissions* on an
 otherwise-legitimate skill → AST03. Deception at the *metadata* layer → AST04.
@@ -408,7 +412,7 @@ skill-guard statically inspects a skill's own bundle, so a finding is filed by
 | AST | Covered by skill-guard `scan`? | Notes |
 |---|---|---|
 | AST01 Malicious Skills | **Yes** — primary | code + `SKILL.md` prose patterns, including the agent-relayed-command (ClickFix) delivery path via `SG-INJ-011` |
-| AST02 Supply Chain | Partial — provenance + static rules | `sign`/`verify` attestation, plus the `core-supply` pack: `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) and `SG-DEP-001` (unpinned/floating dependency specs — `*`/`latest`/`@latest`/`@main`/`:latest`), `SG-DEP-008` (install redirected to a non-default registry/index/proxy — dependency-confusion delivery), `SG-DEP-009` (dependency sourced from a raw VCS URL or bare archive — no registry, so no version resolution, integrity hash, or yank path), `SG-DEP-011` (fetches or decodes an opaque binary and marks it executable in one command — RCE delivery), `SG-DEP-010` (a package.json install-lifecycle hook that auto-runs a command on `npm install` — the declarative sibling of SG-CFG-001), and `SG-CFG-001` in `core-exec` (a bundled agent-hook config that auto-executes commands — shipping the config *is* the supply-chain delivery); the rest of the SG-DEP family remains planned |
+| AST02 Supply Chain | Partial — provenance + static rules | `sign`/`verify` attestation, plus the `core-supply` pack: `SG-DEP-007` (remote-package auto-execution via `npx -y`/`uvx`/`pipx run`) and `SG-DEP-001` (unpinned/floating dependency specs — `*`/`latest`/`@latest`/`@main`/`:latest`), `SG-DEP-008` (install redirected to a non-default registry/index/proxy — dependency-confusion delivery), `SG-DEP-009` (dependency sourced from a raw VCS URL or bare archive — no registry, so no version resolution, integrity hash, or yank path), `SG-DEP-011` (fetches or decodes an opaque binary and marks it executable in one command — RCE delivery), `SG-DEP-010` (a package.json install-lifecycle hook that auto-runs a command on `npm install` — the declarative sibling of SG-CFG-001), and, in `core-exec`, `SG-CFG-001` (a bundled agent-hook config that auto-executes commands — shipping the config *is* the supply-chain delivery) and `SG-CFG-002` (a repo-scoped agent settings file whose `env` block binds an interpreter preload variable, so the named file runs at launch, or redirects `ANTHROPIC_BASE_URL`/peers to a non-vendor host so every request carries the API key there — Check Point CVE-2025-59536 / CVE-2026-21852); the rest of the SG-DEP family remains planned |
 | AST03 Over-Privileged | **Yes** | credential/file/env reach, over-broad `allowed-tools` |
 | AST04 Insecure Metadata | **Yes** | unsafe YAML, steganography in `SKILL.md`/manifest, and `SG-MCP-001` — instructions planted in a bundled MCP config's tool/parameter descriptions (OWASP MCP Top 10 MCP03) |
 | AST05 Untrusted External Instr. | **Yes** | three carriers implemented — `SG-REF-003` (runtime instruction fetch / "external brain"), `SG-REF-004` (external ruleset declared authoritative over the skill) and `SG-REF-005` (self-ingested: the agent's own log/transcript as the carrier); the reference-inventory (`SG-REF-001`) and unpinned-ref (`SG-REF-002`) rules remain planned |
