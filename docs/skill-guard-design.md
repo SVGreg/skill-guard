@@ -532,7 +532,7 @@ rules:
         - unicode_category: [Cf]
         - bidi_control: true
         - regex: '(?i)ignore (all|previous) (instructions|prompts)'
-        - homoglyph_ratio: { gt: 0.15 }
+        - homoglyph_ratio: { min_count: 1 }   # `gt` exists but 0.15 never fires — rule-verification.md §SG-INJ-002 signal (d)
     rationale: >
       Obfuscated or non-printing instructions are invisible to human review
       but parsed by the agent (OWASP AST04/AST01).
