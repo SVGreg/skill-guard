@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.0](https://github.com/SVGreg/skill-guard/compare/v0.1.17...v0.2.0) (2026-08-11)
+
+
+### Features
+
+* **rules:** add SG-CFG-002 — repo-scoped agent settings execute or redirect at load (AST02/AST01) ([#168](https://github.com/SVGreg/skill-guard/issues/168)) ([b6d593d](https://github.com/SVGreg/skill-guard/commit/b6d593d594cb45b17ce8eba14d4bc28c03865cd6))
+* **rules:** implement the homoglyph_ratio primitive — SG-INJ-002 signal (d) (AST04/AST01) ([#164](https://github.com/SVGreg/skill-guard/issues/164)) ([7c22d83](https://github.com/SVGreg/skill-guard/commit/7c22d830b2e7eda3c8915a3e0655c0ab0e300de1))
+* **rules:** SG-EXE-007 — read-only tool reconfigured into an execution primitive ([#161](https://github.com/SVGreg/skill-guard/issues/161)) ([2b2fa78](https://github.com/SVGreg/skill-guard/commit/2b2fa78fabc207372d12d5a67f77258213ad3789))
+
+
+### Bug Fixes
+
+* **cmd:** keygen refuses to overwrite an existing key instead of destroying it ([#169](https://github.com/SVGreg/skill-guard/issues/169)) ([df9fede](https://github.com/SVGreg/skill-guard/commit/df9feded391d7e161f7dfd530c956b88c7603589))
+* **report:** stop writing ANSI escapes into redirected files, and escape U+061C ([#162](https://github.com/SVGreg/skill-guard/issues/162)) ([7a99874](https://github.com/SVGreg/skill-guard/commit/7a99874ffbfea5f955395557ed99404b08c17d18))
+
+
+### Miscellaneous Chores
+
+* release 0.2.0 ([0ff8e2d](https://github.com/SVGreg/skill-guard/commit/0ff8e2d60d41cf4069502cd2604d1f44fe3aab06))
+
 ## [0.1.17](https://github.com/SVGreg/skill-guard/compare/v0.1.16...v0.1.17) (2026-08-09)
 
 
