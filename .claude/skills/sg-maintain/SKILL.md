@@ -203,6 +203,41 @@ owner.
 3. Report to the user (or the loop transcript): which activity ran, the PR/issue link, and what
    the next cycle will likely pick.
 
+## Ship it — the shared ending for every activity skill
+
+Every `sg-*` activity skill finishes here, supplying its own `<branch>`, `<paths>`, `<commit>`,
+`<type-label>` and `<evidence>`. Only `<evidence>` — what the PR body must prove — is genuinely
+skill-specific; the rest is identical every time, which is why it lives here and not in nine files.
+
+**1. Preflight** — guardrail 5 in full: `gofmt -l .` empty · `go vet ./...` · `go test ./...` ·
+exit-code smoke (`scan testdata/malicious`→1, `scan testdata/benign`→0) · `scan` every skill you
+touched · pack `version:` bumped if you changed a pack · touched skill bundles noted for re-signing.
+
+**2. Branch, commit, push** — off fresh `main`, guardrail 7:
+
+```sh
+git checkout main && git pull --ff-only && git checkout -b <branch>
+git add <paths>
+git commit -m "<commit>"
+git push -u origin HEAD
+```
+
+**3. Open the PR** — guardrails 4 and 4a:
+
+```sh
+gh pr create --label automated --label <type-label> \
+  --title "<commit subject>" \
+  --body "<evidence> Bot-generated; needs review."
+```
+
+- **`Closes #<n>`** in the body whenever the work resolves an issue — mandatory, see guardrail 4.
+- Add `--label research` as a *second* type label when the work came from `sg-threat-research`.
+- If you edited anything under `.claude/skills/`, add the **needs re-signing** line (guardrail 5).
+
+**4. Then** — a **non-code** PR (confined to `docs/**`, `README.md`, `PROGRESS.md`): wait for CI,
+then `gh pr merge --squash`. A **code** PR (touches `pkg/`, `cmd/`, `testdata/`, a rule pack, or a
+skill): leave it for the owner. Guardrail 4.
+
 ## Notes
 
 - If a cycle errors out mid-way, log the failure and leave any partial branch un-PR'd; the next

@@ -52,26 +52,19 @@ Defer the rest: append larger items to `docs/planned-rules.md` (or open a GitHub
 
 ## 4. Verify
 
-- `gofmt -l .` empty · `go vet ./...` · `go test ./...` green.
-- Exit-code smoke: `scan testdata/malicious`→1, `scan testdata/benign`→0.
-- Dogfood any skill you touched: `go run ./cmd/skill-guard scan .claude/skills/<name>`.
-- If you changed a rule pack: bump its `version:` in the same commit (`docs/skill-guard-design.md §8.1`
-  — a review fix is normally a **patch**), then regenerate evaluation and cross-check
-  (see `sg-rule-polish` §7).
+Standard preflight is `sg-maintain` §Ship it step 1. Beyond it: if you changed a rule pack, the
+`version:` bump is normally a **patch** for a review fix (`docs/skill-guard-design.md §8.1`), and
+you must regenerate evaluation and cross-check the corpus deltas (see `sg-rule-polish` §7).
 
 ## 5. Open the PR
 
-```sh
-git checkout main && git pull --ff-only && git checkout -b review/<area>-<slug>
-git add -A
-git commit -m "<fix|perf|refactor>(<area>): <what was wrong and the fix>"
-git push -u origin HEAD
-gh pr create --label automated --label code-review \
-  --title "<fix|perf>(<area>): <short>" \
-  --body "Automated code-review cycle over <area>. Findings + fixes with regression tests. Deferred items filed to backlog/issues.$( [ -n \"$ISSUE\" ] && echo \" Closes #$ISSUE.\" ) Bot-generated; needs review."
-```
+Ship per **`sg-maintain` §Ship it**, with:
 
-If the fix resolves an open issue, add `Closes #<n>` to the body so it auto-closes on merge.
+- **branch** `review/<area>-<slug>` · **label** `code-review` · **paths** `-A`
+- **commit** `<fix|perf|refactor>(<area>): <what was wrong and the fix>`
+- **evidence** for the body: each finding with its `file:line` and failure scenario, the fix, and
+  the regression test that fails before and passes after. Name the deferred findings and where they
+  were filed.
 
 Update `state.json` → advance `review_area_cursor` (wrap mod 8). Report the PR link and list any
 deferred findings.

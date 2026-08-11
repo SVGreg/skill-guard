@@ -34,16 +34,13 @@ starts strong:
    regression cases.
 2. Append them under the `## SG-LLM-*` heading in `docs/planned-rules.md`, each as a short bullet:
    the technique, why static rules miss it, and the closed yes/no question a T3 prompt should ask.
-3. If there are notes to add, commit on a branch and open a small PR:
-   ```sh
-   git checkout main && git pull --ff-only && git checkout -b llm/notes-$(date +%Y%m%d)
-   git add docs/planned-rules.md
-   git commit -m "docs(backlog): add SG-LLM prompt-design notes"
-   git push -u origin HEAD
-   gh pr create --label automated --label research \
-     --title "docs(backlog): SG-LLM prompt-design notes" \
-     --body "Accumulated T3 prompt-design cases while the LLM engine is unimplemented (M5). Bot-generated; needs review."
-   ```
+3. If there are notes to add, ship them per **`sg-maintain` §Ship it**, with:
+   - **branch** `llm/notes-$(date +%Y%m%d)` · **label** `research` · **paths** `docs/planned-rules.md`
+   - **commit** `docs(backlog): add SG-LLM prompt-design notes`
+   - **evidence** for the body: each technique, why static rules miss it, and the closed yes/no
+     question a T3 prompt should ask
+
+   This is a **non-code** PR, so merge it once CI is green.
 4. If there is nothing new to add, **no-op**: log "LLM engine not implemented (M5) — skipping, no
    new notes" and end the cycle without a PR.
 
