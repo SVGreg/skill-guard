@@ -209,6 +209,87 @@ rules:
     rationale: A bundled agent-hook config runs its command automatically on every matching lifecycle event, with no confirmation — installing code execution by shipping a config file (AST02/AST01). An empty matcher fires on every tool call and sees all tool input/output.
     fix: Do not ship lifecycle hooks in a skill bundle. If a hook is genuinely required, document it and let the user install it into their own settings deliberately.
 
+  - id: SG-CFG-002
+    title: Repo-scoped agent settings execute or redirect at load
+    ast: [AST02, AST01]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.8
+    # TARGETS ARE LOAD-BEARING, not a default. `configs` only, and the reason is
+    # a measured corpus line: orgs/trailofbits…/skills_atheris/SKILL.md contains
+    #   export LD_PRELOAD="$(python -c 'import atheris; …')"
+    # which MATCHES leaf (a2) and is entirely benign — it is a fuzzing skill
+    # documenting how to run its fuzzer. It costs nothing today only because it
+    # lives in a .md and this rule does not read prose. Adding `scripts` or
+    # `body` here reintroduces that false positive, so do not widen the list
+    # without re-running the corpus.
+    targets: [configs]
+    match:
+      # The sibling half of SG-CFG-001. Check Point's disclosure (CVE-2025-59536,
+      # CVSS 8.7, arbitrary shell execution on tool initialisation in an untrusted
+      # directory; CVE-2026-21852, CVSS 5.3, project-load information disclosure
+      # that exfiltrates the API key) names THREE mechanisms abused through a
+      # repo-checked-in .claude/settings.json — hooks, MCP integrations, and
+      # environment variables. SG-CFG-001 covers hooks. This covers the env half.
+      #
+      # The MCP third is deliberately absent: it is blocked on the `.mcp.json`
+      # classifier gap (engine backlog), where the same bytes scan `fail` as
+      # `mcp.json` and `pass` as `.mcp.json` — the filename Claude Code actually
+      # uses. A leaf here would be dead until that is fixed.
+      #
+      # Why AST02 before AST01: "repository-controlled configuration files now
+      # function as part of the execution layer". The payload arrives through the
+      # distribution channel and fires before any consent dialog — nothing in the
+      # bundle looks like execution, which is the SG-EXE-007 shape delivered
+      # through the *agent's* settings file rather than a *tool's*.
+      any:
+        # (a1) NODE_OPTIONS is split from its siblings because only --require and
+        #      --import execute a file; the rest of the flag space is benign. The
+        #      corpus proves the distinction is needed: trailofbits' devcontainer
+        #      ships "NODE_OPTIONS": "--max-old-space-size=4096", a memory flag.
+        - regex: '(?im)["'']?NODE_OPTIONS["'']?\s*[:=]\s*["''][^"''\n]{0,160}--(?:require|import)[=\s]'
+          confidence: 0.9
+        # (a2) The remaining preload/startup variables take a path or a flag, so a
+        #      program-shaped value is the gate.
+        #
+        #      NOTE THE LEADING \b, and note that `ENV` is NOT in this list. The
+        #      optional quote means the match can otherwise start mid-token, so a
+        #      bare `ENV` alternative matched "NODE_ENV": "/x" and "CONFIG_ENV":
+        #      "/opt/conf". That is the mirror of the boundary class audited in
+        #      #159 — there a trailing \b silently killed a live branch, here a
+        #      missing leading one silently admits unrelated keys. The \b also
+        #      stops MY_BASH_ENV. `ENV` stays out on its own merits too: its
+        #      benign uses are common and BASH_ENV carries the attack.
+        - regex: '(?im)["'']?\b(?:BASH_ENV|PYTHONSTARTUP|LD_PRELOAD|DYLD_INSERT_LIBRARIES|PERL5OPT|RUBYOPT)\b["'']?\s*[:=]\s*["'']\s*(?:[~.]{0,2}/|\$|-)'
+          confidence: 0.9
+        # (b) Endpoint/credential redirection — the CVE-2026-21852 shape stated
+        #     declaratively. Every request, including the key, goes to the host
+        #     named here. RE2 HAS NO LOOKAHEAD, so the loopback/vendor carve-out
+        #     cannot be inline; it is the suppress list below, without which this
+        #     leaf fires on ordinary local-proxy development and on the genuine
+        #     https://api.anthropic.com.
+        - regex: '(?im)["'']?(?:ANTHROPIC_BASE_URL|ANTHROPIC_AUTH_TOKEN|OPENAI_BASE_URL|AZURE_OPENAI_BASE_URL|GEMINI_BASE_URL)["'']?\s*[:=]\s*["'']https?://'
+          confidence: 0.85
+    suppress:
+      # Loopback and private-range endpoints are local development, not
+      # redirection: the corpus's only real instances are `evolver`'s tests
+      # pointing ANTHROPIC_BASE_URL at 127.0.0.1.
+      - '(?i)https?://(?:127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.)'
+      # The real vendor endpoints are the correct value for these variables.
+      - '(?i)https?://[^"''\s]*\.?(?:anthropic\.com|openai\.com|azure\.com|googleapis\.com)'
+      - '(?i)/path/to/'
+    rationale: >-
+      A repo-checked-in agent settings file (.claude/settings.json) that binds an interpreter
+      preload variable — NODE_OPTIONS --require, BASH_ENV, PYTHONSTARTUP, LD_PRELOAD — makes the
+      named file run at launch, before any consent prompt; one that points ANTHROPIC_BASE_URL or a
+      peer at a non-vendor host sends every request, including the API key, to that host. The
+      bundle contains no execution primitive: the settings file is the execution (AST02/AST01).
+    fix: >-
+      Do not ship an `env` block in a bundled agent settings file. Environment that a skill
+      genuinely needs belongs in its documentation, set deliberately by the user in their own
+      shell — a value checked into a repository is applied to everyone who opens it.
+
   - id: SG-ROGUE-001
     title: Skill self-modification
     ast: [AST01]
