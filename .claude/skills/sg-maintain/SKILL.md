@@ -74,6 +74,10 @@ enforces them.
 5. **Preflight before every PR** (same as the `sg-release` skill preflight): `gofmt -l .` empty,
    `go vet ./...`, `go test ./...`, exit-code smoke (`scan testdata/malicious`→1,
    `scan testdata/benign`→0), and dogfood `scan` any skill you touched.
+   **If you edited any file under `.claude/skills/`, re-sign that bundle and commit the updated
+   `.skillsig`** — `skill-guard sign .claude/skills/<name> --identity <yours>` — then confirm
+   `skill-guard verify .claude/skills/<name>` exits 0. An edited `SKILL.md` invalidates its
+   attestation's Merkle root, and nothing else in the repo catches that yet.
    **If the PR touches `pkg/rules/packs/*.yaml`, that pack's `version:` (line 3) must be bumped in
    the same commit** — **minor** when the pack can now produce more or higher-severity findings
    (new rule, new match branch, new target, raised severity/confidence), **patch** when it can only
@@ -84,14 +88,10 @@ enforces them.
    already exists and continue it instead of duplicating.
 7. **Start every cycle from fresh `main`.** Before any selection or branch, sync the local default
    branch from the remote — `git checkout main && git pull --ff-only` — and branch off *that*
-   (`git checkout main && git pull --ff-only && git checkout -b <branch>`). A stale local `main` is
-   the primary cause of merge conflicts between the loop's PRs; pulling first is the fix. Every
-   activity skill's branch step assumes this.
+   (`git checkout main && git pull --ff-only && git checkout -b <branch>`). Every activity skill's
+   branch step assumes this.
 
 ## 0. Sync `main` first
-
-Before loading state or selecting an activity, update the local default branch from the remote so
-all work branches off the latest `main` (guardrail 7):
 
 ```sh
 git checkout main && git pull --ff-only
@@ -163,15 +163,9 @@ proactive cycle runs `sg-rule-implement` again, on a *different* backlog row. Pa
 **two consecutive** implement cycles (`implement_streak` in `state.json`), then advance regardless,
 so research and code review are not starved.
 
-This replaces an earlier "deep-backlog boost" that asked a single cycle to open **two** rule PRs.
-That option was available and **declined every time it came up** (cycles 76 and 81), for the same
-reason each time: a rule shipped to this project's standard — sweep the candidate leaves against the
-corpus before writing YAML, verify the gap is real on the current `main`, run the full corpus before
-and after — is a full cycle of work, and doubling it doubles the review load in one drop. **Cadence,
-not batch size, is the lever**: the loop runs every few hours, so parking the cursor buys the same
-implementation throughput at one PR per cycle. A permanently-declined option is worse than no
-option, because it costs a decision every cycle and quietly reads as "the loop is behind" — so if
-carry-over is itself routinely wrong, **change this paragraph rather than skipping it each cycle.**
+**Cadence, not batch size, is the lever** — never answer a deep backlog by opening two rule PRs in
+one cycle. If the carry-over itself proves routinely wrong, change this paragraph rather than
+skipping it each cycle.
 
 If the selected round-robin activity has nothing to do this cycle (e.g. `sg-rule-implement` with an
 empty backlog), it will say so; advance the cursor once more and run the next one, so a cycle is
@@ -208,7 +202,6 @@ owner.
 
 ## Notes
 
-- Keep cycles short and focused; the value is in steady, reviewable increments, not big drops.
 - If a cycle errors out mid-way, log the failure and leave any partial branch un-PR'd; the next
   cycle's idempotency checks will pick it up or a human can clean it.
 - Tune the ring or the interval as the project's needs shift — this file is the one place to do it.

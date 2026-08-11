@@ -36,7 +36,7 @@ starts strong:
    the technique, why static rules miss it, and the closed yes/no question a T3 prompt should ask.
 3. If there are notes to add, commit on a branch and open a small PR:
    ```sh
-   git checkout -b llm/notes-$(date +%Y%m%d)
+   git checkout main && git pull --ff-only && git checkout -b llm/notes-$(date +%Y%m%d)
    git add docs/planned-rules.md
    git commit -m "docs(backlog): add SG-LLM prompt-design notes"
    git push -u origin HEAD

@@ -106,9 +106,9 @@ run: `gh run watch <id>`.
 
 ## 5. Verify the release
 
-1. `gh release view vX.Y.Z` — must exist, with changelog notes and **7 assets**:
-   5 archives (linux/darwin × amd64/arm64 `.tar.gz`, windows-amd64 `.zip`) + `checksums.txt`
-   + source archive behavior varies; the 6 named assets are what matters.
+1. `gh release view vX.Y.Z` — must exist, with changelog notes and these **6 named assets**:
+   5 archives (linux/darwin × amd64/arm64 `.tar.gz`, windows-amd64 `.zip`) + `checksums.txt`.
+   GitHub may also list auto-generated source archives; those don't count and their presence varies.
 2. Install-path smoke test on this machine:
    ```sh
    VERSION=vX.Y.Z INSTALL_DIR=$(mktemp -d) sh install.sh
