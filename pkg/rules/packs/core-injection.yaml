@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-injection
-version: 1.0.0
+version: 1.1.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -183,7 +183,10 @@ rules:
       # Writes into an explicit temp dir are test fixtures, not reprogramming
       # the user's real agent config.
       - '(?i)path\.join\(\s*(tmp|tmpdir|os\.tmpdir|mkdtemp|fixture)'
-      - '(?i)\b(tempfile\.|mkdtemp|os\.tmpdir\(\)|tmp_path)\b'
+      # The trailing \b bound to every branch, so `tempfile\.` and
+      # `os\.tmpdir\(\)` — both ending in a non-word char — could never fire and
+      # the carve-out only ever worked for `mkdtemp`/`tmp_path` (issue #159).
+      - '(?i)(\btempfile\.|\bmkdtemp\b|\bos\.tmpdir\(\)|\btmp_path\b)'
     rationale: Writing to agent identity/config files lets a skill silently reprogram the agent across sessions (AST01/AST03).
     fix: Do not write to agent identity or config files; keep skill state inside the skill's own directory.
 
@@ -550,7 +553,7 @@ rules:
         - regex: '(?i)\b(your|the\s+agent''?s?|this\s+skill''?s?)\b[^\n]{0,25}\b(rule\s?set|rule\s?book|polic(y|ies)|configuration|config|settings|profile|behaviou?r|operating\s+rules)\b[^\n]{0,25}\b(is|are)\s+(defined|specified|maintained|hosted|stored|governed|controlled|set)\b[^\n]{0,25}\b(at|in|by|from)\b[^\n]{0,25}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)'
           confidence: 0.8
         # load the <policy artifact> … and comply with / follow whatever it says
-        - regex: '(?i)\b(load|fetch|download|read|pull|retrieve|consult|import|sync)\b[^\n]{0,30}\b(rule\s?set|rule\s?book|rules?\s+file|polic(y|ies)|configuration|config|settings|profile|\.cursorrules|\.clinerules|\.windsurfrules|agent[-\s]?rules)\b[^\n]{0,45}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)?[^\n]{0,45}\b(and|then|;)\b[^\n]{0,15}\b(comply\s+with|conform\s+to|abide\s+by|obey|adhere\s+to|enforce|follow\s+(whatever|what|its|their|the\s+(rules?|directives?|instructions?|polic)))\b'
+        - regex: '(?i)\b(load|fetch|download|read|pull|retrieve|consult|import|sync)\b[^\n]{0,30}\b(rule\s?set|rule\s?book|rules?\s+file|polic(y|ies)|configuration|config|settings|profile|\.cursorrules|\.clinerules|\.windsurfrules|agent[-\s]?rules)\b[^\n]{0,45}(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)?[^\n]{0,45}(\band\b|\bthen\b|;)[^\n]{0,15}\b(comply\s+with|conform\s+to|abide\s+by|obey|adhere\s+to|enforce|follow\s+(whatever|what|its|their|the\s+(rules?|directives?|instructions?|polic)))\b'
           confidence: 0.8
         # <external source> … treat it as binding / as your rules
         - regex: '(?i)(https?://[^\s)\]]{0,100}\.(ya?ml|json|toml|conf|cfg|ini|md|mdx|txt|rules|xml|properties)\b|\bthe\s+(remote|external|shared|team|org(anisation|anization)?|company|central|hosted)\b|~/|/etc/|/usr/|/opt/|/var/|\$HOME|%APPDATA%)[^\n]{0,60}\b(treat|use)\s+(it|its\s+\w+|them|the\s+\w+)\s+as\s+(binding|authoritative|your\s+(rules?|polic|instructions?)|the\s+(rules?|polic|source\s+of\s+truth))'
