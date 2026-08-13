@@ -48,10 +48,17 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 		if ids := strings.Join(f.AST, ", "); ids != "" {
 			astTag = fmt.Sprintf("  %s%s%s", col(cGray), sanitize(ids), col(cReset))
 		}
+		// A demoted finding shows the ceiling it was capped to *and* what it
+		// would have been, so the reader can see the judgment rather than a
+		// quietly-lower number (docs/design-note-demotion.md §4).
+		sevText := f.Severity.String()
+		if f.DemotedBy != "" {
+			sevText = fmt.Sprintf("%s (from %s)", sevText, f.OriginalSeverity.String())
+		}
 		fmt.Fprintf(w, "  %s:%d  %s%s%s  %s%s%s  %s%s\n",
 			sanitize(f.File), f.StartLine,
 			col(cBold), sanitize(f.RuleID), col(cReset),
-			sevC, f.Severity.String(), col(cReset),
+			sevC, sevText, col(cReset),
 			sanitize(f.Title), astTag)
 		for _, id := range f.AST {
 			used[id] = true
@@ -62,6 +69,10 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 			}
 			if f.Rationale != "" {
 				fmt.Fprintf(w, "      why:   %s\n", sanitize(f.Rationale))
+			}
+			if f.DemotedBy != "" {
+				fmt.Fprintf(w, "      note:  severity capped at %s by %s (finding kept, not suppressed)\n",
+					f.Severity.String(), sanitize(f.DemotedBy))
 			}
 			if f.Fix != "" {
 				fmt.Fprintf(w, "      fix:   %s\n", sanitize(f.Fix))
