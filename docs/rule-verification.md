@@ -1070,6 +1070,24 @@ payload. One hit is not worth a broad, bypassable mechanism.
   `pkg/scan/scan_test.go`.
 
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical) — **implemented** (`core-secret`)
+> **Wallet vocabulary (#179, second half).** The gate named `*.wallet` and `keystore` but not what a
+> wallet stealer actually takes, so `cp ~/.bitcoin/wallet.dat`, `tar czf - ~/.electrum/wallets`,
+> `cat ~/.config/solana/id.json`, the MetaMask/Phantom browser-extension store, `~/.config/Ledger
+> Live` and seed-phrase/mnemonic files all scanned clean while `cat ~/.ssh/id_rsa` fired critical on
+> the same harness. Added to the **verb-gated** leaf, which is what makes them free: over 11,406
+> corpus files each artifact name appears in **0 files paired with a read/exfil verb**, and `seed
+> phrase`/`mnemonic` — 41 files as bare words in legitimate crypto skills — are **0** once the verb
+> is required.
+>
+> Two details worth keeping. **A shell-escaped space is the same path:** `Ledger\ Live` and
+> `Local\ Extension\ Settings` are how these appear unquoted, so the patterns are written
+> `Ledger[\\ ]+Live`, not with a literal space. And **`Ledger Live` deliberately did *not* go in the
+> ungated artifact leaf** beside `Login Data` and `cookies.sqlite`: those are unambiguous filenames
+> that do not occur in prose, whereas `Ledger Live` is a product name — the one corpus file that
+> mentions it is a security incident-response playbook listing *"Hardware wallet applications (Ledger
+> Live, SafePal, etc)"*, which the ungated leaf would have flagged `critical`. **The ungated leaf is
+> for artifact names that cannot appear in a sentence; everything else rides the verb.**
+
 > **Window fix (#179).** The verb→path span was `[^\n]{0,40}`, which is shorter than the paths
 > credentials actually live at. A macOS `Application Support` path or a Windows `AppData\Roaming`
 > path puts the filename 45–80 characters past the verb, so **five paths this rule already declares
