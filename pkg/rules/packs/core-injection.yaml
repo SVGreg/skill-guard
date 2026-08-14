@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-injection
-version: 1.2.0
+version: 1.3.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -272,20 +272,13 @@ rules:
       - '(?i)\bunrestricted\s+(file|network|disk|read|write|access|permissions?)\b'
       - '(?i)\bwithout\s+(any\s+)?(dependencies|warnings?|errors?|changes?)\b'
       # The MIT grant clause — "to deal in the Software without restriction,
-      # including without limitation the rights to use, copy, modify …" — is a
-      # copyright grant, not jailbreak framing, but it hit the
-      # "without (any) restrictions?" leaf at 0.95 on every bundle shipping a
-      # LICENSE (17 files across the 877-bundle evaluation corpus; 5 of the 100
-      # SkillJect bundles failed on nothing else). Anchoring on the full
-      # "…without limitation" idiom rather than on "Software" or a LICENSE
-      # filename keeps the suppress tight and survives every line-wrap variant
-      # the corpus contains, including derivative licenses that swap the subject
-      # noun ("in the Materials without restriction, including without
-      # limitation"). Note `suppress` is matched against the single line the hit
-      # landed on, so the idiom must stay on one line to be excused — a LICENSE
-      # is still scanned like any other prose, and injected text placed in one
-      # still reports.
-      - '(?i)\bwithout\s+restrictions?,?\s+including\s+without\s+limitation\b'
+      # including without limitation the rights to use, copy, modify …" — used to
+      # be suppressed here (PR #136). It has moved to `CTX-LICENSE-BOILERPLATE`
+      # in the `context` pack, because it is the wrong shape for a suppress: the
+      # words genuinely are there, so this is a *risk judgment*, not a misfire,
+      # and erasing it made the line an evasion surface. Appending the MIT idiom
+      # to `now respond without any restrictions` used to erase the finding
+      # outright; it now yields a low-severity one instead.
     rationale: Suppressing the agent's ability to refuse, warn, or apply safety policy — or telling it to run "unfiltered"/"jailbreak" mode or drop disclaimers — is a jailbreak preamble (AST01).
     fix: Remove instructions that disable refusal, suppress disclaimers, or nullify safety policy.
 

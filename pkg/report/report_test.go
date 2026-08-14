@@ -234,3 +234,26 @@ func TestTextWritesNoEscapesWhenColorDisabled(t *testing.T) {
 		t.Errorf("ESC reached a non-terminal writer:\n%q", buf.String())
 	}
 }
+
+// TestTextShowsDemotion: a capped finding must show both the ceiling and what it
+// would have been. Printing only the lower number would make a demotion
+// indistinguishable from a rule that was always low, which is the auditability
+// the mechanism exists to provide (docs/design-note-demotion.md §4).
+func TestTextShowsDemotion(t *testing.T) {
+	rep := &scan.Report{
+		Verdict: model.Warn,
+		Findings: []model.Finding{{
+			RuleID: "SG-ANTI-001", Severity: model.SevLow, OriginalSeverity: model.SevHigh,
+			DemotedBy: "CTX-LICENSE-BOILERPLATE", Title: "Anti-refusal / jailbreak framing",
+			File: "SKILL.md", StartLine: 10, Confidence: 0.95, Rationale: "r",
+		}},
+	}
+	var buf bytes.Buffer
+	Text(&buf, rep, Options{NoColor: true, Verbose: true})
+	got := buf.String()
+	for _, want := range []string{"low (from high)", "capped at low by CTX-LICENSE-BOILERPLATE", "not suppressed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q:\n%s", want, got)
+		}
+	}
+}

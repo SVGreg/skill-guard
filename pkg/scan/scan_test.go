@@ -23,7 +23,8 @@ func scanFixture(t *testing.T, path string) *Report {
 	if err != nil {
 		t.Fatalf("builtin: %v", err)
 	}
-	return New(rules.AllRules(packs), policy.Default()).Scan(b)
+	return New(rules.AllRules(packs), policy.Default()).
+		WithContexts(rules.AllContexts(packs)).Scan(b)
 }
 
 func TestBenignPasses(t *testing.T) {
