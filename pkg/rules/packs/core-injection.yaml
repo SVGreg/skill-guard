@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-injection
-version: 1.1.0
+version: 1.2.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
