@@ -232,6 +232,48 @@ namespace corruption the ID-reconciliation table records. A separate prefix (`CT
 unprefixed name in a dedicated pack are both acceptable; the decision belongs with the
 schema work.
 
+## 6a. Shipped — what the implementation decided
+
+Implemented from §4 only. §5 (bundle-scoped waivers) stays a separate backlog row, and the
+SARIF mapping stays open because skill-guard emits no SARIF yet.
+
+**Schema.** `kind: context` in any pack, with `scope: line|file` and `effect.max_severity`.
+Context rules compile into `Pack.Contexts`, separate from `Pack.Rules`, because they are a
+different kind of thing — they never produce a finding. The loader **fails the load** on
+`severity`, `confidence` or `suppress` in a context rule, on `effect`/`scope` in a detection,
+and on an unknown `kind`: those fields would be inert, and an inert field that looks
+meaningful is the failure mode PR #125 fixed for the `scoring:` key.
+
+**Naming (§6 resolved).** `CTX-` prefix, in a dedicated `context` pack. A unit test fails on
+any context rule taking an `SG-` id, so the namespace cannot be corrupted by hand later.
+
+**Ordering (§7 resolved): caps apply before dedup**, and therefore before waivers, counts,
+max severity, risk and verdict. Every downstream consumer sees the severity the report will
+actually show; a cap applied later would leave a `high` in the counts and a `fail` verdict
+behind a report line that reads `low`.
+
+**Scope granularity (§7 resolved):** `line` and `file` are implemented, `span` is not. `line`
+is what the license case needs and `file` costs nothing once the plumbing exists; `span`
+needs a definition of a block boundary that no current entry would use.
+
+**Multiple caps on one line:** the lowest ceiling wins.
+
+**A no-op cap is not recorded.** If the ceiling is at or above the finding's own severity,
+nothing changes and `demoted_by` stays empty — claiming a demotion that did not happen would
+be a lie in the JSON.
+
+**Reporting.** The text report prints `low (from high)` on the finding line and, in verbose,
+`severity capped at low by CTX-… (finding kept, not suppressed)`. JSON carries `demoted_by`
+and `original_severity`. Nothing is hidden anywhere.
+
+**Migration.** Only the motivating entry moved: `SG-ANTI-001`'s MIT grant-clause `suppress`
+(PR #136) is now `CTX-LICENSE-BOILERPLATE`. §8's non-goal stands — the rest convert when
+their rule is next touched, with corpus measurement, not in one sweep.
+
+**Still open, deliberately:** policy override of a context rule (an org that wants license
+boilerplate flagged is a legitimate position), the SARIF mapping, and whether the documentary
+modifier folds into this. None of them ride along with this change.
+
 ## 7. Open questions
 
 - **Scope granularity.** `line` is the minimum. Is `file` needed (a whole `LICENSE`), and

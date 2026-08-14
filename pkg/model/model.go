@@ -78,7 +78,15 @@ type Finding struct {
 	Rationale  string   `json:"rationale,omitempty"`
 	Fix        string   `json:"fix,omitempty"`
 	Confidence float64  `json:"confidence"`
-	Waived     bool     `json:"waived,omitempty"`
+	// DemotedBy names the context rule that capped this finding's severity, and
+	// OriginalSeverity is the severity it carried before the cap. Both are unset
+	// unless a cap actually applied — a context rule whose ceiling is at or above
+	// the finding's own severity changes nothing and is not recorded. Demotion is
+	// deliberately *not* erasure: the finding keeps its id, confidence and excerpt
+	// and stays in the report and the JSON (docs/design-note-demotion.md §4).
+	DemotedBy        string   `json:"demoted_by,omitempty"`
+	OriginalSeverity Severity `json:"original_severity,omitempty"`
+	Waived           bool     `json:"waived,omitempty"`
 }
 
 // Counts summarizes findings by severity (waived excluded).

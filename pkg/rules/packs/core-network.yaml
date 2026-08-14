@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-network
-version: 1.0.0
+version: 1.1.0
 description: Data exfiltration, egress, SSRF (rule-verification.md §3).
 rules:
   - id: SG-NET-002
@@ -73,7 +73,7 @@ rules:
         - regex: '(?im)\b(embed|render|include|insert|append|display)\b[^\n]{0,60}\b(image|img|markdown link|hyperlink)\b[^\n]{0,100}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|previous message|system prompt|user data)\b'
           confidence: 0.75
         # encode-the-context-into-a-URL framing
-        - regex: '(?im)\b(base64|url ?encod\w+|percent ?encod\w+)\b[^\n]{0,80}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|system prompt|user data)\b[^\n]{0,100}\b(image|img|url|query string|src=)\b'
+        - regex: '(?im)\b(base64|url ?encod\w+|percent ?encod\w+)\b[^\n]{0,80}(^|[^-\n])\b(conversation|chat history|context window|secret|api[ _-]?key|token|credential|system prompt|user data)\b[^\n]{0,100}(\bimage\b|\bimg\b|\burl\b|\bquery string\b|src=)'
           confidence: 0.75
     suppress:
       - '(?i)\b(img\.shields\.io|badge\.fury\.io|shields\.io)\b'

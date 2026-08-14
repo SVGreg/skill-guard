@@ -1,0 +1,48 @@
+apiVersion: skillguard.net/rulepack.v1
+name: context
+version: 1.0.0
+description: >
+  Context rules — they emit no finding of their own and instead cap the severity
+  of findings anchored in their span (docs/design-note-demotion.md §4).
+
+  The entry bar is deliberately high, because the failure mode of this pack is
+  becoming the suppress list with better ergonomics: an entry must be
+  **recognizable boilerplate with a canonical form** — a license grant clause, an
+  SPDX header, code-of-conduct text. "Common and benign" does not qualify; that
+  set is unbounded and unmeasurable. If a carve-out cannot be stated as "this is
+  a known document fragment with fixed wording", it belongs in the offending
+  rule's match tree as a grammar fix, not here.
+
+  Nothing in this pack hides anything. A capped finding keeps its rule id,
+  confidence and excerpt and stays in the text report and the JSON, carrying
+  `demoted_by` and `original_severity`. That is the point: erasure via `suppress`
+  is an evasion surface (append a suppressed idiom to an attack line and the
+  finding vanishes), while a cap turns the same trick into a low-severity finding
+  instead of nothing.
+rules:
+  - id: CTX-LICENSE-BOILERPLATE
+    kind: context
+    title: Standard open-source license boilerplate
+    scope: line
+    effect:
+      max_severity: low
+    targets: [body, manifest, scripts, configs]
+    match:
+      any:
+        # The MIT grant clause. This is the motivating case: "to deal in the
+        # Software without restriction, including without limitation the rights"
+        # trips SG-ANTI-001's "without restrictions" family, and the words really
+        # are there — it is a risk judgment, not a misfire, which is exactly the
+        # distinction `suppress` cannot express.
+        - regex: '(?i)\bwithout\s+restrictions?,?\s+including\s+without\s+limitation\b'
+        - regex: '(?i)\bpermission\s+is\s+hereby\s+granted,\s+free\s+of\s+charge\b'
+        - regex: '(?i)\bthe\s+software\s+is\s+provided\s+"?as\s+is"?,?\s+without\s+warranty\b'
+        # Apache-2.0 and the SPDX header that stands in for any of them.
+        - regex: '(?i)\blicensed\s+under\s+the\s+apache\s+license,\s+version\s+2\.0\b'
+        - regex: '(?i)\bwithout\s+warranties\s+or\s+conditions\s+of\s+any\s+kind\b'
+        - regex: 'SPDX-License-Identifier:'
+    rationale: >
+      Recognizable license boilerplate. A finding anchored here matched real
+      words in a fixed, well-known document fragment, so it is kept and weighted
+      down rather than deleted — appending this text to a payload line must not
+      make the payload invisible.

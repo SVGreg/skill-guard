@@ -16,25 +16,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// loadRuleset loads built-in packs plus any explicit --rulepack files.
-func loadRuleset(extra []string) ([]*rules.Rule, error) {
+// loadRuleset loads built-in packs plus any explicit --rulepack files. It
+// returns detections and severity-capping context rules separately, because the
+// scanner consumes them at different stages (see scan.Scanner.WithContexts).
+func loadRuleset(extra []string) ([]*rules.Rule, []*rules.ContextRule, error) {
 	packs, err := rules.Builtin()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, path := range extra {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		p, err := rules.LoadPack(data)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		fmt.Fprintf(os.Stderr, "note: loaded unsigned rule-pack %q (provenance: unsigned)\n", path)
 		packs = append(packs, p)
 	}
-	return rules.AllRules(packs), nil
+	return rules.AllRules(packs), rules.AllContexts(packs), nil
 }
 
 func scanCmd() *cobra.Command {
@@ -84,11 +86,11 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 			if failOn != "" {
 				pol.FailOn = failOn
 			}
-			rs, err := loadRuleset(rulepacks)
+			rs, cs, err := loadRuleset(rulepacks)
 			if err != nil {
 				return fail(3, "rules: %v", err)
 			}
-			rep := scan.New(rs, pol).Scan(b)
+			rep := scan.New(rs, pol).WithContexts(cs).Scan(b)
 
 			w := outputWriter(out)
 			defer closeWriter(w)
@@ -172,11 +174,11 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 
 			var summary *attest.ScanSummary
 			if !noScan {
-				rs, err := loadRuleset(nil)
+				rs, cs, err := loadRuleset(nil)
 				if err != nil {
 					return fail(3, "rules: %v", err)
 				}
-				rep := scan.New(rs, policy.Default()).Scan(b)
+				rep := scan.New(rs, policy.Default()).WithContexts(cs).Scan(b)
 				summary = &attest.ScanSummary{
 					Verdict: string(rep.Verdict), MaxSeverity: rep.MaxSeverity.String(),
 					RiskScore: rep.RiskScore, Version: Version,
@@ -366,7 +368,11 @@ func versionCmd() *cobra.Command {
 				return fail(4, "%v", err)
 			}
 			for _, p := range packs {
-				fmt.Printf("  rulepack %s@%s (%d rules)\n", p.Name, p.Version, len(p.Rules))
+				line := fmt.Sprintf("  rulepack %s@%s (%d rules", p.Name, p.Version, len(p.Rules))
+				if n := len(p.Contexts); n > 0 {
+					line += fmt.Sprintf(", %d context", n)
+				}
+				fmt.Println(line + ")")
 			}
 			return nil
 		},
