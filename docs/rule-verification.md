@@ -985,6 +985,15 @@ payload. One hit is not worth a broad, bypassable mechanism.
   `pkg/scan/scan_test.go`.
 
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical) — **implemented** (`core-secret`)
+> **Window fix (#179).** The verb→path span was `[^\n]{0,40}`, which is shorter than the paths
+> credentials actually live at. A macOS `Application Support` path or a Windows `AppData\Roaming`
+> path puts the filename 45–80 characters past the verb, so **five paths this rule already declares
+> went silent**: `cat ~/key.pem` matched while
+> `cat "$HOME/Library/Application Support/MyApp/certs/client.pem"` did not, and the same held for
+> `/credentials`, `id_rsa` inside a macOS app container, `keystore` under `%APPDATA%\Roaming`, and a
+> `.p12` under Application Support. Nothing reported the loss, because the *short* form of every one
+> of those paths still matched — the rule looked healthy. Widened to `{0,120}`; see §8.2.
+
 - **Signals:** path references to `~/.ssh/, ~/.aws/, ~/.config/gcloud, .env, **/credentials*, *.pem, *.key, id_rsa, *.wallet, keystore`, browser stores (`Login Data`, `cookies.sqlite`, `Local Storage`), OS keychains (`security find-generic-password`, `secret-tool`, `Credential Manager`) — **in a read/access context**.
 - **FP carve-outs:** *placeholder* paths (`/path/to/credentials`, `~/.aws/credentials # example`), `.env.example`, `.gitignore` entries listing these (not reading them), a skill that documents where creds live. Require an actual read sink (`open`, `cat`, `read`, glob-then-iterate) — a mere string mention → info.
 - **Escalation:** none; path + sink is structural.
@@ -1645,6 +1654,11 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
 - **Fixtures:** `TestOverBroadActivationTrigger` in `pkg/rules/rules_test.go` — 16 TP + 10 benign rows (the scoped-broad phrasings that would break a naive `any|every|all` match). `TestOverBroadActivationTriggerCorpusNegatives` pins **30 verbatim corpus excerpts** that must not match, plus the one corpus true positive that must — recall and precision fail with different names. Bundle fixture: an "always use this skill for every task … regardless of the topic" line appended to `testdata/malicious/SKILL.md`, asserted by `TestMaliciousFixtureTriggersOverBroadTrigger` in `pkg/scan/scan_test.go`.
 
 ### SG-AS-001 — Agent-config / cross-skill snooping  (AST03, high) — **implemented** (`core-secret`)
+> **Window fix (#179).** Both leaves carried the same `[^\n]{0,40}` verb→path span as `SG-SEC-001`,
+> with the same consequence: `cat ~/mcp.json` matched, while
+> `cat "$HOME/Library/Application Support/Claude/claude_desktop_config.json"` — where that config
+> actually lives on macOS — did not. Widened to `{0,120}`; see §8.2.
+
 - **Signals (shipped):** two leaves. **(a) Config read** — a read verb within 40 chars of an agent
   config location: `cat|less|head|tail|grep|rg|jq|strings|xxd|open|read|Get-Content` (with `read`
   left open-ended so `readFileSync`/`read_text` match) against `mcp.json`,
@@ -2180,3 +2194,52 @@ Every rule entry must ship with:
 7. Golden expected-findings file so confidence/severity regressions are caught in CI.
 
 **Precision budget:** track per-rule FP rate against the benign corpus (`anthropics/skills` mirror). A rule exceeding a configurable FP ceiling (default 2% of benign skills) is auto-demoted to `info`/`warn` until tuned — coverage never comes at the cost of an unusable signal-to-noise ratio.
+
+### 8.2 Window constants: measure the path, not the pattern
+
+A `[^\n]{0,N}` between two slots is a calibration decision, and the way it fails is silent. If `N`
+is shorter than the real distance between the slots, the leaf keeps matching the *short* form of
+every input it was written for — so the rule looks healthy, its tests pass, and only the realistic
+input goes missing.
+
+`core-secret`'s verb→path window was `{0,40}`. Real credential paths are longer than that: a macOS
+`Application Support` path or a Windows `AppData\Roaming` path puts the filename 45–80 characters
+past the verb. The result was that **five paths `SG-SEC-001` already declares** — `.pem`,
+`/credentials`, `id_rsa`, `keystore`, `.p12` — were unreachable at the depth those files actually
+live at, on a rule whose severity is `critical`, and `SG-AS-001` missed the real macOS location of
+Claude Desktop's MCP config. An exfiltrating skill did not need to know any of this; it only had to
+name the true path (#179).
+
+**Pick the constant from a measured saturation curve, not from taste.** Over the 11,406-file
+evaluation corpus, all three verb→path leaves stop moving between 80 and 120 — `120` is identical
+to `80` in every row:
+
+| leaf | `{0,40}` | `{0,80}` | `{0,120}` | `{0,160}` |
+|---|---|---|---|---|
+| `SG-SEC-001` | 39 files / 61 spans | 41 / 65 | **41 / 65** | 42 / 66 |
+| `SG-AS-001` (config leaf) | 10 / 14 | 12 / 16 | **12 / 16** | 12 / 20 |
+| `SG-AS-001` (skills leaf) | 16 / 28 | 18 / 33 | **18 / 33** | 18 / 33 |
+
+So `{0,120}` buys every realistic path for **+6 files, +11 spans across three leaves**, and sits on
+the flat part of the curve — far enough past saturation to absorb a longer path than the corpus
+happens to contain, without reaching the point where `160` starts pairing unrelated tokens.
+
+**A trailing `\b` on the verb slot is not the fix — inflections are.** Widening the window surfaced a
+second defect: `SG-AS-001`'s verb alternations ended without a boundary, so `open` matched inside
+`openai/codex` and `~/.openclaw/mcp.json`, and `dir` matched inside `directory`. Closing it with a
+bare `\b` removed those, and **also silently removed three real corpus matches** — `Reads
+~/.gemini/tmp/…` and ``reads `.claude/loop.md` `` — because `SG-AS-001` targets *prose*, where a
+skill describes itself in the third person. The shipped form is `(?:s|es|ed|ing)?\b`: it blocks an
+arbitrary word continuation while keeping the inflection. Caught only by re-scanning the bundles
+that already produced findings and diffing against `main` — the pack-wide test suite passed either
+way.
+
+Note `SG-SEC-001`'s verb slot has carried a bare `\b` since it shipped, so `Reads ~/.ssh/id_rsa` in
+prose does not match it. That is a pre-existing narrowness, not a regression from this change, and
+widening it would add matches that need their own measurement — left alone deliberately.
+
+**Widen the windows that span a verb and a path; leave the ones that span prose.** `SG-SEC-005`'s
+`{0,60}`/`{0,40}` slots sit between a verb, a credential *noun* and a destination *noun* — an
+English sentence, not a filesystem path. Its calibration is measuring a different thing and was left
+alone, pinned by `TestSecretPromptWindowsUnchanged`. Sweeping every `{0,N}` in a pack to one value
+would have changed a second rule's meaning while claiming to fix a first.
