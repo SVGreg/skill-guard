@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-supply
-version: 1.0.0
+version: 1.1.0
 description: Supply chain — unpinned/remote dependencies pulled and executed at use time (rule-verification.md §4, AST02).
 rules:
   - id: SG-DEP-007
@@ -31,6 +31,31 @@ rules:
         # pipx run <pkg>: one-shot fetch-and-run of a Python package.
         - regex: '(?i)\bpipx\s+run\s+[@a-z0-9][\w.-]{3,}'
           confidence: 0.85
+        # bunx has no confirmation prompt at all — unlike npx there is nothing to
+        # auto-accept — so requiring `-y` left the rule blind to the only form
+        # bunx actually has, while its own title and rationale name it. Corpus:
+        # 31 files across 4 bundles, three of them one skill family documenting
+        # `bunx remotion`, which is the same shape as the `uvx markitdown`
+        # cluster the rule already counts.
+        - regex: '(?i)\b(?:bunx|bun[ \t]+x)[ \t]+[@a-z0-9][\w.@/-]{2,}'
+          confidence: 0.85
+        # `npm exec` is npx's modern spelling: same fetch-and-run, same absence
+        # of a pin. 0 corpus files.
+        - regex: '(?i)\bnpm[ \t]+exec[ \t]+(?:-y[ \t]+|--yes[ \t]+|--[ \t]+)?[@a-z0-9][\w.@/-]{2,}'
+          confidence: 0.85
+        # `uv tool run` is `uvx` spelled out, and `uv run --with` pulls a package
+        # into a throwaway environment and executes inside it. 1 and 2 files.
+        - regex: '(?i)\buv[ \t]+tool[ \t]+run[ \t]+[@a-z0-9][\w.-]{2,}'
+          confidence: 0.85
+        - regex: '(?i)\buv[ \t]+run\b[^\n]{0,40}--with[ \t]+[@a-z0-9][\w.-]{2,}'
+          confidence: 0.85
+        # deno run against a REMOTE spec. The local-file form (`deno run main.ts`,
+        # `deno run ./x.ts`) is ordinary and must not match, so a remote spec
+        # prefix is required rather than the bare verb. 0 corpus files, and the
+        # https form is the most on-point payload shape in this family: an
+        # arbitrary remote script executed with an explicit all-permissions flag.
+        - regex: '(?i)\bdeno[ \t]+run\b[^\n]{0,60}(?:npm:|jsr:|https?://)[\w.@/:-]{2,}'
+          confidence: 0.9
     suppress:
       # A pinned exact version (npx foo@1.2.3, uvx ruff@0.5.0) is auditable — out of scope.
       - '(?i)@\d+\.\d+'
