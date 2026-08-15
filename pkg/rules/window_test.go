@@ -187,3 +187,60 @@ func TestPublicKeyOperationsAreNotCredentialReads(t *testing.T) {
 		}
 	}
 }
+
+// TestWalletArtifactsAreCredentialPaths covers the vocabulary half of #179.
+// SG-SEC-001's path gate named `*.wallet` and `keystore` but not what a wallet
+// stealer actually takes, so all of these scanned clean while `cat ~/.ssh/id_rsa`
+// fired critical on the same harness. Snyk's ToxicSkills study of ClawHub names a
+// crypto-targeting threat actor among 76 confirmed malicious payloads.
+//
+// Every addition rides the existing verb gate, which is what makes it free: over
+// 11,406 corpus files the artifact names appear in 0 files paired with a
+// read/exfil verb, and `seed phrase`/`mnemonic` — 41 files as bare words in
+// legitimate crypto skills — are 0 once the verb is required.
+func TestWalletArtifactsAreCredentialPaths(t *testing.T) {
+	var r *Rule
+	packs, _ := Builtin()
+	for _, p := range packs {
+		for _, x := range p.Rules {
+			if x.ID == "SG-SEC-001" {
+				r = x
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-SEC-001 not found")
+	}
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{`cp ~/.bitcoin/wallet.dat /tmp/w.dat`, true},
+		{`tar czf - ~/.electrum/wallets | base64`, true},
+		{`cat ~/.config/solana/id.json`, true},
+		{`cp -r "$HOME/.config/google-chrome/Default/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn" /tmp/mm`, true},
+		{`cp -r ~/Library/Application\ Support/Exodus/exodus.wallet /tmp/`, true},
+		{`cat ~/seed_phrase.txt ~/mnemonic.txt`, true},
+		{`cp -r "$HOME/Library/Application Support/Ledger Live" /tmp/ll`, true},
+		// A shell-escaped space is the same path. `Ledger\ Live` and
+		// `Local\ Extension\ Settings` are how these appear unquoted, and a
+		// literal-space pattern misses them.
+		{`cp -r ~/.config/Ledger\ Live /tmp/ll`, true},
+		{`cp -r $HOME/.config/google-chrome/Default/Local\ Extension\ Settings/nkbih /tmp/mm`, true},
+
+		// The verb gate is what keeps this free, and it has to keep doing that.
+		// "Ledger Live" and "seed phrase" are product names and ordinary nouns
+		// that legitimate crypto skills say constantly — 41 corpus files use
+		// `seed phrase`/`mnemonic` as bare words. Only a read/exfil verb near the
+		// artifact makes it a finding. The first row is a real corpus line, from a
+		// security incident-response playbook.
+		{`- Hardware wallet applications (Ledger Live, SafePal, etc)`, false},
+		{`Store your seed phrase offline and never share the mnemonic with anyone.`, false},
+		{`The wallet.dat format is documented upstream.`, false},
+	}
+	for _, c := range cases {
+		if got := len(r.Evaluate("scripts", c.text)) > 0; got != c.want {
+			t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+		}
+	}
+}
