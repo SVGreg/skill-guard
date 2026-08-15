@@ -1807,6 +1807,63 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
 - **Confidence:** distance-1 to popular + young/unknown author 0.7.
 - **Fixtures:** TP: `reqeusts`, `python-dateutil` vs `python-dateutils`. FP: `requests`.
 
+#### Implementation audit (cycle 109, 2026-08-15) — **blocked on registry truth, not on the missing distance primitive**
+
+`sg-rule-implement` picked this row (the last `planned` detection in the backlog) and could not ship it.
+Recording the measurement so no later cycle re-derives it.
+
+- **The obvious blocker is not the real one.** The engine has no edit-distance leaf (`regex`, `substring`,
+  `unicode_category`, `bidi_control`, `tag_block`, `escape_sequence`, `url_host`, `homoglyph_ratio`), so the
+  spec's signal cannot be written as YAML. That is fixable. What is not fixable in-engine is precision.
+- **Measured over 12,104 corpus files** against ~110 curated top PyPI+npm names, extracting the package
+  argument of every install/runner command: **19 distinct near-miss names / 57 occurrences, 0 true
+  positives.** Distance-1: `nuxi`~`nuxt`, `just`~`jest`, `@stryker-mutator/core`~`cors`,
+  `@playwright/test`~`jest`, `https`~`httpx`. Distance-2: `vitest`~`vite`, `astro`~`attrs`,
+  `canvas`~`pandas`, `node`~`zod`, `dash`~`lodash`, `ninja`~`jinja2`, `cbor2`~`cors`, `commands`~`commander`.
+  A distance ≤2 rule on this corpus is **100% false positives**.
+- **By perturbation class**, the FPs are not spread evenly — they sit entirely in **substitution** (6 names)
+  and **affix** (`langchain-core`). The classic typo shapes are clean: **transposition (721 variants),
+  doubled char (839), single omission (838) and every separator variant (231) produce 0 corpus hits.**
+- **That clean subset is still not shippable, and 0 hits is why it looks safe.** Two registry facts decide it:
+  - **PyPI normalizes `-`, `_` and `.` to a single name** ([PEP 503](https://packaging.python.org/en/latest/specifications/name-normalization/):
+    *"lowercased with all runs of the characters `.`, `-`, or `_` replaced with a single `-`"*). `python_dateutil`
+    **is** `python-dateutil`. A separator-variant rule would flag the canonical package spelled differently —
+    an FP by construction, and one the corpus cannot show because the corpus happens not to spell it that way.
+  - **npm has rejected new names differing from an existing package only by punctuation since 2017**, a policy
+    introduced *because* of the `crossenv`/`cross-env` attack this rule's fixtures cite.
+
+  So the one compact, auditable, FP-free class detects a shape both major registries have structurally removed.
+- **What is left** — transposition/doubling/omission — needs ~2,400 generated alternations of a hardcoded
+  top-N list embedded in a pack: unauditable as data, stale as the list ages, and covering only squats of the
+  N names chosen. That is not "rules are data"; it is a build artifact pasted into YAML.
+- **Conclusion.** The discriminator for this threat is **registry truth** — does the name exist, who published
+  it, how old is it — exactly the **Escalation** bullet above. `nuxi` is the proof that name shape alone carries
+  no signal: distance-1 from `nuxt`, published by the same project, entirely legitimate. Unblocks if an
+  online-registry escalation is ever built. **The homoglyph form of this threat is already covered** by
+  `SG-INJ-002`'s `homoglyph_ratio` leaf, which targets `scripts`/`configs`.
+
+### SG-DEP-012 — Vendored compiled artifact  (AST02/AST08, medium) — **blocked** (engine: assets are not targets)
+- **Threat:** a skill ships pre-compiled code instead of source — `.pyc`/`.pyo`, `.so`/`.dylib`/`.dll`, `.exe`,
+  `.wasm`, `.jar`/`.class`, `.node` — or an opaque archive. The bytes execute like a script, and neither a human
+  reviewer nor any static rule can read them. `SG-DEP-011` covers *fetching* a binary and marking it executable;
+  this is the same payload with no fetch to detect, because it is already in the bundle. SkillSpector SC8.
+- **Signals (designed, not shippable yet):** an `asset` whose extension or magic bytes identify compiled code
+  (`\x7fELF`, `MZ`, `\xca\xfe\xba\xbe`, `\x00asm`), reported at the file level.
+- **Blocked, and the block is structural.** `pkg/skill.classify` gives these files role `asset`, and
+  `pkg/scan.Scan` builds targets only from `manifest`/`body`/`Scripts`/`Configs`/`Docs` — **no rule can be
+  evaluated against an asset at all.** This rule cannot be written until the classifier/target row in
+  `planned-rules.md` lands.
+- **Prevalence (803 bundles / 12,099 files, 2026-08-15): 2 bundles.** `tracy-stats` vendors 4 `.exe` + 2 `.dll`
+  (PE magic confirmed by reading the header, not by trusting the extension), reported as nothing today;
+  `web-artifacts-builder` ships `scripts/shadcn-components.tar.gz`. At 0.25% this is high-precision and
+  low-noise **once it can run**.
+- **Rejected alternative — match the invocation instead of the artifact.** Expressible with today's engine, but
+  measured at **33 bundles / 69 occurrences**, dominated by `chmod +x` over ordinary `.sh`/`.py` files — the
+  "make my own script runnable" idiom, not unreviewable code. Narrowing to compiled extensions leaves
+  `java -jar spectra-cli.jar` pointed at a JAR the bundle does not contain. **Detect the artifact, not the verb.**
+- **Fixtures (when unblocked):** TP: a bundle shipping `helper.pyc` / an ELF `helper`. FP: `.svg`, `.png`, `.ttf`
+  assets, which must stay silent.
+
 ### SG-DEP-003 — Known-CVE dependency  (AST02, high)  [SkillSpector SC4; via OSV]
 - **Signals:** resolve pinned deps against an **offline OSV mirror**; online OSV opt-in (`--online`, sets `nondeterministic`).
 - **FP carve-outs:** version not actually in the vulnerable range; dev-only dep with no runtime path; withdrawn advisories.
