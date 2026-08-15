@@ -1865,6 +1865,55 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   yet shipped.)
 
 ### SG-DEP-007 — Remote-package auto-execution via a package runner  (AST02/AST01, medium) — **implemented** (`core-supply`)
+
+#### Polish cycle 108 — first FP audit, and the `-y` requirement was an npx-ism
+
+**Precision: nothing to fix.** All 43 corpus hits were read and every one is a genuine runner
+invocation — `uvx markitdown` ×10 in one skill, `npx -y` ×10, `npx skills add … -g -y` ×5,
+`pnpm dlx stryker` ×4, plus `uvx ruff` / `uvx cookiecutter` in Trail of Bits' Python skill. That is
+the rule working as designed: at `medium` it surfaces the capability for review rather than
+failing the skill, because static analysis cannot tell a trusted package from a malicious one and
+both are unpinned remote fetch-and-execute.
+
+One marginal hit is **left deliberately**: `skill-finder/SKILL.md:218` reads ``Use `npx skills add`
+with `-y` `` — the verb and the flag are in *separate* code spans, so this is prose describing the
+flag rather than a command line. Tightening the 40-character gap to exclude it would also break
+`"command": "npx", "args": ["-y", …]`, which is a real MCP-config invocation and appears in the
+corpus. A known, documented FP beats that recall loss.
+
+**Recall: `bunx` was named but unreachable.** The rule's title and rationale both name `bunx`, and
+the leaf required `-y`/`--yes` — but **bunx has no confirmation prompt at all**, so there is nothing
+to auto-accept and `bunx <pkg>`, its only real form, matched nothing. Five leaves added, each
+measured against the corpus first:
+
+| added | corpus cost | why |
+|---|---|---|
+| `bunx <pkg>` / `bun x <pkg>` | 31 files / **4 bundles** | bunx never prompts; `-y` is meaningless for it |
+| `npm exec [-y\|--] <pkg>` | 0 files | npx's modern spelling, same fetch-and-run |
+| `uv tool run <pkg>` | 1 file | `uvx` spelled out |
+| `uv run --with <pkg>` | 2 files | pulls a package into a throwaway env and executes in it |
+| `deno run … npm:\|jsr:\|https://` | 0 files | the https form is the most on-point shape in the family |
+
+The bunx cost is concentrated the same way the existing hits are — three of the four bundles are one
+Remotion skill family documenting `bunx remotion`, which is the same shape as the `uvx markitdown`
+cluster the rule already counts as a true positive. Treating them differently would be the
+inconsistency.
+
+**Deliberately NOT added: bare `npx <pkg>`.** It measures **158 files across 62 bundles** — the rule
+would go from 17 bundles to ~70. And unlike bunx, npx *does* prompt on first use, so `-y` is a real
+"no human in the loop" discriminator rather than noise. `go run <host>/pkg@latest` is also left out:
+it is fetch-and-execute, but `SG-DEP-001` already surfaces it as an unpinned dependency and two
+rules on one line is duplicate reporting.
+
+**Local and pinned forms stay out**, and the new leaves respect the existing carve-outs:
+`deno run main.ts` and `deno run ./src/main.ts` are ordinary local execution, `bunx remotion@4.0.1`
+is pinned and auditable, `bunx ./tools/build.js` is a local path, `npm run build` is a script not a
+runner, and `uv run python -m pytest` has no `--with`. All are negative rows in
+`TestPackageRunnerCoversModernSpellings`.
+
+The new leaves use `[ \t]+` rather than `\s+` between command words, so a match cannot span a line
+break — the newline-crossing-gap class tracked in the engine backlog.
+
 - **Signals:** the fetch-**and-execute** runner idioms — `npx -y` / `bunx -y` (explicit
   auto-confirm), `pnpm dlx` / `yarn dlx` (the download-and-run subcommand), `uvx <tool>`, and
   `pipx run <pkg>`. Each pulls an unpinned remote package and runs it in one command, with no
