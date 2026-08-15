@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.1](https://github.com/SVGreg/skill-guard/compare/v0.2.0...v0.2.1) (2026-08-15)
+
+
+### Features
+
+* **rules:** context rules that cap severity, so a finding can be demoted instead of erased ([#178](https://github.com/SVGreg/skill-guard/issues/178)) ([757f925](https://github.com/SVGreg/skill-guard/commit/757f92521e7a160092f007a2ae63042a9b8ab9d8))
+* **rules:** SG-SEC-001 covers crypto-wallet artifacts ([#179](https://github.com/SVGreg/skill-guard/issues/179)) ([#184](https://github.com/SVGreg/skill-guard/issues/184)) ([637974d](https://github.com/SVGreg/skill-guard/commit/637974df019c877ab49f4640832cda9296f53c94))
+
+
+### Bug Fixes
+
+* **rules:** guard the whole pack set against \b binding to every alternation branch ([#177](https://github.com/SVGreg/skill-guard/issues/177)) ([3c75417](https://github.com/SVGreg/skill-guard/commit/3c75417f5242b097c9f6ff8f9974502c962e8915))
+* **rules:** polish SG-INJ-001 — scope the weak target slot, add four missing phrase families ([#176](https://github.com/SVGreg/skill-guard/issues/176)) ([0cadc09](https://github.com/SVGreg/skill-guard/commit/0cadc09ca2e23260d7904e618a91a022245c0d6c))
+* **rules:** widen SG-DEP-007 — bunx was named in the rule but unreachable ([#186](https://github.com/SVGreg/skill-guard/issues/186)) ([aed38f8](https://github.com/SVGreg/skill-guard/commit/aed38f8837c89ef6397e0c7a653c35a52a4dfc11))
+* **rules:** widen the verb→path window so real credential paths are reachable ([#179](https://github.com/SVGreg/skill-guard/issues/179)) ([#182](https://github.com/SVGreg/skill-guard/issues/182)) ([b9a505a](https://github.com/SVGreg/skill-guard/commit/b9a505afdcbeb520fb551047ac28443853a72a9d))
+
+
+### Performance Improvements
+
+* **skill:** gatherRefs counted newlines from offset 0 per match — quadratic on untrusted input ([#185](https://github.com/SVGreg/skill-guard/issues/185)) ([d59ce7f](https://github.com/SVGreg/skill-guard/commit/d59ce7fc57b388536bcb4e89a94934ee0c98680e))
+
 ## [0.2.0](https://github.com/SVGreg/skill-guard/compare/v0.1.17...v0.2.0) (2026-08-11)
 
 
