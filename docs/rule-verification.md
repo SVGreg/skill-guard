@@ -1620,6 +1620,41 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   asserts **two distinct line numbers** in `setup.sh`, which is what catches the attribution bug
   above — asserting only "the rule appears" passed throughout it.
 
+### SG-EXE-008 — Covert resource abuse / cryptomining workload  (AST01/AST03, high) — **planned**
+- **Threat:** the skill enlists the agent's host into unauthorized work — a coin miner run in the
+  background, a pool worker, or a "use idle compute" framing. Distinct from the other `SG-EXE-*`
+  rules by *what is executed* rather than *how*: the launch itself is an ordinary command, so
+  `SG-EXE-001`/`-003` see nothing special, and the harm is resource theft rather than takeover.
+  Named by SkillSpector (YARA cryptominer signature) and by HiddenLayer's malicious-skills research
+  ("agents quietly enrolled in unauthorized work"). **Verified undetected on `main` (2026-08-17):**
+  a bundle whose script runs `xmrig --url stratum+tcp://pool.minexmr.com:4444 --coin monero
+  --background` scans **`pass` / 0 findings**.
+- **Signals, and the shape is decided by the FP measurement below.**
+  - **Primary, effectively free: a `stratum+tcp://` / `stratum2+ssl://` pool URL.** A stratum URL is
+    a mining-protocol endpoint and has essentially no other use. **0 of 12,104 corpus files.**
+  - **Secondary, must be paired:** a miner binary (`xmrig`, `minerd`, `ethminer`, `cpuminer`,
+    `cgminer`, `nbminer`, `lolminer`) **gated on a run/fetch verb or a pool flag**
+    (`--url`, `--pool`, `--donate-level`, `-o stratum…`) — never on the bare name.
+  - `--donate-level` is a miner-specific flag: **0 corpus files.**
+- **FP carve-outs — measured over 12,104 files, and they define the rule more than the signals do.**
+  - **Bare miner names cost a false positive.** `clawhub/kubernetes/skills/security/SKILL.md:890`
+    ships a **Falco detection rule** listing `minerd, minergate-cli, xmrig` as process-name IoCs.
+    This is the known benign-but-flagged class — a security tool that legitimately contains the
+    attack's own vocabulary — so the binary-name leaf must be verb/flag-gated.
+  - **Never key on the English words.** `crypto mining` / `cryptominer` / `coin miner` appear in
+    **4 files across 3 bundles, and all four are detection content**: the Falco rule above, Trail of
+    Bits' YARA-authoring reference (`description = "Detects potential cryptomining…"`), and SEAL's
+    web3 supply-chain threat docs. A word-based leaf is 0/4 precision on this corpus.
+  - **Pool hostnames are not safe either:** `f2pool|nicehash|minexmr|…` matches
+    `"note": "F2Pool"` in a crypto **news-source** config. Use the pool only via a `stratum` URL or
+    an explicit `--url`/`-o` flag, not as a bare hostname.
+- **Severity/confidence (proposed):** `high` — this is unauthorized code running with the user's
+  resources, but it is theft of compute rather than of credentials or control. `stratum` URL 0.9;
+  verb-gated miner binary 0.85.
+- **Fixtures (when implemented):** TP: the probe above; `-o stratum+tcp://…` in a bundled script.
+  FP rows must include the Falco IoC line and the YARA `description = "Detects potential
+  cryptomining"` line **verbatim**, since those are the real-world negatives.
+
 ---
 
 ## 4. Per-rule verification — metadata, supply chain, triggers, provenance
