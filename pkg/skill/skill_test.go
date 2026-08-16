@@ -216,6 +216,47 @@ func TestClassifyReferenceDocs(t *testing.T) {
 	}
 }
 
+// TestClassifyExecutableExtensions pins the extensions added for issue #187.
+// Role is what matters — an extension missing from scriptExt classifies as an
+// inert `asset`, and scan.Scan builds no target from assets, so no rule in any
+// pack can ever see the file. Each row fails against the pre-fix map.
+func TestClassifyExecutableExtensions(t *testing.T) {
+	cases := []struct {
+		path, wantRole, wantLang string
+	}{
+		// Directly executable on Windows, and previously absent altogether.
+		{"install.bat", "script", "batch"},
+		{"scripts/setup.cmd", "script", "batch"},
+		// Family completions: the other spellings were already mapped.
+		{"hook.cjs", "script", "javascript"},
+		{"loader.mts", "script", "typescript"},
+		{"helper.cts", "script", "typescript"},
+		{"tool.pyw", "script", "python"},
+		{"module.psm1", "script", "powershell"},
+		// Already-mapped spellings must not regress.
+		{"run.sh", "script", "bash"},
+		{"run.mjs", "script", "javascript"},
+		{"run.ps1", "script", "powershell"},
+		// Deliberately still assets — these need their own measured change,
+		// so a future widening has to update this test on purpose.
+		{"component.tsx", "asset", ""},
+		{"widget.jsx", "asset", ""},
+		{"lib.rs", "asset", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			f := File{Path: c.path, Content: []byte("echo hi\n")}
+			classify(&f)
+			if f.Role != c.wantRole {
+				t.Errorf("classify(%q).Role = %q, want %q", c.path, f.Role, c.wantRole)
+			}
+			if f.Language != c.wantLang {
+				t.Errorf("classify(%q).Language = %q, want %q", c.path, f.Language, c.wantLang)
+			}
+		})
+	}
+}
+
 // TestBundleCollectsDocsAndTheirURLs covers the two halves of issue #13 that
 // live in this package: reference docs must be grouped into Bundle.Docs so the
 // scanner can target them, and gatherRefs must inventory their URLs — it used
