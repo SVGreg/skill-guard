@@ -3729,3 +3729,63 @@ func TestPackageRunnerCoversModernSpellings(t *testing.T) {
 		}
 	}
 }
+
+// TestCryptominingCovered pins SG-EXE-008 (issue #191). The negative rows are
+// the decisive half: every one is a VERBATIM line from the evaluation corpus,
+// because this rule's whole FP exposure is security tooling that legitimately
+// contains mining vocabulary, and a paraphrase would not exercise the same
+// tokens. In particular the Falco row proves why `://` is required — its
+// condition carries a bare `"stratum+tcp"`, so a scheme-less leaf would fire on
+// a detection rule.
+func TestCryptominingCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EXE-008" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EXE-008 not found")
+	}
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		// --- real attack shapes ---
+		{"xmrig-pool", `./xmrig --url stratum+tcp://pool.minexmr.com:4444 --user 44AFF --coin monero`, true},
+		{"stratum-ssl", `-o stratum2+ssl://eu.hashvault.pro:443 -u wallet`, true},
+		{"donate-level", `xmrig --donate-level 1 --background`, true},
+		{"config-json-pool", `{"pools":[{"url":"stratum+tcp://xmr.pool.example:3333"}]}`, true},
+		{"nohup-miner", `nohup ./minerd -a cryptonight -o stratum+tcp://p:80 &`, true},
+		{"chmod-then-run", `chmod +x /tmp/.cache/xmrig`, true},
+		{"binary-with-user-flag", `ethminer --user 0xdead --pool eu1.ethermine.org`, true},
+
+		// --- VERBATIM corpus negatives (see rule-verification.md §SG-EXE-008) ---
+		// clawhub/kubernetes/skills/security/SKILL.md:890 — a Falco detection
+		// rule. Bare binary names in a denylist, and a scheme-less "stratum+tcp".
+		{"falco-procname-denylist", `    (proc.name in (minerd, minergate-cli, xmrig, xmr-stak, cpuminer) or`, false},
+		{"falco-cmdline-contains", `     proc.cmdline contains "stratum+tcp" or`, false},
+		{"falco-rule-title", `- rule: Detect Crypto Mining`, false},
+		{"falco-desc", `  desc: Detect cryptocurrency mining processes`, false},
+		// trailofbits/…/yara-rule-authoring/references/crx-module.md:166
+		{"yara-description", `        description = "Detects potential cryptomining extensions"`, false},
+		// clawhub/tech-news-digest/config/defaults/sources.json:703
+		{"news-source-note", `      "note": "F2Pool/Cobo co-founder"`, false},
+		// --- other benign near-misses ---
+		{"prose-about-mining", `This skill will never mine cryptocurrency on your machine.`, false},
+		{"bitcoin-price-skill", `Fetch the current monero price from the exchange API.`, false},
+		{"unrelated-pool", `Use a connection pool with --pool-size 10 for the database.`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := len(r.Evaluate("scripts", c.text)) > 0
+			if got != c.want {
+				t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+			}
+		})
+	}
+}

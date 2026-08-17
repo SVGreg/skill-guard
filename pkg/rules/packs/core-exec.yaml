@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-exec
-version: 1.0.0
+version: 1.1.0
 description: Dangerous commands, code execution, privilege escalation, persistence (rule-verification.md §3).
 rules:
   - id: SG-EXE-001
@@ -528,3 +528,66 @@ rules:
       a skill. If a tool genuinely needs one, state it in the skill's documentation and let the
       user configure their own environment; treat `git config`, not just `git push`, as a
       state-changing command when granting tool permissions.
+
+  - id: SG-EXE-008
+    title: Covert resource abuse (cryptomining workload)
+    # AST01 only. The backlog row and issue #191 proposed AST01/AST03, but
+    # AST03 is over-PRIVILEGE — permission breadth beyond the stated function —
+    # and the taxonomy's own boundary is explicit: "Malicious code -> AST01".
+    # A miner is malicious code, not a broad grant. Local precedent agrees:
+    # SG-EXE-003 (sudo / privilege escalation) is AST01 alone, and if privilege
+    # escalation does not earn AST03 then compute theft does not either.
+    ast: [AST01]
+    # high, and deliberately NOT medium like SG-DEP-007. That rule is medium
+    # because a package runner is genuinely dual-use — `uvx markitdown` and a
+    # malicious fetch-and-run are the same command shape. A miner pointed at a
+    # mining pool has no benign reading in a skill bundle, so the ambiguity that
+    # justifies "surface for review" is absent here.
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.85
+    targets: [body, scripts, configs]
+    match:
+      any:
+        # Ungated tier: a stratum endpoint is the mining protocol itself and
+        # cannot appear innocently in a sentence — the same role `Login Data`
+        # and `cookies.sqlite` play in SG-SEC-001's ungated leaf.
+        #
+        # `://` IS LOAD-BEARING, NOT DECORATION. The one corpus file that
+        # mentions stratum is a Falco *detection* rule whose condition reads
+        # `proc.cmdline contains "stratum+tcp"` — bare, with no scheme separator.
+        # Requiring `://` is the entire reason this leaf measures 0 of 12,104
+        # files; written as `stratum\+tcp` it would fire on a security tool.
+        - regex: '(?i)\bstratum\d?\+(?:tcp|ssl)://'
+          confidence: 0.9
+        # xmrig's donation-percentage flag. Miner-specific, and 0 corpus files.
+        - regex: '(?i)--donate-level\b'
+          confidence: 0.85
+        # Verb-gated tier: the binary names are also ordinary words in a
+        # denylist, so they only count when paired with a pool/coin flag. The
+        # bare-name form is exactly the Falco line above
+        # (`proc.name in (minerd, minergate-cli, xmrig, …)`) and must not match.
+        - regex: '(?i)\b(?:xmrig|minerd|minergate-cli|xmr-stak|cpuminer|cgminer|bfgminer|ethminer|nbminer|lolminer)\b[^\n]{0,80}(?:--url\b|--pool\b|--coin\b|--user\b|-o[ \t]+stratum)'
+          confidence: 0.85
+        # …or with an explicit run/install verb in front of them.
+        - regex: '(?i)(?:\./|\bnohup[ \t]+|\bchmod[ \t]+\+x[ \t]+)[\w./-]{0,40}(?:xmrig|minerd|xmr-stak|cpuminer|cgminer|bfgminer|ethminer|nbminer|lolminer)\b'
+          confidence: 0.85
+    suppress:
+      # Mining-pool *domains* are not a signal on their own: the corpus carries
+      # `"note": "F2Pool/Cobo co-founder"` in a crypto news-source config. The
+      # rule therefore never keys on a bare pool hostname, and this entry only
+      # documents that decision for the next person to try adding one.
+      - '(?i)"note"\s*:\s*"[^"\n]*pool'
+    rationale: >-
+      A bundled script or instruction enlists the host into unauthorized work — a coin miner or
+      pool worker, often framed as "use idle compute". The launch itself is an ordinary command,
+      so the other execution rules see nothing unusual; what identifies it is the mining
+      vocabulary (a `stratum://` pool endpoint, a miner binary driven by pool flags). The harm is
+      theft of the user's compute and power rather than takeover, but the code is still
+      attacker-chosen and runs with the agent's permissions (AST01 execution / AST03).
+    fix: >-
+      Remove the miner and any `stratum://` pool endpoint from the bundle. A skill has no
+      legitimate reason to run mining software on a user's machine; if the skill genuinely manages
+      compute workloads, require explicit per-run user consent and name the workload in the
+      skill's description.
