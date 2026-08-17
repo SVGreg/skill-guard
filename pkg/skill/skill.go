@@ -303,11 +303,33 @@ func normalizePath(root, p string) string {
 }
 
 // scriptExt maps extensions to a language for language-aware rules.
+//
+// Membership decides far more than the language label: an extension that is not
+// here (and carries no shebang) falls through classify's default to the inert
+// `asset` role, and scan.Scan builds no target from assets — so no rule in any
+// pack is ever evaluated against it. A payload moved from `setup.sh` to a name
+// this map does not list scans completely clean (issue #187). Extensions are
+// therefore added on the same standard as `.sh`: if the file is executable code,
+// it belongs here, whether or not a language-gated rule exists yet.
+//
+// `.bat`/`.cmd` were the sharp edge — directly executable on Windows and absent
+// entirely. The rest close families whose other spellings were already mapped
+// (`.js`/`.mjs` without `.cjs`, `.ts` without `.cts`/`.mts`, `.ps1` without
+// `.psm1`), which is the shape of omission that recurs silently.
+//
+// Deliberately still absent, pending their own measured change: `.tsx`/`.jsx`/
+// `.rs` (183 corpus files — a large population entering `scripts` at once, which
+// needs its own before/after regen), and `.fish`/`.ksh`, which have no honest
+// label here — calling fish "bash" would reintroduce the mislabeling already
+// tracked for `pwsh` in shebangLanguage.
 var scriptExt = map[string]string{
 	".sh": "bash", ".bash": "bash", ".zsh": "bash",
-	".py": "python", ".js": "javascript", ".mjs": "javascript",
-	".ts": "typescript", ".rb": "ruby", ".pl": "perl",
-	".ps1": "powershell", ".php": "php",
+	".py": "python", ".pyw": "python",
+	".js": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+	".ts": "typescript", ".cts": "typescript", ".mts": "typescript",
+	".rb": "ruby", ".pl": "perl",
+	".ps1": "powershell", ".psm1": "powershell", ".php": "php",
+	".bat": "batch", ".cmd": "batch",
 }
 
 var configNames = map[string]bool{
