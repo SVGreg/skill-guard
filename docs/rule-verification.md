@@ -1835,6 +1835,50 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   (caret/tilde ranges, exact pins, `"x"` literal, `idx >= 0` comparisons, digest-pinned image).
   Requirements-style `>=` bounds are deferred until targeting can be made file-type-aware.
 
+#### Polish cycle 112 — first FP audit at corpus scale (877 bundles)
+
+The earlier "5 findings / 4 skills" note was measured on the 240-skill corpus. At 877 bundles the
+rule produces **42 findings across 19 bundles**, so this is the first real precision audit.
+
+- **Precision: 41 of 42 are true positives**, and every one was read individually.
+  - **`@latest` — 26 hits**, all genuine floating install specs (`npx …@latest` in ClawHub install
+    metadata, `go install …@latest`, a `safe-install.sh`, two Trail of Bits reference docs).
+  - **`:latest` — 14 hits.** Eight are ordinary floating container tags (`python:latest`,
+    `docker.io/library/nginx:latest`, `n8nio/n8n:latest`, `wordpress:latest`,
+    `ghcr.io/iii-hq/node:latest`). **Six are Ollama model tags** (`llama3.2:latest`,
+    `nomic-embed-text:latest`, `mistral:latest`), four of them in test files. These are not
+    container images, but they are the same construct and the same risk — a model pulled at
+    `:latest` floats exactly as an image does — so they are counted as true positives. Worth
+    knowing that the `:latest` leaf's real-world population is partly **model** tags, not just OCI
+    refs; a future narrowing that assumes a registry/image shape would silently drop them.
+  - **`"version": "latest"` (1)** is a **true positive** and a pointed one: it is Anthropic's
+    `container={"skills": [{…, "version": "latest"}]}`, i.e. a *skill* loaded into the execution
+    container at a floating version — precisely this project's own supply chain.
+- **The single false positive, and the fix.** `superlocalmemory/ide/hooks/tool-event-hook.sh:14`
+  carries `{ "type": "PostToolUse", "matcher": "*", … }` — the standard **Claude Code hook
+  matcher**, where `"*"` is a *scope* wildcard meaning "every tool", not a version. The JSON leaf
+  `"[^"\n]{1,60}"\s*:\s*"(\*|latest)"` matches **any** key, so it cannot tell a dependency block
+  from an access-control block. Suppressed by key (`matcher`, `value`) rather than by weakening the
+  leaf, because the leaf's `latest` half and its real `"*"` dependency matches must survive —
+  `"happy-dom": "*"` and `"@types/deep-eql": "*"` are pinned as `true` rows for exactly that.
+- **Deliberately left open (a known, documented FP beats a silent recall loss).** The `"*"` half is
+  structurally ambiguous and only a *dependency-block* notion could resolve it, which needs the
+  file-type awareness this rule's own doc already defers. Two consequences worth recording: only the
+  two observed keys are carved out, so the next wildcard-scope key will re-hit it; and the corpus
+  holds **9 `"engines": {"node": "*"}` entries in `package-lock.json` files** that do not fire today
+  only because a lock file classifies as an inert `asset` (issue #187). If the classifier work
+  proceeds, those become new false positives — an engine constraint is not a floating dependency —
+  and `"node"` was **not** suppressed here because it is also a plausible package name.
+- **Recall: one candidate measured and rejected, with numbers.** GitHub's floating
+  `releases/latest/download/` redirect is a genuine unpinned fetch and is not matched today, but the
+  corpus holds exactly **2 instances**: `curl … https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh`,
+  which **already fires `SG-NET-002` at critical**, and a `[Documentation](…/releases/latest/download/tracy.pdf)`
+  markdown link, which would be a new false positive. Adding the leaf would put a second, lower
+  severity finding on a line already reported and buy one FP — the same "two rules, one line"
+  trade rejected for `go run <host>/pkg@latest` in the SG-DEP-007 cycle. Not added.
+  npm dist-tags (`@next`/`@beta`/`@canary`) were also measured: **4 spans, all noise** — `Use @next`
+  in a prose CSV and `@edge` matching inside the scope name `@edge-runtime/vm`.
+
 ### SG-DEP-002 — Typosquat / dependency confusion  (AST02, medium)  [SkillSpector SC6]
 - **Signals:** Levenshtein/keyboard-distance ≤ 2 to a top-N popular package with different author; internal-looking scoped names resolvable from public registry (confusion).
 - **FP carve-outs:** the *real* popular package itself; well-known forks; distance-1 that is a legitimately different established package (maintain an allowlist of known-good near-names).

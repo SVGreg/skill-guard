@@ -1958,7 +1958,18 @@ func TestUnpinnedDependencyCovered(t *testing.T) {
 		{"image@sha256:abc123 # digest-pinned", false},
 		{`{"task": "x"}`, false},         // bare "x" literal — not a version spec
 		{"if (idx >= 0) return;", false}, // numeric comparison, not a >=0 dep spec
-		{"assert.ok(line >= 0)", false},  // idem
+		// Corpus FP (cycle 112), verbatim from
+		// superlocalmemory/ide/hooks/tool-event-hook.sh:14 — a Claude Code hook
+		// matcher. `"*"` here is a SCOPE wildcard ("run on every tool"), not a
+		// floating version, and the JSON leaf matches any key so it cannot tell.
+		{`{ "type": "PostToolUse", "matcher": "*",`, false},
+		{`"value": "*"`, false},
+		// The carve-out is keyed to those two keys only: a real dependency whose
+		// value is "*" must still be caught, including one that merely sits near
+		// a hook config.
+		{`"happy-dom": "*"`, true},
+		{`"@types/deep-eql": "*"`, true},
+		{"assert.ok(line >= 0)", false}, // idem
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("configs", c.text)) > 0

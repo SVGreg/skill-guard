@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-supply
-version: 1.1.0
+version: 1.1.1
 description: Supply chain — unpinned/remote dependencies pulled and executed at use time (rule-verification.md §4, AST02).
 rules:
   - id: SG-DEP-007
@@ -105,6 +105,14 @@ rules:
     suppress:
       # a same-line exact pin (==, digest, git SHA) means it is not actually floating
       - '(?i)(==|@sha(256)?:|#[0-9a-f]{7,40}\b)'
+      # A `"*"` value is a version only inside a dependency block. In an agent
+      # hook / access-control config it is a SCOPE wildcard meaning "all", and
+      # the JSON leaf cannot tell the two apart because it matches any key.
+      # Corpus FP: `{ "type": "PostToolUse", "matcher": "*", … }` — the standard
+      # Claude Code hook matcher, reported as a floating dependency (cycle 112).
+      # Only the two keys actually observed are carved out; see
+      # rule-verification.md §SG-DEP-001 for the `engines` exposure left open.
+      - '(?i)"(matcher|value)"\s*:\s*"\*"'
     rationale: >-
       A dependency declared with a floating spec — `"*"`/`"latest"`, `pkg@latest`, a git dep on a
       moving branch (`@main`), or a `:latest` container tag — resolves to whatever is newest at
