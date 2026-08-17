@@ -1687,7 +1687,7 @@ func TestDocumentaryModifierIsProseOnly(t *testing.T) {
 		{"configs", near, 0},
 	}
 	for _, c := range cases {
-		if got := contextModifier(c.target, c.text, len(c.text)); got != c.want {
+		if got := contextModifier(c.target, c.text, len(c.text), fenceStarts(c.text)); got != c.want {
 			t.Errorf("contextModifier(%q, %q) = %v, want %v", c.target, c.text, got, c.want)
 		}
 	}

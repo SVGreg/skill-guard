@@ -84,6 +84,7 @@ func homoglyphCarrier(word string) bool {
 // exactly like an ordinary one.
 func scanHomoglyph(text string, hc *homoglyphCond, conf float64) []match {
 	var carriers []match
+	lt := newLineTracker(text)
 	latinWords := 0
 	start := -1
 	hasLatin, isWord := false, false
@@ -96,7 +97,7 @@ func scanHomoglyph(text string, hc *homoglyphCond, conf float64) []match {
 			latinWords++
 		}
 		if homoglyphCarrier(w) {
-			carriers = append(carriers, match{start, end, lineNum(text, start), homoglyphExcerpt(w), conf, true})
+			carriers = append(carriers, match{start, end, lt.at(start), homoglyphExcerpt(w), conf, true})
 		}
 		start, hasLatin, isWord = -1, false, false
 	}

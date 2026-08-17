@@ -6,6 +6,7 @@ package rules
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -111,6 +112,14 @@ type match struct {
 func (r *Rule) Evaluate(target, text string) []model.Finding {
 	matches := r.eval(r.Match, text)
 	var out []model.Finding
+	// Fence offsets are a property of the text, not of any one match, so they
+	// are computed once here rather than re-derived per candidate. Only prose
+	// targets consult them (contextModifier returns 0 for scripts/configs), so
+	// the scan is skipped entirely otherwise.
+	var fences []int
+	if isProseTarget(target) {
+		fences = fenceStarts(text)
+	}
 	// Dedup per line within this rule+target, keeping the highest-confidence
 	// match (rule-verification.md §1.2). idxByLine maps a line to its slot in
 	// out so a later, stronger signal on the same line replaces a weaker one
@@ -121,7 +130,7 @@ func (r *Rule) Evaluate(target, text string) []model.Finding {
 	for _, m := range matches {
 		conf := m.confidence
 		if !m.structural {
-			conf += contextModifier(target, text, m.start)
+			conf += contextModifier(target, text, m.start, fences)
 		} else if isProseTarget(target) {
 			conf += modInstruction
 		}
@@ -217,19 +226,21 @@ func (r *Rule) evalLeaf(c Condition, text string) []match {
 	switch {
 	case c.regex != nil:
 		var ms []match
+		lt := newLineTracker(text)
 		for _, loc := range c.regex.FindAllStringIndex(text, -1) {
-			ms = append(ms, match{loc[0], loc[1], lineNum(text, loc[0]), text[loc[0]:loc[1]], conf, false})
+			ms = append(ms, match{loc[0], loc[1], lt.at(loc[0]), text[loc[0]:loc[1]], conf, false})
 		}
 		return ms
 	case c.substring != "":
 		var ms []match
+		lt := newLineTracker(text)
 		for off := 0; ; {
 			i := strings.Index(text[off:], c.substring)
 			if i < 0 {
 				break
 			}
 			p := off + i
-			ms = append(ms, match{p, p + len(c.substring), lineNum(text, p), c.substring, conf, false})
+			ms = append(ms, match{p, p + len(c.substring), lt.at(p), c.substring, conf, false})
 			off = p + len(c.substring)
 		}
 		return ms
@@ -251,21 +262,26 @@ func (r *Rule) evalLeaf(c Condition, text string) []match {
 
 // --- unicode / structural scanners ---
 
+// unicodeCategoryTables is package-level rather than rebuilt inside
+// scanUnicodeCategory: the map is constant, and the scanner runs once per rule
+// per target, so allocating it per call is pure waste.
+var unicodeCategoryTables = map[string]*unicode.RangeTable{
+	"Cf": unicode.Cf, "Cc": unicode.Cc, "Co": unicode.Co,
+}
+
 func scanUnicodeCategory(text string, cats []string, conf float64) []match {
-	tables := map[string]*unicode.RangeTable{
-		"Cf": unicode.Cf, "Cc": unicode.Cc, "Co": unicode.Co,
-	}
 	var ms []match
+	lt := newLineTracker(text)
 	for i, r := range text {
 		if i == 0 && r == '\uFEFF' {
 			continue // leading BOM is not smuggling
 		}
 		for _, cat := range cats {
-			if t := tables[cat]; t != nil && unicode.Is(t, r) {
+			if t := unicodeCategoryTables[cat]; t != nil && unicode.Is(t, r) {
 				if r == '\u200D' && isEmojiZWJ(text, i) {
 					break // legitimate emoji ZWJ
 				}
-				ms = append(ms, match{i, i + len(string(r)), lineNum(text, i), "U+" + fmtHex(r), conf, true})
+				ms = append(ms, match{i, i + len(string(r)), lt.at(i), "U+" + fmtHex(r), conf, true})
 				break
 			}
 		}
@@ -275,9 +291,10 @@ func scanUnicodeCategory(text string, cats []string, conf float64) []match {
 
 func scanRunes(text string, pred func(rune) bool, conf float64) []match {
 	var ms []match
+	lt := newLineTracker(text)
 	for i, r := range text {
 		if pred(r) {
-			ms = append(ms, match{i, i + len(string(r)), lineNum(text, i), "U+" + fmtHex(r), conf, true})
+			ms = append(ms, match{i, i + len(string(r)), lt.at(i), "U+" + fmtHex(r), conf, true})
 		}
 	}
 	return ms
@@ -330,9 +347,10 @@ var escapeSeqRe = regexp.MustCompile(`\x1b(?:\[[0-9;?<>=]+[ -/]*[@-~]|\][0-9]{1,
 // never re-emit the payload into the reviewer's own terminal.
 func scanEscapeSequence(text string, conf float64) []match {
 	var ms []match
+	lt := newLineTracker(text)
 	for _, loc := range escapeSeqRe.FindAllStringIndex(text, -1) {
 		s, e := loc[0], loc[1]
-		ms = append(ms, match{s, e, lineNum(text, s), "ESC" + text[s+1:e], conf, true})
+		ms = append(ms, match{s, e, lt.at(s), "ESC" + text[s+1:e], conf, true})
 	}
 	return ms
 }
@@ -344,9 +362,10 @@ func scanTagBlock(text string, conf float64) []match {
 	safe := emojiTagSpans(runes)
 	byteOff := 0
 	var ms []match
+	lt := newLineTracker(text)
 	for idx, r := range runes {
 		if r >= 0xE0000 && r <= 0xE007F && !inSpans(safe, idx) {
-			ms = append(ms, match{byteOff, byteOff + len(string(r)), lineNum(text, byteOff), "U+" + fmtHex(r), conf, true})
+			ms = append(ms, match{byteOff, byteOff + len(string(r)), lt.at(byteOff), "U+" + fmtHex(r), conf, true})
 		}
 		byteOff += len(string(r))
 	}
@@ -418,12 +437,13 @@ func authorityHost(authority string) string {
 
 func scanURLHost(text string, hosts []string, conf float64) []match {
 	var ms []match
+	lt := newLineTracker(text)
 	for _, loc := range urlHostRe.FindAllStringSubmatchIndex(text, -1) {
 		host := authorityHost(text[loc[2]:loc[3]])
 		for _, h := range hosts {
 			h = strings.ToLower(h)
 			if host == h || strings.HasSuffix(host, "."+h) {
-				ms = append(ms, match{loc[0], loc[1], lineNum(text, loc[0]), host, conf, true})
+				ms = append(ms, match{loc[0], loc[1], lt.at(loc[0]), host, conf, true})
 				break
 			}
 		}
@@ -445,7 +465,7 @@ func isProseTarget(target string) bool {
 	return target == "manifest" || target == "body" || target == "refs"
 }
 
-func contextModifier(target, text string, pos int) float64 {
+func contextModifier(target, text string, pos int, fences []int) float64 {
 	// The documentary and code-example penalties model *prose* registers: a
 	// fenced example or a "never run …" sentence in narrative text that
 	// *describes* an attack rather than committing it. They apply only to the
@@ -463,25 +483,12 @@ func contextModifier(target, text string, pos int) float64 {
 		return 0
 	}
 	delta := modInstruction
-	if inCodeFence(text, pos) {
+	if inFence(fences, pos) {
 		delta += modCodeExample
 	} else if nearDocKeyword(text, pos) {
 		delta += modDocumentary
 	}
 	return delta
-}
-
-func inCodeFence(text string, pos int) bool {
-	fences := 0
-	for i := 0; i+3 <= len(text) && i < pos; {
-		if text[i] == '`' && i+3 <= len(text) && text[i:i+3] == "```" {
-			fences++
-			i += 3
-			continue
-		}
-		i++
-	}
-	return fences%2 == 1
 }
 
 func nearDocKeyword(text string, pos int) bool {
@@ -503,6 +510,73 @@ func lineNum(text string, off int) int {
 		off = len(text)
 	}
 	return strings.Count(text[:off], "\n") + 1
+}
+
+// lineTracker converts a stream of **non-decreasing** byte offsets into 1-based
+// line numbers with a single forward pass over the text.
+//
+// Every scanner in this file used to call lineNum per match, and lineNum counts
+// newlines from offset 0 — so a target with M matches cost O(M × N). That is the
+// same defect fixed in pkg/skill.gatherRefs (PR #185), and it is reachable with
+// attacker-controlled input: a bundle file may be up to maxFileSize (16 MiB) and
+// every rule runs over it. Measured on a synthetic body of repeated matching
+// lines, before this change: 256 KiB 152 ms · 512 KiB 509 ms · 1 MiB 1.44 s ·
+// 2 MiB 4.57 s — doubling the input more than tripled the time, for ONE rule on
+// ONE target.
+//
+// Offsets must arrive in non-decreasing order, which every caller satisfies:
+// regexp.FindAllStringIndex yields leftmost-first non-overlapping matches, the
+// substring loop advances monotonically, and the rune/word scanners walk the
+// text forward. A smaller offset is still answered correctly — it falls back to
+// a full count rather than returning a stale line — so a future caller that
+// breaks the ordering gets a slow answer, never a wrong one.
+type lineTracker struct {
+	text string
+	off  int
+	line int
+}
+
+func newLineTracker(text string) *lineTracker {
+	return &lineTracker{text: text, line: 1}
+}
+
+func (lt *lineTracker) at(off int) int {
+	if off > len(lt.text) {
+		off = len(lt.text)
+	}
+	if off < lt.off {
+		return lineNum(lt.text, off)
+	}
+	lt.line += strings.Count(lt.text[lt.off:off], "\n")
+	lt.off = off
+	return lt.line
+}
+
+// fenceStarts returns the byte offset of every ``` fence marker in the text.
+//
+// inCodeFence used to re-count fences from offset 0 for every candidate match —
+// the same O(M × N) shape as lineNum above, with a byte-at-a-time loop rather
+// than an optimized Count. The offsets are computed once per Evaluate and shared
+// by every match on that target.
+func fenceStarts(text string) []int {
+	var offs []int
+	for i := 0; i+3 <= len(text); {
+		if text[i] == '`' && text[i:i+3] == "```" {
+			offs = append(offs, i)
+			i += 3
+			continue
+		}
+		i++
+	}
+	return offs
+}
+
+// inFence reports whether pos sits inside a fenced block: an odd number of fence
+// markers start strictly before it. sort.SearchInts returns the index of the
+// first offset >= pos, which is exactly the count of offsets below pos — the
+// same quantity the old counting loop produced.
+func inFence(offs []int, pos int) bool {
+	return sort.SearchInts(offs, pos)%2 == 1
 }
 
 func lineText(text string, off int) string {
