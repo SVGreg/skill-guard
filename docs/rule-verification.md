@@ -1620,7 +1620,43 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   asserts **two distinct line numbers** in `setup.sh`, which is what catches the attribution bug
   above — asserting only "the rule appears" passed throughout it.
 
-### SG-EXE-008 — Covert resource abuse / cryptomining workload  (AST01/AST03, high) — **planned**
+### SG-EXE-008 — Covert resource abuse / cryptomining workload  (AST01/AST03, high) — **implemented** (`core-exec`)
+
+#### Shipped (cycle 115) — what the implementation decided
+
+- **Two tiers, exactly as the audit predicted**, modelled on `SG-SEC-001`: an **ungated** leaf for the
+  artefact that cannot appear innocently in a sentence (`stratum+tcp://` / `stratum2+ssl://`, 0.9),
+  and **verb/flag-gated** leaves for the miner binaries, which are also just words in a denylist.
+- **`://` is load-bearing, and reading the corpus negative verbatim is what proved it.** The single
+  corpus file mentioning stratum is a Falco detection rule whose condition is
+  `proc.cmdline contains "stratum+tcp"` — **with no scheme separator**. The measured "0 of 12,104
+  files" holds *only* because the pattern requires `://`; written as `stratum\+tcp` the leaf would
+  fire on a security tool. This is the concrete argument for the skill's rule that FP rows must be
+  copied verbatim rather than paraphrased — a paraphrase would almost certainly have included `://`
+  and hidden the constraint.
+- **Leaves:** `stratum\d?\+(tcp|ssl)://` 0.9 · `--donate-level` 0.85 (xmrig-specific, 0 corpus files)
+  · miner binary within 80 chars of `--url`/`--pool`/`--coin`/`--user`/`-o stratum` 0.85 · a run verb
+  (`./`, `nohup `, `chmod +x `) immediately before a miner binary 0.85. Each flag alternative carries
+  its own `\b` rather than one trailing boundary, per §8.1 — `--url\b|--pool\b|…` not `(--url|…)\b`.
+- **Severity `high`, deliberately breaking from `SG-DEP-007`'s `medium`.** That rule is medium because
+  a package runner is genuinely dual-use (`uvx markitdown` and a malicious fetch-and-run are the same
+  shape). A miner pointed at a pool has no benign reading in a skill bundle, so the ambiguity that
+  justifies "surface for review rather than fail" is simply absent. The difference is in the evidence,
+  not an inconsistency in the taxonomy.
+- **The `suppress` entry carries no weight and is documentation.** Pool *domains* are not a signal —
+  the corpus has `"note": "F2Pool/Cobo co-founder"` in a crypto news-source config — so the rule never
+  keys on a bare pool hostname; the entry records that decision for the next person tempted to add one.
+- **Corpus: 0 findings.** Verified by scanning every bundle whose files mention any mining vocabulary
+  (see the PR), so the zero is a measured result over the candidate population rather than an artefact
+  of the rule never being reached.
+- **Fixtures:** `TestCryptominingCovered` (`pkg/rules/rules_test.go`) — 7 attack forms + 9 benign, of
+  which **6 are verbatim corpus lines** (four from the Falco rule, one from Trail of Bits' YARA
+  reference, one from the news-source config). Bundle fixture: a `nohup ./xmrig --url stratum+tcp://…`
+  line in `testdata/malicious/setup.sh`, asserted by `TestMaliciousFixtureTriggersCryptomining`
+  (which also pins the file and the `high` severity) and negatively by
+  `TestBenignStaysCleanOfCryptomining`.
+
+#### Original design note (pre-implementation)
 - **Threat:** the skill enlists the agent's host into unauthorized work — a coin miner run in the
   background, a pool worker, or a "use idle compute" framing. Distinct from the other `SG-EXE-*`
   rules by *what is executed* rather than *how*: the launch itself is an ordinary command, so

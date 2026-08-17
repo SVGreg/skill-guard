@@ -699,3 +699,37 @@ func TestMaliciousFixtureTriggersHomoglyphDisguise(t *testing.T) {
 	}
 	t.Error("expected malicious fixture to trigger SG-INJ-002 on the homoglyph-disguised sentence")
 }
+
+// TestMaliciousFixtureTriggersCryptomining asserts SG-EXE-008 end-to-end against
+// the bundled fixture (a `nohup ./xmrig --url stratum+tcp://…` line in
+// testdata/malicious/setup.sh — inert test data, never executed). Its own test
+// rather than a row in TestMaliciousFails' `want` map, for the same conflict
+// reason as its siblings: that map is a single line every rule PR appends to.
+func TestMaliciousFixtureTriggersCryptomining(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID != "SG-EXE-008" {
+			continue
+		}
+		if f.File != "setup.sh" {
+			t.Errorf("SG-EXE-008 reported in %s, want setup.sh", f.File)
+		}
+		if f.Severity != model.SevHigh {
+			t.Errorf("SG-EXE-008 severity = %s, want high", f.Severity)
+		}
+		return
+	}
+	t.Error("expected malicious fixture to trigger SG-EXE-008")
+}
+
+// TestBenignStaysCleanOfCryptomining guards the other direction: the benign
+// fixture must not acquire a mining finding, and the rule must not fire on the
+// security-tooling register that is its entire real-world FP exposure.
+func TestBenignStaysCleanOfCryptomining(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/benign")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-EXE-008" {
+			t.Errorf("SG-EXE-008 fired on the benign fixture at %s:%d", f.File, f.StartLine)
+		}
+	}
+}

