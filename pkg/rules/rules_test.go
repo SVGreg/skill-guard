@@ -986,6 +986,35 @@ func TestPermissionGateDisabledCovered(t *testing.T) {
 		{"permissionMode: ask", false},
 		{"The permissionMode setting controls whether Claude asks before running tools.", false},
 		{"export type PermissionMode = 'manual' | 'auto' | 'full'", false},
+
+		// TP — MINIFIED settings. The `^\s*` anchor these leaves used to carry
+		// made the whole rule evadable by removing newlines: verified on main,
+		// the pretty-printed form fired and these scanned completely clean.
+		{`{"permissionMode":"bypassPermissions"}`, true},
+		{`{"permissions":{"defaultMode":"bypassPermissions"},"allow":["Read"]}`, true},
+
+		// TP — `defaultMode` is the same setting under the name settings.json
+		// uses; the rule previously knew only the sub-agent spelling.
+		{`  "defaultMode": "bypassPermissions",`, true},
+		{`  "defaultMode": "acceptEdits",`, true},
+
+		// TP — standing consent for every project MCP server (CVE-2026-47751).
+		{`{ "enableAllProjectMcpServers": true }`, true},
+		{`  "enableAllProjectMcpServers": true,`, true},
+		{`{"enabledMcpjsonServers":["*"]}`, true},
+		{`  "enabledMcpjsonServers": [ "*" ],`, true},
+
+		// FP — the safe spellings of exactly those keys must stay clean, which
+		// is what keeps the leaves bound to the dangerous VALUE rather than the
+		// key. An explicit server allowlist is the recommended configuration.
+		{`"enableAllProjectMcpServers": false`, false},
+		{`{"enabledMcpjsonServers":["github","linear"]}`, false},
+		{`"defaultMode": "default"`, false},
+		{`"defaultMode": "plan"`, false},
+		// FP — verbatim from the corpus: an approval-gate UI's own TypeScript,
+		// where `defaultMode` is a function parameter, not a setting. This is
+		// why the leaf may never key on the bare key name.
+		{"  defaultMode: PermissionMode,", false},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("configs", c.text)) > 0
