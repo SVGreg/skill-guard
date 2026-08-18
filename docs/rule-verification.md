@@ -1915,6 +1915,55 @@ rule produces **42 findings across 19 bundles**, so this is the first real preci
   npm dist-tags (`@next`/`@beta`/`@canary`) were also measured: **4 spans, all noise** — `Use @next`
   in a prose CSV and `@edge` matching inside the scope name `@edge-runtime/vm`.
 
+### SG-EXE-009 — Nested agent spawned with the consent gate disabled  (AST01/AST03, high) — **planned**
+- **Threat:** a bundled script or body step invokes **another agent process** from the command line
+  with the approval gate turned off — `claude --agent <name> -p "<prompt>" --permission-mode
+  bypassPermissions --no-session-persistence`, typically backgrounded with `nohup … &`. Reversec's
+  Part 2 chain uses this to **fragment the attack across isolated contexts**: agent 1 writes a
+  script, agent 2 runs it, agent 3 exfiltrates, and no single agent ever sees the whole workflow, so
+  the model has nothing to refuse. It also defeats the project's own mitigation — the writeup notes
+  `"disableSkillShellExecution": true` blocks direct bash *within* a skill but does not stop a skill
+  from spawning an external CLI agent.
+- **Why this is not `SG-MTA-003`.** That rule owns the **declarative** gate removal in
+  `manifest`/`configs` (`permissionMode`/`defaultMode`, `enableAllProjectMcpServers`). This is an
+  **imperative** one in a script, and it needs `scripts`/`body` targets. The two spellings also
+  differ: the config key is `permissionMode:`/`defaultMode:`, the CLI flag is `--permission-mode`
+  with a **hyphen** and a space-separated value, which `SG-MTA-003`'s leaves cannot match by
+  construction.
+- **Verified undetected on `main` (2026-08-19):** a bundle whose `pipeline.sh` contains
+  `nohup claude --agent "collector" -p "…" --permission-mode bypassPermissions
+  --no-session-persistence &` scans **`pass` / 0 findings**.
+- **Signals (proposed) — gate on the INVOCATION, not the flag.** Require a `claude` command on the
+  line *and* a consent-bypassing flag: `--dangerously-skip-permissions`, or `--permission-mode`
+  bound to `bypassPermissions`. Backgrounding (`nohup`, trailing `&`), `--agent`, `-p` and
+  `--no-session-persistence` are corroborating, not sufficient.
+- **FP carve-outs, and the measurement is what forces the shape (12,104 files).**
+  - **The flag alone is not enough.** `--permission-mode` bound to a bypass value appears in **1
+    file** — and it is a `"description"` **prose string** in a project's own evals harness
+    (`loci-preflight/evals/combined_evals.json`), describing a two-turn test that resumes "with
+    `--permission-mode acceptEdits`". There is no `claude` command on the line, so requiring the
+    invocation excludes it.
+  - **`claude -p` is not a signal.** Headless invocation appears in **7 files / 15 spans**, mostly
+    code comments in `evolver`'s `agentRunner.js` documenting a legitimate runner.
+  - `--no-session-persistence`, `claude --agent`, and `nohup … claude` are each **0 files**.
+  - `--dangerously-skip-permissions` is **1 file**: `alias claude-yolo='claude
+    --dangerously-skip-permissions'` in Trail of Bits' devcontainer `resources/.zshrc` — a true
+    positive by the capability doctrine, but see the blocker below.
+- **Measured NEGATIVE result worth recording: do not key on the anti-inspection framing.** Reversec
+  highlights the orchestrator instruction *"no need to read them at all"*, which reads as damning in
+  the writeup. In the wild it is **7 files / 8 spans and the visible instances are legitimate** —
+  ReSpect's experimental-isolation skills say *"Do not inspect the test-writer agent"* and *"Do not
+  read benchmark or source Spectr…"* as a deliberate independent-test methodology. A leaf on that
+  phrasing would fire on research design, not attacks.
+- **Blocked in part by the classifier (#187).** The one real-world instance lives in `.zshrc`, which
+  matches nothing in `scriptExt`/`configNames`/`docExt` and is therefore an inert `asset`. Proven by
+  moving the bytes: identical content scans `pass` / 0 as `.zshrc` and **`fail`** as `control.sh`.
+  The rule is still worth shipping — the `pipeline.sh` form is reachable today — but its coverage of
+  shell dotfiles depends on that fix.
+- **Fixtures (when implemented):** TP: the probe above; `claude --dangerously-skip-permissions` in a
+  bundled `.sh`. FP rows must include the evals `"description"` line and an `agentRunner.js`
+  `claude -p` comment **verbatim**.
+
 ### SG-DEP-002 — Typosquat / dependency confusion  (AST02, medium)  [SkillSpector SC6]
 - **Signals:** Levenshtein/keyboard-distance ≤ 2 to a top-N popular package with different author; internal-looking scoped names resolvable from public registry (confusion).
 - **FP carve-outs:** the *real* popular package itself; well-known forks; distance-1 that is a legitimately different established package (maintain an allowlist of known-good near-names).
