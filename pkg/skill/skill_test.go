@@ -361,3 +361,70 @@ func TestRealCorpusBundlesFitTheCap(t *testing.T) {
 			"legitimate skills would start failing to load", maxBundleSize>>20, largestObservedBundle>>20)
 	}
 }
+
+// TestNestedSkillMDIsNotTheManifest pins the root-only manifest role. The role
+// used to be claimed by basename, which gave every nested SKILL.md a role that
+// led to no scan target at all: scan.Scan builds manifest/body from the ROOT
+// file, and loadDir's grouping switch collects only script/config/doc.
+func TestNestedSkillMDIsNotTheManifest(t *testing.T) {
+	cases := []struct{ path, wantRole string }{
+		{"SKILL.md", "manifest"},
+		{"skills/sub/SKILL.md", "doc"},
+		{"plugins/a/skills/b/SKILL.md", "doc"},
+		// Anything under .claude/ is a config first — that branch precedes docs
+		// and is deliberately left alone.
+		{".claude/skills/x/SKILL.md", "config"},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			f := File{Path: c.path, Content: []byte("---\nname: x\ndescription: y\n---\n\n# X\n")}
+			classify(&f)
+			if f.Role != c.wantRole {
+				t.Errorf("classify(%q).Role = %q, want %q", c.path, f.Role, c.wantRole)
+			}
+		})
+	}
+}
+
+// TestNestedSkillMDIsCollectedAsDoc is the bundle-level half: the nested file
+// must actually reach Bundle.Docs, which is what scan.Scan turns into a target.
+func TestNestedSkillMDIsCollectedAsDoc(t *testing.T) {
+	dir := writeBundle(t)
+	if err := os.MkdirAll(filepath.Join(dir, "skills", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(dir, "skills", "sub", "SKILL.md")
+	if err := os.WriteFile(nested, []byte("---\nname: sub\n---\n\n# Sub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := LoadBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, d := range b.Docs {
+		if d.Path == "skills/sub/SKILL.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("nested SKILL.md not in Bundle.Docs; docs=%v", docPaths(b))
+	}
+	// The root manifest must still be the manifest, and must not leak into Docs.
+	if !b.Manifest.Present || b.Manifest.Name != "mini" {
+		t.Errorf("root manifest not parsed: present=%v name=%q", b.Manifest.Present, b.Manifest.Name)
+	}
+	for _, d := range b.Docs {
+		if d.Path == "SKILL.md" {
+			t.Error("root SKILL.md must not be collected as a doc")
+		}
+	}
+}
+
+func docPaths(b *Bundle) []string {
+	out := make([]string, 0, len(b.Docs))
+	for _, d := range b.Docs {
+		out = append(out, d.Path)
+	}
+	return out
+}
