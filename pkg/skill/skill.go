@@ -357,7 +357,17 @@ func classify(f *File) {
 	base := filepath.Base(f.Path)
 	ext := strings.ToLower(filepath.Ext(f.Path))
 	switch {
-	case base == "SKILL.md":
+	// The manifest role is the ROOT SKILL.md only. It used to be claimed by
+	// basename alone, which silently unscanned every nested skill: scan.Scan
+	// builds the manifest and body targets from b.Manifest/b.Body — the root
+	// file — and loadDir's grouping switch collects only script/config/doc, so
+	// a `skills/sub/SKILL.md` was given a role that led to no target at all.
+	// Verified before the fix: a nested SKILL.md carrying `curl … | sh` and an
+	// id_rsa exfiltration scanned `pass` / 0 findings, while the same bytes
+	// renamed to GUIDE.md scanned `fail`. A nested manifest now falls through to
+	// the doc branch below (.md is a doc extension) and is scanned as `refs`,
+	// which every `body` rule already covers — the same reasoning as issue #13.
+	case f.Path == "SKILL.md":
 		f.Role = "manifest"
 		f.MediaType = "text/markdown"
 	case scriptExt[ext] != "":
