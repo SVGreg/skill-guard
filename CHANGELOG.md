@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.2](https://github.com/SVGreg/skill-guard/compare/v0.2.1...v0.2.2) (2026-08-21)
+
+
+### Features
+
+* **rules:** add SG-EXE-008 — covert resource abuse / cryptomining (AST01) ([#194](https://github.com/SVGreg/skill-guard/issues/194)) ([3c148ed](https://github.com/SVGreg/skill-guard/commit/3c148ed2b303cb4bad92eae3bf7419f198594379)), closes [#191](https://github.com/SVGreg/skill-guard/issues/191)
+* **rules:** add SG-EXE-009 — nested agent spawned with the consent gate disabled (AST01/AST03) ([#201](https://github.com/SVGreg/skill-guard/issues/201)) ([432ca51](https://github.com/SVGreg/skill-guard/commit/432ca513eb038fdc6950d5f9aafcc64468596434)), closes [#199](https://github.com/SVGreg/skill-guard/issues/199)
+
+
+### Bug Fixes
+
+* **rules:** narrow SG-DEP-001 — a hook matcher's "*" is a scope wildcard, not a version ([#190](https://github.com/SVGreg/skill-guard/issues/190)) ([bcae7d0](https://github.com/SVGreg/skill-guard/commit/bcae7d05c92523ef61e1702929d31a11dae2cb7e))
+* **rules:** widen SG-MTA-003 — the line anchor was an evasion, and defaultMode was invisible ([#198](https://github.com/SVGreg/skill-guard/issues/198)) ([b3c20dc](https://github.com/SVGreg/skill-guard/commit/b3c20dc80cea29ffe1bc1aae3b5d676765328414)), closes [#192](https://github.com/SVGreg/skill-guard/issues/192)
+* **scan:** a nested SKILL.md was given the manifest role and then scanned by nothing ([#202](https://github.com/SVGreg/skill-guard/issues/202)) ([9d765be](https://github.com/SVGreg/skill-guard/commit/9d765be9649b66848ea5e834241a20cfa4c99362))
+* **skill:** scriptExt silently decided the scanned surface — .bat/.cmd/.cjs reached no rule ([#189](https://github.com/SVGreg/skill-guard/issues/189)) ([c836c57](https://github.com/SVGreg/skill-guard/commit/c836c57875dee73677755061718ddab3e37c761c))
+
+
+### Performance Improvements
+
+* **rules:** evaluation was O(matches x text) — every match re-counted from offset 0 ([#196](https://github.com/SVGreg/skill-guard/issues/196)) ([2ba3191](https://github.com/SVGreg/skill-guard/commit/2ba319198458d2912af186460f99a3ea67df814e))
+
 ## [0.2.1](https://github.com/SVGreg/skill-guard/compare/v0.2.0...v0.2.1) (2026-08-15)
 
 
