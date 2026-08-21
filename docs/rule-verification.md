@@ -1954,7 +1954,47 @@ rule produces **42 findings across 19 bundles**, so this is the first real preci
   npm dist-tags (`@next`/`@beta`/`@canary`) were also measured: **4 spans, all noise** — `Use @next`
   in a prose CSV and `@edge` matching inside the scope name `@edge-runtime/vm`.
 
-### SG-EXE-009 — Nested agent spawned with the consent gate disabled  (AST01/AST03, high) — **planned**
+### SG-EXE-009 — Nested agent spawned with the consent gate disabled  (AST01/AST03, high) — **implemented** (`core-exec`)
+
+#### Shipped (cycle 121) — what the implementation decided
+
+- **Gate on the invocation, exactly as the pre-filing measurement demanded.** Three leaves, each
+  requiring a `claude` command **and** a consent flag within 120 chars:
+  `--dangerously-skip-permissions` 0.9 · `--permission-mode … bypassPermissions` 0.9 ·
+  `--permission-mode … acceptEdits` 0.8. Neither half is a signal alone, and the tests carry the
+  verbatim corpus lines that prove it: the flag appears in a `"description"` prose string with no
+  command, and `claude -p` appears in legitimate runner code with no flag.
+- **`acceptEdits` is 0.8 here but 0.75 in `SG-MTA-003`, and the difference is deliberate.** This
+  rule targets `body`, where a fenced example costs −0.4 against the +0.15 instruction bonus.
+  Measured with a probe rather than derived: an 0.85 body leaf inside a ```bash fence next to
+  *"For example,"* scores **0.60** and emits. So 0.75 would land on exactly **0.50** and survive
+  only because the threshold test is `conf < EmitThreshold`; **0.70 would be dead in any fenced
+  example**, which is precisely where a skill documents its own commands. 0.8 clears at 0.55.
+- **`AST03` applies here, unlike `SG-EXE-008`.** That rule dropped AST03 because mining is malicious
+  *code*, not over-privilege. This one is the **imperative twin of `SG-MTA-003`** (AST03, "disabled
+  permission gate"), so the over-privilege half is the whole point rather than incidental.
+- **No coordination with `SG-MTA-003` is needed, by construction.** Its leaves require
+  `permissionMode`/`defaultMode` followed by `:` or `=`; the CLI form is `--permission-mode` with a
+  hyphen and a space-separated value. They cannot match the same text, and
+  `TestMaliciousFixtureTriggersNestedAgentBypass` **asserts the absence of a double-report** on the
+  fixture line rather than assuming it.
+- **Defensive framing is deliberately NOT suppressed.** A doc that warns *"Never run
+  `claude --dangerously-skip-permissions`"* still matches, and that is pinned as a `true` row. The
+  design's position is explicit — framing is not a boundary that survives transport, and suppressing
+  on it is intent inference (`design-note-demotion.md §1`). The documentary modifier already weights
+  it down to 0.65 on prose; a `CTX-` context rule is the intended long-term answer, not a `suppress`.
+  The rule ships with **no `suppress` list at all**, because the invocation gate does the work a
+  carve-out would otherwise have to.
+- **Corpus: 0 findings**, measured over every bundle mentioning either consent flag — a superset of
+  what the rule can match. The one real-world instance (Trail of Bits' `claude-yolo` alias) is
+  matched by the pattern but **unreachable until #187**, since `.zshrc` classifies as an inert asset.
+- **Fixtures:** `TestNestedAgentConsentBypassCovered` — 8 attack forms (the Reversec chain,
+  `=`/quoted/space value spellings, the alias form, `acceptEdits`) + 6 benign, of which **3 are
+  verbatim corpus lines**. Bundle fixture: a `nohup claude --agent … --permission-mode
+  bypassPermissions --no-session-persistence &` line in `testdata/malicious/setup.sh`, asserted by
+  `TestMaliciousFixtureTriggersNestedAgentBypass` (file, `high` severity, and no double-report).
+
+#### Original design note (pre-implementation)
 - **Threat:** a bundled script or body step invokes **another agent process** from the command line
   with the approval gate turned off — `claude --agent <name> -p "<prompt>" --permission-mode
   bypassPermissions --no-session-persistence`, typically backgrounded with `nohup … &`. Reversec's
