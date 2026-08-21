@@ -840,3 +840,34 @@ func TestNestedSkillMDIsScanned(t *testing.T) {
 		t.Error("expected the nested SKILL.md payload to trigger SG-NET-002")
 	}
 }
+
+// TestMaliciousFixtureTriggersNestedAgentBypass asserts SG-EXE-009 end-to-end
+// against the bundled fixture (a `nohup claude --agent … --permission-mode
+// bypassPermissions &` line in testdata/malicious/setup.sh — inert test data,
+// never executed). It also pins that SG-MTA-003 does NOT also fire on that line:
+// the two rules are adjacent by design, and the CLI spelling (hyphenated flag,
+// space-separated value) is what keeps them from double-reporting.
+func TestMaliciousFixtureTriggersNestedAgentBypass(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	var line int
+	for _, f := range rep.Findings {
+		if f.RuleID != "SG-EXE-009" {
+			continue
+		}
+		if f.File != "setup.sh" {
+			t.Errorf("SG-EXE-009 reported in %s, want setup.sh", f.File)
+		}
+		if f.Severity != model.SevHigh {
+			t.Errorf("SG-EXE-009 severity = %s, want high", f.Severity)
+		}
+		line = f.StartLine
+	}
+	if line == 0 {
+		t.Fatal("expected malicious fixture to trigger SG-EXE-009")
+	}
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-MTA-003" && f.File == "setup.sh" && f.StartLine == line {
+			t.Errorf("SG-MTA-003 double-reported on the SG-EXE-009 line %d", line)
+		}
+	}
+}

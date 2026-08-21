@@ -986,6 +986,35 @@ func TestPermissionGateDisabledCovered(t *testing.T) {
 		{"permissionMode: ask", false},
 		{"The permissionMode setting controls whether Claude asks before running tools.", false},
 		{"export type PermissionMode = 'manual' | 'auto' | 'full'", false},
+
+		// TP — MINIFIED settings. The `^\s*` anchor these leaves used to carry
+		// made the whole rule evadable by removing newlines: verified on main,
+		// the pretty-printed form fired and these scanned completely clean.
+		{`{"permissionMode":"bypassPermissions"}`, true},
+		{`{"permissions":{"defaultMode":"bypassPermissions"},"allow":["Read"]}`, true},
+
+		// TP — `defaultMode` is the same setting under the name settings.json
+		// uses; the rule previously knew only the sub-agent spelling.
+		{`  "defaultMode": "bypassPermissions",`, true},
+		{`  "defaultMode": "acceptEdits",`, true},
+
+		// TP — standing consent for every project MCP server (CVE-2026-47751).
+		{`{ "enableAllProjectMcpServers": true }`, true},
+		{`  "enableAllProjectMcpServers": true,`, true},
+		{`{"enabledMcpjsonServers":["*"]}`, true},
+		{`  "enabledMcpjsonServers": [ "*" ],`, true},
+
+		// FP — the safe spellings of exactly those keys must stay clean, which
+		// is what keeps the leaves bound to the dangerous VALUE rather than the
+		// key. An explicit server allowlist is the recommended configuration.
+		{`"enableAllProjectMcpServers": false`, false},
+		{`{"enabledMcpjsonServers":["github","linear"]}`, false},
+		{`"defaultMode": "default"`, false},
+		{`"defaultMode": "plan"`, false},
+		// FP — verbatim from the corpus: an approval-gate UI's own TypeScript,
+		// where `defaultMode` is a function parameter, not a setting. This is
+		// why the leaf may never key on the bare key name.
+		{"  defaultMode: PermissionMode,", false},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("configs", c.text)) > 0
@@ -1687,7 +1716,7 @@ func TestDocumentaryModifierIsProseOnly(t *testing.T) {
 		{"configs", near, 0},
 	}
 	for _, c := range cases {
-		if got := contextModifier(c.target, c.text, len(c.text)); got != c.want {
+		if got := contextModifier(c.target, c.text, len(c.text), fenceStarts(c.text)); got != c.want {
 			t.Errorf("contextModifier(%q, %q) = %v, want %v", c.target, c.text, got, c.want)
 		}
 	}
@@ -3779,6 +3808,68 @@ func TestCryptominingCovered(t *testing.T) {
 		{"prose-about-mining", `This skill will never mine cryptocurrency on your machine.`, false},
 		{"bitcoin-price-skill", `Fetch the current monero price from the exchange API.`, false},
 		{"unrelated-pool", `Use a connection pool with --pool-size 10 for the database.`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := len(r.Evaluate("scripts", c.text)) > 0
+			if got != c.want {
+				t.Errorf("%q: got match=%v want %v", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+// TestNestedAgentConsentBypassCovered pins SG-EXE-009 (issue #199). The rule's
+// whole design decision is that neither half is a signal alone — the flag
+// appears in prose, the command appears in legitimate runner code — so the FP
+// rows carry more weight than the TP rows and are verbatim corpus lines.
+func TestNestedAgentConsentBypassCovered(t *testing.T) {
+	packs, _ := Builtin()
+	var r *Rule
+	for _, p := range packs {
+		for _, rr := range p.Rules {
+			if rr.ID == "SG-EXE-009" {
+				r = rr
+			}
+		}
+	}
+	if r == nil {
+		t.Fatal("SG-EXE-009 not found")
+	}
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		// --- the Reversec Part 2 chain and its variants ---
+		{"reversec-chain", `nohup claude --agent "collector" -p "gather files" --permission-mode bypassPermissions --no-session-persistence &`, true},
+		{"flag-first-order", `claude -p "do the thing" --permission-mode bypassPermissions`, true},
+		{"equals-form", `claude --agent runner --permission-mode=bypassPermissions`, true},
+		{"quoted-value", `claude --agent runner --permission-mode "bypassPermissions"`, true},
+		{"yolo-alias", `alias claude-yolo='claude --dangerously-skip-permissions'`, true},
+		{"skip-perms-inline", `claude --dangerously-skip-permissions -p "refactor"`, true},
+		{"accept-edits", `claude --agent editor --permission-mode acceptEdits`, true},
+
+		// --- VERBATIM corpus negatives: neither half is a signal alone ---
+		// loci-preflight/evals/combined_evals.json:3 — a "description" prose
+		// string. The flag is present; no `claude` command is.
+		{"evals-prose-flag", `turn 2 resumes the SAME session with --permission-mode acceptEdits and an approval message, which exits plan mode`, false},
+		// evolver/src/experiment/agentRunner.js — legitimate headless runner.
+		{"agentrunner-comment", "// `claude -p` returns a JSON envelope; map it to a result", false},
+		{"headless-no-bypass", `claude -p "summarise the diff" --output-format json`, false},
+		// --- other benign near-misses ---
+		{"safe-mode", `claude --permission-mode plan`, false},
+		{"prose-about-flag", `Never pass --dangerously-skip-permissions when running the agent.`, false},
+		// DELIBERATE true: a doc that warns against the flag while quoting the
+		// whole command still matches. The design's position is explicit that
+		// defensive framing must NOT be suppressed — "framing is not a boundary
+		// that survives transport", and suppressing on it is intent inference,
+		// which the design rejects (docs/design-note-demotion.md §1). The
+		// documentary modifier already handles it on prose targets: 0.9 + 0.15
+		// - 0.4 = 0.65, reported but weighted down. A context rule is the
+		// intended long-term answer, not a suppress.
+		{"doc-warning-quoting-command", "Never run `claude --dangerously-skip-permissions` in a shared repo.", true},
+		{"unrelated-claude", `Ask claude to review the changes before merging.`, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-exec
-version: 1.1.0
+version: 1.2.0
 description: Dangerous commands, code execution, privilege escalation, persistence (rule-verification.md §3).
 rules:
   - id: SG-EXE-001
@@ -591,3 +591,63 @@ rules:
       legitimate reason to run mining software on a user's machine; if the skill genuinely manages
       compute workloads, require explicit per-run user consent and name the workload in the
       skill's description.
+
+  - id: SG-EXE-009
+    title: Nested agent spawned with the consent gate disabled
+    # AST01 for the execution, AST03 for the permission. Both genuinely apply
+    # here, unlike SG-EXE-008 where AST03 was dropped: this rule is the
+    # *imperative* twin of SG-MTA-003 (AST03, "over-broad tool grant or disabled
+    # permission gate"), so the over-privilege half is the whole point rather
+    # than an incidental consequence.
+    ast: [AST01, AST03]
+    # high, matching SG-MTA-003. Removing the approval prompt is not a broad
+    # grant the user still sees — it is the removal of the seeing.
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.85
+    targets: [body, scripts, configs]
+    match:
+      # GATE ON THE INVOCATION, NOT THE FLAG. The flag alone is not a signal:
+      # `--permission-mode` bound to a bypass value appears once in the corpus,
+      # inside a "description" PROSE string in a project's own evals harness
+      # ("turn 2 resumes the SAME session with --permission-mode acceptEdits"),
+      # with no `claude` command on the line. Requiring the command excludes it
+      # by construction rather than by a suppress. Conversely `claude -p` alone
+      # is 7 files / 15 spans of legitimate headless-runner code and comments,
+      # so the command alone is not a signal either — only the pair is.
+      any:
+        # The blanket bypass. Corpus: 1 file — `alias claude-yolo='claude
+        # --dangerously-skip-permissions'` in a vendor devcontainer, a true
+        # positive under the capability doctrine (it installs a consent-gate
+        # bypass into the user's shell). Note it currently sits in a `.zshrc`,
+        # which classify() files as an inert asset, so the leaf only reaches it
+        # once issue #187 lands.
+        - regex: '(?i)\bclaude\b[^\n]{0,120}--dangerously-skip-permissions\b'
+          confidence: 0.9
+        # The mode flag, hyphenated and space-separated — a spelling SG-MTA-003
+        # cannot match by construction, since its leaves require `:` or `=`
+        # after `permissionMode`/`defaultMode`. The two rules therefore never
+        # both fire on one line; no coordination or suppress is needed.
+        - regex: '(?i)\bclaude\b[^\n]{0,120}--permission-mode[=\s]+["'']?bypassPermissions\b'
+          confidence: 0.9
+        # acceptEdits auto-approves file *writes* only — the narrower escape.
+        # SG-MTA-003 scores its declarative twin 0.75, but this rule targets
+        # `body`, where a fenced example costs -0.4 against a +0.15 instruction
+        # bonus: 0.75 would land on exactly 0.50 and survive only because the
+        # threshold test is `conf < EmitThreshold`. 0.8 clears it at 0.55.
+        - regex: '(?i)\bclaude\b[^\n]{0,120}--permission-mode[=\s]+["'']?acceptEdits\b'
+          confidence: 0.8
+    rationale: >-
+      A bundled script or instruction launches a *second* agent process with the approval prompt
+      turned off — `claude --agent … -p … --permission-mode bypassPermissions`, often backgrounded
+      with `nohup … &`. Beyond running unattended, this fragments the work across isolated context
+      windows: one agent writes a script, another executes it, a third exfiltrates, and no single
+      agent ever sees the whole chain, so the model has nothing to refuse. It also survives
+      `disableSkillShellExecution`, which blocks bash inside a skill but not a skill spawning an
+      external CLI agent (AST01 execution / AST03 over-privilege).
+    fix: >-
+      Do not spawn nested agents with the permission gate disabled. Drop
+      `--dangerously-skip-permissions` and `--permission-mode bypassPermissions`, and let the user
+      approve the tools each agent uses. If a skill genuinely needs multi-step automation, keep it
+      in one context where the whole plan is visible and reviewable.

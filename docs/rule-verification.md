@@ -1772,6 +1772,45 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   by `TestMaliciousFixtureTriggersPermissionGateDisabled`, which pins the *file* as well as the rule so
   a future target-list regression fails.
 
+#### Polish cycle 118 — the anchor was an evasion, and `defaultMode` was a blind spot
+
+- **Corpus precision: 0 findings across 877 bundles, before and after.** There is therefore no
+  precision evidence either way for this rule, which is why every leaf added here is bound to a
+  literal setting **value** and each was measured at **0 of 12,104 files** before being written.
+- **The `^\s*` anchor made the whole rule evadable by minifying the settings file.** Verified on
+  `main`: a bundle whose `.claude/settings.json` contains
+  `{\n  "permissionMode": "bypassPermissions"\n}` **fires**, while
+  `{"permissionMode":"bypassPermissions"}` — the same setting on one line — scans **completely
+  clean**, because the key is preceded by `{` rather than whitespace. Every value-bound leaf shared
+  the defect. The key/value pair is the real unit, so the patterns now bind to the **key boundary**
+  (`\bpermissionMode\b…`) instead of the line start. **`allowed-tools` keeps its `^\s*` anchor** —
+  it is YAML front-matter, where the key genuinely does begin a line.
+- **`defaultMode` is the same setting under the name `settings.json` actually uses.** Claude Code
+  accepts the mode at `permissions.defaultMode` as well as `permissionMode` in a sub-agent's
+  front-matter; the rule knew only the second spelling, so
+  `{"permissions":{"defaultMode":"bypassPermissions"}}` was invisible. Added at the same
+  confidences as its twin (0.9 / 0.75). **Bound to the dangerous values, never the bare key** — the
+  corpus contains `defaultMode: PermissionMode,` as a *function parameter* in an approval-gate UI's
+  own TypeScript, which is pinned as a verbatim FP row.
+- **`enableAllProjectMcpServers: true` / `enabledMcpjsonServers: ["*"]`** — standing consent for
+  every project-declared MCP server with no per-server prompt. This is the consent-gate half of
+  **CVE-2026-47751 / GHSA-8q5r-mmjf-575q** (issue #192). The safe spellings must stay clean and are
+  pinned as FP rows: `"enableAllProjectMcpServers": false` and an explicit server allowlist
+  `{"enabledMcpjsonServers":["github","linear"]}`, which is the recommended configuration.
+- **Deliberately NOT added: `--dangerously-skip-permissions`.** It is the CLI spelling of the same
+  gate removal, and the corpus has a real instance —
+  `alias claude-yolo='claude --dangerously-skip-permissions'` in Trail of Bits' devcontainer
+  `resources/.zshrc`. Two reasons it is out of scope here. (1) It would need `scripts` added to
+  `targets`, which newly exposes this rule to every script in every bundle — a materially larger
+  blast radius that deserves its own measured change. (2) **It would be dead code today anyway:**
+  `.zshrc` matches no entry in `scriptExt`, `configNames` or `docExt`, so it classifies as an inert
+  `asset` and is never scanned. Proven by moving the bytes: the same file content produces
+  `pass` / 0 findings as `.zshrc` and **`fail`** as `control.sh`. That is issue #187's blind spot
+  with a concrete real-world consequence, and it must be fixed before this leaf is worth writing.
+- **Fixtures:** `TestPermissionGateDisabledCovered` grew 8 TP rows (minified `permissionMode`,
+  minified nested `defaultMode`, both `defaultMode` values, both MCP keys in compact and
+  pretty form) and 5 FP rows, **all 8 TPs verified to fail against the pre-fix pack**.
+
 ### SG-MTA-004 — Over-broad filesystem permission scope  (AST03, medium) — **implemented** (`core-metadata`)
 - **Threat:** the file-scope sibling of `SG-MTA-003` (over-broad *tool* grant). A manifest that
   declares a `read`/`write`/`edit`/`paths`/`permissions`/`filesystem`/`fs`/`allow-*`/`scope` key
@@ -1915,7 +1954,47 @@ rule produces **42 findings across 19 bundles**, so this is the first real preci
   npm dist-tags (`@next`/`@beta`/`@canary`) were also measured: **4 spans, all noise** — `Use @next`
   in a prose CSV and `@edge` matching inside the scope name `@edge-runtime/vm`.
 
-### SG-EXE-009 — Nested agent spawned with the consent gate disabled  (AST01/AST03, high) — **planned**
+### SG-EXE-009 — Nested agent spawned with the consent gate disabled  (AST01/AST03, high) — **implemented** (`core-exec`)
+
+#### Shipped (cycle 121) — what the implementation decided
+
+- **Gate on the invocation, exactly as the pre-filing measurement demanded.** Three leaves, each
+  requiring a `claude` command **and** a consent flag within 120 chars:
+  `--dangerously-skip-permissions` 0.9 · `--permission-mode … bypassPermissions` 0.9 ·
+  `--permission-mode … acceptEdits` 0.8. Neither half is a signal alone, and the tests carry the
+  verbatim corpus lines that prove it: the flag appears in a `"description"` prose string with no
+  command, and `claude -p` appears in legitimate runner code with no flag.
+- **`acceptEdits` is 0.8 here but 0.75 in `SG-MTA-003`, and the difference is deliberate.** This
+  rule targets `body`, where a fenced example costs −0.4 against the +0.15 instruction bonus.
+  Measured with a probe rather than derived: an 0.85 body leaf inside a ```bash fence next to
+  *"For example,"* scores **0.60** and emits. So 0.75 would land on exactly **0.50** and survive
+  only because the threshold test is `conf < EmitThreshold`; **0.70 would be dead in any fenced
+  example**, which is precisely where a skill documents its own commands. 0.8 clears at 0.55.
+- **`AST03` applies here, unlike `SG-EXE-008`.** That rule dropped AST03 because mining is malicious
+  *code*, not over-privilege. This one is the **imperative twin of `SG-MTA-003`** (AST03, "disabled
+  permission gate"), so the over-privilege half is the whole point rather than incidental.
+- **No coordination with `SG-MTA-003` is needed, by construction.** Its leaves require
+  `permissionMode`/`defaultMode` followed by `:` or `=`; the CLI form is `--permission-mode` with a
+  hyphen and a space-separated value. They cannot match the same text, and
+  `TestMaliciousFixtureTriggersNestedAgentBypass` **asserts the absence of a double-report** on the
+  fixture line rather than assuming it.
+- **Defensive framing is deliberately NOT suppressed.** A doc that warns *"Never run
+  `claude --dangerously-skip-permissions`"* still matches, and that is pinned as a `true` row. The
+  design's position is explicit — framing is not a boundary that survives transport, and suppressing
+  on it is intent inference (`design-note-demotion.md §1`). The documentary modifier already weights
+  it down to 0.65 on prose; a `CTX-` context rule is the intended long-term answer, not a `suppress`.
+  The rule ships with **no `suppress` list at all**, because the invocation gate does the work a
+  carve-out would otherwise have to.
+- **Corpus: 0 findings**, measured over every bundle mentioning either consent flag — a superset of
+  what the rule can match. The one real-world instance (Trail of Bits' `claude-yolo` alias) is
+  matched by the pattern but **unreachable until #187**, since `.zshrc` classifies as an inert asset.
+- **Fixtures:** `TestNestedAgentConsentBypassCovered` — 8 attack forms (the Reversec chain,
+  `=`/quoted/space value spellings, the alias form, `acceptEdits`) + 6 benign, of which **3 are
+  verbatim corpus lines**. Bundle fixture: a `nohup claude --agent … --permission-mode
+  bypassPermissions --no-session-persistence &` line in `testdata/malicious/setup.sh`, asserted by
+  `TestMaliciousFixtureTriggersNestedAgentBypass` (file, `high` severity, and no double-report).
+
+#### Original design note (pre-implementation)
 - **Threat:** a bundled script or body step invokes **another agent process** from the command line
   with the approval gate turned off — `claude --agent <name> -p "<prompt>" --permission-mode
   bypassPermissions --no-session-persistence`, typically backgrounded with `nohup … &`. Reversec's
