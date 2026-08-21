@@ -1772,6 +1772,45 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
   by `TestMaliciousFixtureTriggersPermissionGateDisabled`, which pins the *file* as well as the rule so
   a future target-list regression fails.
 
+#### Polish cycle 118 — the anchor was an evasion, and `defaultMode` was a blind spot
+
+- **Corpus precision: 0 findings across 877 bundles, before and after.** There is therefore no
+  precision evidence either way for this rule, which is why every leaf added here is bound to a
+  literal setting **value** and each was measured at **0 of 12,104 files** before being written.
+- **The `^\s*` anchor made the whole rule evadable by minifying the settings file.** Verified on
+  `main`: a bundle whose `.claude/settings.json` contains
+  `{\n  "permissionMode": "bypassPermissions"\n}` **fires**, while
+  `{"permissionMode":"bypassPermissions"}` — the same setting on one line — scans **completely
+  clean**, because the key is preceded by `{` rather than whitespace. Every value-bound leaf shared
+  the defect. The key/value pair is the real unit, so the patterns now bind to the **key boundary**
+  (`\bpermissionMode\b…`) instead of the line start. **`allowed-tools` keeps its `^\s*` anchor** —
+  it is YAML front-matter, where the key genuinely does begin a line.
+- **`defaultMode` is the same setting under the name `settings.json` actually uses.** Claude Code
+  accepts the mode at `permissions.defaultMode` as well as `permissionMode` in a sub-agent's
+  front-matter; the rule knew only the second spelling, so
+  `{"permissions":{"defaultMode":"bypassPermissions"}}` was invisible. Added at the same
+  confidences as its twin (0.9 / 0.75). **Bound to the dangerous values, never the bare key** — the
+  corpus contains `defaultMode: PermissionMode,` as a *function parameter* in an approval-gate UI's
+  own TypeScript, which is pinned as a verbatim FP row.
+- **`enableAllProjectMcpServers: true` / `enabledMcpjsonServers: ["*"]`** — standing consent for
+  every project-declared MCP server with no per-server prompt. This is the consent-gate half of
+  **CVE-2026-47751 / GHSA-8q5r-mmjf-575q** (issue #192). The safe spellings must stay clean and are
+  pinned as FP rows: `"enableAllProjectMcpServers": false` and an explicit server allowlist
+  `{"enabledMcpjsonServers":["github","linear"]}`, which is the recommended configuration.
+- **Deliberately NOT added: `--dangerously-skip-permissions`.** It is the CLI spelling of the same
+  gate removal, and the corpus has a real instance —
+  `alias claude-yolo='claude --dangerously-skip-permissions'` in Trail of Bits' devcontainer
+  `resources/.zshrc`. Two reasons it is out of scope here. (1) It would need `scripts` added to
+  `targets`, which newly exposes this rule to every script in every bundle — a materially larger
+  blast radius that deserves its own measured change. (2) **It would be dead code today anyway:**
+  `.zshrc` matches no entry in `scriptExt`, `configNames` or `docExt`, so it classifies as an inert
+  `asset` and is never scanned. Proven by moving the bytes: the same file content produces
+  `pass` / 0 findings as `.zshrc` and **`fail`** as `control.sh`. That is issue #187's blind spot
+  with a concrete real-world consequence, and it must be fixed before this leaf is worth writing.
+- **Fixtures:** `TestPermissionGateDisabledCovered` grew 8 TP rows (minified `permissionMode`,
+  minified nested `defaultMode`, both `defaultMode` values, both MCP keys in compact and
+  pretty form) and 5 FP rows, **all 8 TPs verified to fail against the pre-fix pack**.
+
 ### SG-MTA-004 — Over-broad filesystem permission scope  (AST03, medium) — **implemented** (`core-metadata`)
 - **Threat:** the file-scope sibling of `SG-MTA-003` (over-broad *tool* grant). A manifest that
   declares a `read`/`write`/`edit`/`paths`/`permissions`/`filesystem`/`fs`/`allow-*`/`scope` key
