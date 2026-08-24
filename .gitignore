@@ -35,3 +35,5 @@ Thumbs.db
 
 # Maintenance-loop runtime state (per-machine; not shared)
 /.claude/maintenance/
+# Development-loop runtime state (per-machine; not shared)
+/.claude/development/
