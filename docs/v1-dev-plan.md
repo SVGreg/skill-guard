@@ -91,7 +91,7 @@ visible per finding and waivers shown as suppressions.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | |
+| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
 | M3-02 | `--format sarif` wired into `scan` | todo | M3-01 | |
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | todo | M3-01 | |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | todo | M3-01 | |
