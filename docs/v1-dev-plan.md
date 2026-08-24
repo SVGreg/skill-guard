@@ -58,7 +58,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
-| **M3** | SARIF output + CI surface | M3-01 … M3-08 | expanded |
+| **M3** | SARIF output + CI surface | M3-01 … M3-09 | expanded |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-09 | expanded |
 | **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
@@ -91,7 +91,7 @@ visible per finding and waivers shown as suppressions.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | todo | — | |
+| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | |
 | M3-02 | `--format sarif` wired into `scan` | todo | M3-01 | |
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | todo | M3-01 | |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | todo | M3-01 | |
@@ -99,6 +99,7 @@ visible per finding and waivers shown as suppressions.
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | todo | M3-02 | |
 | M3-07 | Docs: "Use in CI", SARIF mapping, README version reconcile | todo | M3-02 | |
 | M3-08 | Public demo repo showing findings in the Security tab | owner | M3-06 | |
+| M3-09 | Artifact URIs resolvable from the repo workspace (GitHub alert linking) | todo | M3-06 | |
 
 ### M3-01 — SARIF 2.1.0 emitter
 **Goal.** `report.SARIF(w, rep, opt)` alongside `Text`/`JSON`/`SkillCard`, emitting a valid SARIF
@@ -167,6 +168,17 @@ suppressions); README install snippet pinned to the current tag and its status p
 to say SARIF ships.
 **Acceptance.** README no longer claims SARIF is unimplemented; the snippet's version matches
 `git tag --sort=-v:refname | head -1`.
+
+### M3-09 — Repo-workspace-relative artifact URIs
+**Why this exists.** Findings carry **bundle**-relative paths (`SKILL.md`, `scripts/setup.sh`), not
+repo-relative ones, so a bundle scanned at `./skills/foo` yields `SKILL.md` — which GitHub resolves
+against the checkout root and fails to link. M3-01 emits the SARIF-standard escape hatch
+(`uriBaseId: SRCROOT` + `originalUriBaseIds`), but whether GitHub's uploader honours it must be
+confirmed against a real upload, not assumed.
+**Deliverables.** Confirm behavior with an actual code-scanning upload during M3-06; if the base id
+is ignored, prefix result URIs with the scanned path (an emitter option, not a change to
+`Finding.File`, which stays bundle-relative for the JSON contract).
+**Acceptance.** An alert in the Security tab links to the correct file in the repo tree.
 
 ### M3-08 — Public demo (owner)
 **Goal.** Roadmap's "done when" for M3.
@@ -312,6 +324,9 @@ and the offline path; SGMT-1 marked **legacy but supported** — not removed in 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-24 — M3-01 started; added **M3-09** (repo-workspace-relative artifact URIs) as a
+  follow-up found while implementing the emitter — GitHub cannot link an alert whose URI is
+  bundle-relative, and the SARIF `uriBaseId` escape hatch needs confirming against a real upload.
 - 2026-08-24 — plan created from `docs/v1-dev-roadmap.md`; M3, M4 and D expanded; repo
   reconciliation recorded in §0 (pack count, milestone-numbering collision, version-target drift,
   README lag).
