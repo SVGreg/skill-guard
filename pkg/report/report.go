@@ -1,5 +1,5 @@
-// Package report renders scan results as human text, JSON, or a skill-card
-// (design §10.6). SARIF is deferred to M3 (PROGRESS.md).
+// Package report renders scan results as human text, JSON, a skill-card
+// (design §10.6), or SARIF 2.1.0 for code scanning (sarif.go).
 package report
 
 import (
