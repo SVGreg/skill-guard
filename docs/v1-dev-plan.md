@@ -92,8 +92,8 @@ visible per finding and waivers shown as suppressions.
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
 | M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
-| M3-02 | `--format sarif` wired into `scan` | in-progress | M3-01 | #207 |
-| M3-03 | AST01–AST10 carried into SARIF taxonomy | todo | M3-01 | |
+| M3-02 | `--format sarif` wired into `scan` | done | M3-01 | #207 |
+| M3-03 | AST01–AST10 carried into SARIF taxonomy | in-progress | M3-01 | |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | todo | M3-01 | |
 | M3-05 | Golden-file + offline schema-validation tests | todo | M3-01 | |
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | todo | M3-02 | |
@@ -326,6 +326,8 @@ and the offline path; SGMT-1 marked **legacy but supported** — not removed in 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-25 — M3-03 added `model.ASTAll()` rather than letting the SARIF emitter keep its own
+  copy of the ten risks; the taxonomy now has exactly one definition in the codebase.
 - 2026-08-25 — M3-01 merged (#205). M3-02 pulled the user-visible README documentation forward
   from M3-07: the flag and its docs must land together, or the release either advertises a format
   the CLI rejects or ships one nobody can find. M3-07 keeps the mapping page and the version pin.

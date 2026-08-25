@@ -1,6 +1,9 @@
 package model
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // ASTRef is a reference to one OWASP Agentic Skills Top 10 risk. Findings carry
 // AST ids (e.g. "AST01"); this maps each id to its human title and canonical
@@ -28,6 +31,23 @@ var astTitles = map[string]string{
 
 // astBaseURL is the OWASP project page; per-risk pages are <base>/astNN.html.
 const astBaseURL = "https://owasp.org/www-project-agentic-skills-top-10/"
+
+// ASTAll returns the whole catalog in id order (AST01 … AST10). Exported so a
+// report format that must describe the taxonomy — SARIF taxonomies[], say —
+// enumerates it from here instead of hard-coding ten strings of its own.
+func ASTAll() []ASTRef {
+	ids := make([]string, 0, len(astTitles))
+	for id := range astTitles {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]ASTRef, 0, len(ids))
+	for _, id := range ids {
+		ref, _ := ASTInfo(id)
+		out = append(out, ref)
+	}
+	return out
+}
 
 // ASTInfo returns the title and reference URL for an AST id (e.g. "AST01").
 // ok is false for an unknown id (the returned ref still carries the id).
