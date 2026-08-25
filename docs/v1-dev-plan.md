@@ -92,12 +92,12 @@ visible per finding and waivers shown as suppressions.
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
 | M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
-| M3-02 | `--format sarif` wired into `scan` | todo | M3-01 | |
+| M3-02 | `--format sarif` wired into `scan` | in-progress | M3-01 | |
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | todo | M3-01 | |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | todo | M3-01 | |
 | M3-05 | Golden-file + offline schema-validation tests | todo | M3-01 | |
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | todo | M3-02 | |
-| M3-07 | Docs: "Use in CI", SARIF mapping, README version reconcile | todo | M3-02 | |
+| M3-07 | Docs: SARIF mapping page, README version reconcile | todo | M3-02 | |
 | M3-08 | Public demo repo showing findings in the Security tab | owner | M3-06 | |
 | M3-09 | Artifact URIs resolvable from the repo workspace (GitHub alert linking) | todo | M3-06 | |
 
@@ -162,10 +162,12 @@ gate fails on exit 1 while the upload still happens.
 
 ### M3-07 — Docs
 **Goal.** Roadmap §2 "docs ship with the feature" and §6.5 README reconcile.
-**Deliverables.** README "Use in CI" section with the workflow snippet; the exit-code contract
-restated for gating; `docs/sarif-mapping.md` (severity → level, fingerprints, tags/taxa,
-suppressions); README install snippet pinned to the current tag and its status paragraph updated
-to say SARIF ships.
+**Amended in M3-02** — the user-visible half (README format table, `--format sarif` examples, the
+code-scanning workflow snippet, and the status paragraph) shipped with the flag itself, because
+documenting a format the CLI does not accept would have been false and documenting it later would
+have left a released feature invisible. What remains here: `docs/sarif-mapping.md` (severity →
+level, fingerprints, tags/taxa, suppressions) once M3-03/M3-04 fix those mappings, the exit-code
+contract restated for gating, and pinning the README install snippet to the current tag.
 **Acceptance.** README no longer claims SARIF is unimplemented; the snippet's version matches
 `git tag --sort=-v:refname | head -1`.
 
@@ -324,6 +326,9 @@ and the offline path; SGMT-1 marked **legacy but supported** — not removed in 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-25 — M3-01 merged (#205). M3-02 pulled the user-visible README documentation forward
+  from M3-07: the flag and its docs must land together, or the release either advertises a format
+  the CLI rejects or ships one nobody can find. M3-07 keeps the mapping page and the version pin.
 - 2026-08-24 — M3-01 started; added **M3-09** (repo-workspace-relative artifact URIs) as a
   follow-up found while implementing the emitter — GitHub cannot link an alert whose URI is
   bundle-relative, and the SARIF `uriBaseId` escape hatch needs confirming against a real upload.

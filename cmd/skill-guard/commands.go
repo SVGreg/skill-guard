@@ -58,6 +58,7 @@ OUTPUT (--format):
   • text        human-readable findings (default)
   • json        machine-readable report for CI/tooling
   • skill-card   signed-summary card + attestation envelope (JSON)
+  • sarif       SARIF 2.1.0 for GitHub code scanning / any SARIF viewer
 
 POLICY (--policy .skillguard.yaml): sets fail_on/warn_on thresholds, waivers,
 allowlists, and the trust roster. Without one, the default gates fail on high+.
@@ -118,7 +119,7 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&format, "format", "text", "output format: text | json | skill-card")
+	f.StringVar(&format, "format", "text", "output format: text | json | skill-card | sarif")
 	f.StringVar(&out, "out", "", "write output to this file instead of stdout")
 	f.StringVar(&policyPath, "policy", "", "policy file (.skillguard.yaml) with thresholds, waivers, and trust roster")
 	f.StringVar(&failOn, "fail-on", "", "override fail threshold: critical | high | medium | low")
@@ -387,6 +388,8 @@ func emit(w *os.File, rep *scan.Report, format string, opt report.Options) error
 		return report.JSON(w, rep, opt)
 	case "skill-card":
 		return report.SkillCard(w, rep, opt)
+	case "sarif":
+		return report.SARIF(w, rep, opt)
 	default:
 		report.Text(w, rep, opt)
 		return nil
