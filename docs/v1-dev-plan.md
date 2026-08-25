@@ -93,7 +93,7 @@ visible per finding and waivers shown as suppressions.
 |---|---|---|---|---|
 | M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
 | M3-02 | `--format sarif` wired into `scan` | done | M3-01 | #207 |
-| M3-03 | AST01–AST10 carried into SARIF taxonomy | in-progress | M3-01 | |
+| M3-03 | AST01–AST10 carried into SARIF taxonomy | in-progress | M3-01 | #208 |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | todo | M3-01 | |
 | M3-05 | Golden-file + offline schema-validation tests | todo | M3-01 | |
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | todo | M3-02 | |
