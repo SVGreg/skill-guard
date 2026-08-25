@@ -151,13 +151,14 @@ verdict: pass   risk score: 0/100 (L0)   [crit 0, high 0, med 0, low 0, info 0]
 ```sh
 skill-guard scan ./my-skill --verbose                 # show rationale + suggested fix per finding
 skill-guard scan ./my-skill --format json --out report.json
+skill-guard scan ./my-skill --format sarif --out results.sarif   # GitHub code scanning
 skill-guard scan ./my-skill --policy .skillguard.yaml --fail-on critical
 skill-guard scan ./my-skill --rulepack ./extra-rules.yaml   # add rules (repeatable)
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--format` | `text` (default), `json`, or `skill-card` |
+| `--format` | `text` (default), `json`, `skill-card`, or `sarif` |
 | `--out` | write output to a file instead of stdout |
 | `--policy` | policy file with thresholds, waivers, allowlists, trust roster |
 | `--fail-on` | override fail threshold: `critical \| high \| medium \| low` |
@@ -283,10 +284,19 @@ public key under `trust.keys` to establish trust.
 | `text` | human-readable findings (default) |
 | `json` | machine-readable report for CI/tooling |
 | `skill-card` | signed-summary card + attestation envelope (JSON) |
+| `sarif` | SARIF 2.1.0 — GitHub code scanning, or any SARIF viewer |
 
 ```sh
 skill-guard scan ./my-skill --format json
+skill-guard scan ./my-skill --format sarif --out results.sarif
 ```
+
+SARIF output is deterministic (no timestamps), and each result carries a stable
+`partialFingerprints` entry computed from rule + file + matched text — **not**
+the line number — so editing text above a finding does not close its alert and
+open an identical one. Severity maps onto SARIF's three levels
+(`critical`/`high` → `error`, `medium` → `warning`, `low`/`info` → `note`) with
+the raw severity, confidence, and `ast` ids preserved in `properties`.
 
 Each finding carries its OWASP `ast` ids, and the report includes an
 `ast_references` map resolving every cited id to its title and page — so
@@ -582,6 +592,17 @@ jobs:
       # exit 1 here fails the job when the verdict is "fail"
 ```
 
+To get findings into the GitHub **Security** tab instead, emit SARIF and hand it
+to the code-scanning uploader. `continue-on-error` lets the upload happen even
+when the scan gates the build:
+
+```yaml
+      - run: skill-guard scan ./my-skill --format sarif --out skill-guard.sarif
+        continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: skill-guard.sarif }
+```
+
 ---
 
 ## Development
@@ -601,9 +622,10 @@ Fixtures live in [`testdata/`](testdata/): `benign/` (a clean skill) and
 `malicious/` (an injection + exfiltration corpus — **do not run** its
 `setup.sh`, it exists only as scanner test input).
 
-See [`PROGRESS.md`](PROGRESS.md) for implementation status and the roadmap
-beyond M1/M2 (SARIF output, taint analysis, LLM/dynamic engines, language
-bindings, keyfile encryption).
+See [`PROGRESS.md`](PROGRESS.md) for implementation status and
+[`docs/v1-dev-plan.md`](docs/v1-dev-plan.md) for the tracked roadmap to v1
+(OMS/Sigstore signing, load-time verification, taint analysis, LLM/dynamic
+engines, language bindings, keyfile encryption).
 
 ---
 

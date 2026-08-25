@@ -70,7 +70,7 @@ func loadBundleFriendly(path string) (*skill.Bundle, error) {
 }
 
 // validFormats are the accepted --format values for scan.
-var validFormats = []string{"text", "json", "skill-card"}
+var validFormats = []string{"text", "json", "skill-card", "sarif"}
 
 // validateFormat rejects an unknown --format value up-front instead of silently
 // falling back to text.
