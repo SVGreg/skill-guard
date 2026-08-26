@@ -197,7 +197,7 @@ if effort must be cut, cut M6/M7, never this.**
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | in-progress | — | |
+| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | in-progress | — | #213 |
 | M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | todo | M4-01 | |
 | M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | todo | M4-02 | |
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | todo | M4-03 | |
