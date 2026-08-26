@@ -241,6 +241,37 @@ wrote my-skill/SKILL.md.skillsig
 | `--no-scan` | integrity-only attestation (does not embed a scan result) |
 | `--emit-manifest-fields` | also write USF `content_hash`/`signature` into `SKILL.md` front-matter |
 | `--ttl-days` | attestation validity in days (default 365) |
+| `--oms` | also write `skill.oms.sig` (OpenSSF Model Signing v1.0; needs an `ecdsa-p256` key) |
+
+#### OMS interoperability
+
+`--oms` additionally writes **`skill.oms.sig`**, an
+[OpenSSF Model Signing](https://github.com/ossf/model-signing-spec) v1.0 bundle
+covering the whole directory tree, so verifiers outside skill-guard can check
+the skill. It is written **alongside** `SKILL.md.skillsig`, never instead of it:
+SGMT-1 remains skill-guard's own format and its local trust model.
+
+```sh
+skill-guard keygen --out oms.key --type ecdsa-p256
+skill-guard sign ./my-skill --key oms.key --oms
+```
+
+```
+wrote my-skill/SKILL.md.skillsig
+  merkle_root sha256:df97944f0c4772c981608e5a728cd5c4e469b83f3de97d5df29afac0f9bf0854
+  scan attached: pass
+  wrote my-skill/skill.oms.sig (OMS v1.0, 3 files, root ec1b7863800207778da088343c2b78e05d5e27fa…)
+```
+
+The bundle is a Sigstore bundle whose DSSE payload is an in-toto Statement v1
+with the OMS predicate: every regular file with its SHA-256, the
+canonicalization metadata a verifier needs to reproduce the file set, and a root
+digest over the manifest. `.git`, `.gitignore`, `.gitattributes`, `.github` and
+the signature files themselves are excluded, per the spec.
+
+An Ed25519 key is refused here — the OMS algorithm registry mandates EC
+P-256/384/521 — and the refusal happens before anything is written. See
+[`docs/oms-notes.md`](docs/oms-notes.md) for the spec findings this implements.
 
 ### `verify`
 
