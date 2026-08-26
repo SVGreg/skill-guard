@@ -202,6 +202,21 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 	identity, issuer, idErr := oms.CertIdentity(leaf)
 	res.CertIdentity, res.CertIssuer = identity, issuer
 
+	// Short-lived Fulcio certificates expire within minutes, so verification
+	// uses the transparency-log timestamp — when the signature was recorded —
+	// rather than now. Without a log entry there is no trustworthy time, and
+	// guessing "now" would reject every keyless signature older than its
+	// certificate's ten-minute window.
+	//
+	// Read before the roots are consulted so the timestamp is reported even
+	// when trust is withheld: "signed at" is an observation about the bundle,
+	// not a conclusion about it, and it is exactly what a reader wants when
+	// deciding whether to pin the issuing CA.
+	when, ok := oms.IntegratedTime(bundle)
+	if ok {
+		res.SignedAt = when
+	}
+
 	pool, err := roster.CertPool(policyDir)
 	if err != nil {
 		res.CertError = err.Error()
@@ -211,18 +226,10 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 		res.CertError = "no certificate roots are configured (trust.roots), so a keyless signature cannot be checked"
 		return
 	}
-
-	// Short-lived Fulcio certificates expire within minutes, so verification
-	// uses the transparency-log timestamp — when the signature was recorded —
-	// rather than now. Without a log entry there is no trustworthy time, and
-	// guessing "now" would reject every keyless signature older than its
-	// certificate's ten-minute window.
-	when, ok := oms.IntegratedTime(bundle)
 	if !ok {
 		res.CertError = "the bundle carries no transparency-log entry, so the certificate's validity window cannot be anchored in time"
 		return
 	}
-	res.SignedAt = when
 
 	inter := x509.NewCertPool()
 	for _, c := range intermediates {

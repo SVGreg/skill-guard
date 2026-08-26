@@ -316,3 +316,23 @@ func TestRootsFromFile(t *testing.T) {
 		t.Error("roots resolved against the wrong directory still verified")
 	}
 }
+
+// TestKeylessReportsTimestampWithoutRoots: the log timestamp and the bound
+// identity are observations about the bundle, not conclusions about it, so they
+// must be reported even when no roots are pinned and trust is withheld. A
+// reader deciding whether to pin a CA needs exactly these two facts.
+func TestKeylessReportsTimestampWithoutRoots(t *testing.T) {
+	signedAt := time.Now().Add(-time.Hour).Truncate(time.Second)
+	f := newKeylessFixture(t, testIdentity, testIssuer, signedAt)
+
+	res := VerifyOMS(f.skill, f.bundle, policy.Trust{})
+	if res.Trusted || res.SignatureValid {
+		t.Fatalf("trust was granted without roots: %+v", res)
+	}
+	if res.CertIdentity != testIdentity || res.CertIssuer != testIssuer {
+		t.Errorf("identity/issuer withheld: %q / %q", res.CertIdentity, res.CertIssuer)
+	}
+	if !res.SignedAt.Equal(signedAt) {
+		t.Errorf("SignedAt = %v, want %v", res.SignedAt, signedAt)
+	}
+}
