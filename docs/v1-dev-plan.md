@@ -96,7 +96,7 @@ visible per finding and waivers shown as suppressions.
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | done | M3-01 | #208 |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | done | M3-01 | #209 |
 | M3-05 | Golden-file + offline schema-validation tests | done | M3-01 | #210 |
-| M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | in-progress | M3-02 | |
+| M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | in-progress | M3-02 | #211 |
 | M3-07 | Docs: SARIF mapping page, README version reconcile | todo | M3-02 | |
 | M3-08 | Public demo repo showing findings in the Security tab | owner | M3-06 | |
 | M3-09 | Artifact URIs resolvable from the repo workspace (GitHub alert linking) | todo | M3-06 | |
