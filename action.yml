@@ -1,0 +1,141 @@
+name: skill-guard
+description: Scan Agent Skills (SKILL.md bundles) against the OWASP Agentic Skills Top 10 and upload the findings to code scanning.
+author: SVGreg
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: Bundle directory (containing SKILL.md) or a single SKILL.md file to scan.
+    required: false
+    default: "."
+  format:
+    description: "Output format: sarif | json | text | skill-card. Only sarif can be uploaded to code scanning."
+    required: false
+    default: sarif
+  output:
+    description: File the scan output is written to.
+    required: false
+    default: skill-guard.sarif
+  policy:
+    description: Path to a .skillguard.yaml policy (thresholds, waivers, allowlists, trust roster).
+    required: false
+    default: ""
+  fail-on:
+    description: "Override the fail threshold: critical | high | medium | low."
+    required: false
+    default: ""
+  rulepack:
+    description: Extra rule-pack YAML file to load. One path per line for several.
+    required: false
+    default: ""
+  version:
+    description: >-
+      skill-guard release to install (e.g. v0.2.2), "latest" for the newest release, or
+      "preinstalled" to use a skill-guard already on PATH (a Homebrew install, or one built
+      from source in an earlier step).
+    required: false
+    default: latest
+  upload-sarif:
+    description: "Upload the SARIF file to GitHub code scanning. Requires the security-events: write permission."
+    required: false
+    default: "true"
+  fail-on-verdict:
+    description: Fail the job when the scan verdict is fail (exit 1). The upload still happens first.
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: "skill-guard's exit code: 0 pass/warn, 1 verdict fail, 3 usage error, 4 internal error."
+    value: ${{ steps.scan.outputs.exit-code }}
+  output-file:
+    description: Path to the file the scan wrote.
+    value: ${{ steps.scan.outputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install skill-guard
+      if: ${{ inputs.version != 'preinstalled' }}
+      shell: bash
+      env:
+        # The action's own copy of install.sh is used, so the installer matches
+        # the ref the workflow pinned rather than whatever is on main.
+        VERSION: ${{ inputs.version == 'latest' && '' || inputs.version }}
+        INSTALL_DIR: ${{ runner.temp }}/skill-guard-bin
+      run: |
+        mkdir -p "$INSTALL_DIR"
+        sh "${{ github.action_path }}/install.sh"
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+    - name: Check the preinstalled binary
+      if: ${{ inputs.version == 'preinstalled' }}
+      shell: bash
+      run: |
+        command -v skill-guard >/dev/null 2>&1 || {
+          echo "::error::version: preinstalled was requested but no skill-guard is on PATH"
+          exit 1
+        }
+        skill-guard version
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        SG_PATH: ${{ inputs.path }}
+        SG_FORMAT: ${{ inputs.format }}
+        SG_OUTPUT: ${{ inputs.output }}
+        SG_POLICY: ${{ inputs.policy }}
+        SG_FAIL_ON: ${{ inputs.fail-on }}
+        SG_RULEPACK: ${{ inputs.rulepack }}
+      run: |
+        # Written as if-blocks, not `[ -n "$x" ] && args+=(…)`: composite steps
+        # run under `bash -e`, where a false test as the last command of a line
+        # aborts the step.
+        args=(scan "$SG_PATH" --format "$SG_FORMAT" --out "$SG_OUTPUT")
+        if [ -n "$SG_POLICY" ]; then args+=(--policy "$SG_POLICY"); fi
+        if [ -n "$SG_FAIL_ON" ]; then args+=(--fail-on "$SG_FAIL_ON"); fi
+        while IFS= read -r pack; do
+          if [ -n "$pack" ]; then args+=(--rulepack "$pack"); fi
+        done <<< "$SG_RULEPACK"
+
+        # The gate is applied at the end, after the upload — a scan that fails
+        # the build must still deliver its findings, or the failure is all the
+        # reviewer gets. Composite steps have no continue-on-error, so the exit
+        # code is captured rather than propagated here.
+        set +e
+        skill-guard "${args[@]}"
+        code=$?
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "output-file=$SG_OUTPUT" >> "$GITHUB_OUTPUT"
+        # 0 (pass/warn) and 1 (verdict fail) are scan outcomes and are handled
+        # by the gate step after the upload. Anything else — 3 usage, 4
+        # internal, 127 missing binary — is a broken workflow, not a finding,
+        # and must fail immediately rather than masquerade as a clean scan.
+        case "$code" in
+          0|1) ;;
+          *)
+            echo "::error::skill-guard exited $code (3 = usage error, 4 = internal error)"
+            exit "$code"
+            ;;
+        esac
+
+    - name: Upload SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' && inputs.format == 'sarif' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}
+
+    - name: Apply the verdict gate
+      if: ${{ always() && inputs.fail-on-verdict == 'true' }}
+      shell: bash
+      run: |
+        code="${{ steps.scan.outputs.exit-code }}"
+        if [ "$code" != "0" ]; then
+          echo "::error::skill-guard verdict gate failed (exit $code); findings were uploaded first"
+          exit "$code"
+        fi
