@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/SVGreg/skill-guard/main/install.sh 
 
 The script detects your OS/architecture (macOS/Linux, amd64/arm64), verifies the release
 checksum, and installs to `/usr/local/bin` (override with `INSTALL_DIR`; pin a release with
-`VERSION=v0.1.0`). On Windows, download the `.zip` from the
+`VERSION=v0.2.2`). On Windows, download the `.zip` from the
 [releases page](https://github.com/SVGreg/skill-guard/releases) and put `skill-guard.exe`
 on your `PATH`.
 
@@ -306,7 +306,9 @@ report.
 
 Each finding carries its OWASP `ast` ids, and the report includes an
 `ast_references` map resolving every cited id to its title and page — so
-tooling never has to hard-code the taxonomy.
+tooling never has to hard-code the taxonomy. The full SARIF mapping — severity
+levels, fingerprints, taxonomy, suppressions, and the CI gating contract — is
+documented in [`docs/sarif-mapping.md`](docs/sarif-mapping.md).
 
 ```json
 {
@@ -493,6 +495,12 @@ the trust anchor. See [`docs/skill-guard-design.md`](docs/skill-guard-design.md)
 | `2` | **verification failed** — invalid signature, tampered/drifted content, a **revoked** signing key, or an attestation that is **expired** (or carries an expiry that cannot be read) |
 | `3` | usage error (bad arguments, missing file, invalid flag value) |
 | `4` | internal error |
+
+`1` is a **finding**; `3` and `4` mean the invocation itself is broken. CI should
+treat them differently — gate the build on `1`, but fail loudly on `3`/`4`
+instead of reporting a clean scan. The bundled [GitHub Action](#github-action)
+does exactly that, and [`docs/sarif-mapping.md`](docs/sarif-mapping.md) spells
+out the gating contract.
 
 ---
 
