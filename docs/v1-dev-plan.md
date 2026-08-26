@@ -198,8 +198,8 @@ if effort must be cut, cut M6/M7, never this.**
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
 | M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | done | — | #213 |
-| M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | in-progress | M4-01 | #214 |
-| M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | todo | M4-02 | |
+| M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | done | M4-01 | #214 |
+| M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | in-progress | M4-02 | #215 |
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | todo | M4-03 | |
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | todo | M4-01 | |
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | todo | M4-04, M4-05 | |
@@ -366,6 +366,10 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-03 rejects any `..` component outright rather than resolving it: §6.1.2 rule 2
+  forbids the component, and rule 3 only asks for `.` and `//` to be collapsed. Quietly resolving
+  `a/b/../c.txt` would accept a path the spec calls invalid, and a verifier that rejects it would
+  then disagree with our manifest.
 - 2026-08-26 — M4-02 landed the OMS wire types (`pkg/attest/oms`) alongside the vectors: the card
   said "parses into our types", and those types did not exist yet. They are JSON structs plus
   structural validation, stdlib only — no dependency added, and M4-04/M4-06 now have their shape.
