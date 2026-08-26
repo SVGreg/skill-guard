@@ -29,6 +29,17 @@ const (
 	// being pasted onto every URI.
 	srcRoot = "SRCROOT"
 
+	// astTaxonomyName / astTaxonomyGUID identify the OWASP taxonomy component
+	// that results and rules point at. The GUID is a fixed, arbitrary UUID: SARIF
+	// requires one to reference a toolComponent, and it must not change between
+	// runs or consumers see a different taxonomy each scan.
+	astTaxonomyName = "OWASP Agentic Skills Top 10"
+	astTaxonomyGUID = "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10"
+	astTaxonomyOrg  = "OWASP"
+	// astBaseInfoURI is the taxonomy's project page — the per-risk pages come
+	// from model.ASTAll, this is just the parent.
+	astBaseInfoURI = "https://owasp.org/www-project-agentic-skills-top-10/"
+
 	// fingerprintKey is versioned: changing how the fingerprint is computed
 	// would otherwise silently re-open every existing alert. Bump the suffix
 	// and consumers keep both, which is the documented SARIF behavior.
@@ -46,8 +57,52 @@ type sarifLog struct {
 type sarifRun struct {
 	Tool               sarifTool               `json:"tool"`
 	OriginalURIBaseIDs map[string]sarifURIBase `json:"originalUriBaseIds,omitempty"`
+	Taxonomies         []sarifTaxonomy         `json:"taxonomies,omitempty"`
 	Results            []sarifResult           `json:"results"`
 	Properties         map[string]any          `json:"properties,omitempty"`
+}
+
+// sarifTaxonomy is a toolComponent describing an external classification —
+// here the OWASP Agentic Skills Top 10, carried verbatim from pkg/model so the
+// taxonomy has exactly one definition in the codebase.
+type sarifTaxonomy struct {
+	Name             string      `json:"name"`
+	GUID             string      `json:"guid"`
+	Organization     string      `json:"organization,omitempty"`
+	ShortDescription sarifText   `json:"shortDescription"`
+	InformationURI   string      `json:"informationUri,omitempty"`
+	IsComprehensive  bool        `json:"isComprehensive"`
+	Taxa             []sarifTaxa `json:"taxa"`
+}
+
+type sarifTaxa struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	ShortDescription sarifText `json:"shortDescription"`
+	HelpURI          string    `json:"helpUri,omitempty"`
+}
+
+// sarifTaxaRef points at one taxon inside the taxonomy component. Both the id
+// and the index are emitted: the index is what consumers resolve, the id is
+// what a human reads in raw output.
+type sarifTaxaRef struct {
+	ID            string            `json:"id"`
+	Index         int               `json:"index"`
+	ToolComponent sarifComponentRef `json:"toolComponent"`
+}
+
+type sarifComponentRef struct {
+	Name  string `json:"name,omitempty"`
+	GUID  string `json:"guid"`
+	Index int    `json:"index"`
+}
+
+// sarifRelationship ties a rule to the taxa it maps onto. "relevant" is the
+// SARIF kind for "this rule concerns that classification", which is exactly the
+// ast_references relation.
+type sarifRelationship struct {
+	Target sarifTaxaRef `json:"target"`
+	Kinds  []string     `json:"kinds"`
 }
 
 type sarifTool struct {
@@ -66,14 +121,15 @@ type sarifURIBase struct {
 }
 
 type sarifRule struct {
-	ID                   string         `json:"id"`
-	Name                 string         `json:"name,omitempty"`
-	ShortDescription     sarifText      `json:"shortDescription"`
-	FullDescription      *sarifText     `json:"fullDescription,omitempty"`
-	Help                 *sarifText     `json:"help,omitempty"`
-	HelpURI              string         `json:"helpUri,omitempty"`
-	DefaultConfiguration sarifConfig    `json:"defaultConfiguration"`
-	Properties           map[string]any `json:"properties,omitempty"`
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name,omitempty"`
+	ShortDescription     sarifText           `json:"shortDescription"`
+	FullDescription      *sarifText          `json:"fullDescription,omitempty"`
+	Help                 *sarifText          `json:"help,omitempty"`
+	HelpURI              string              `json:"helpUri,omitempty"`
+	DefaultConfiguration sarifConfig         `json:"defaultConfiguration"`
+	Relationships        []sarifRelationship `json:"relationships,omitempty"`
+	Properties           map[string]any      `json:"properties,omitempty"`
 }
 
 type sarifConfig struct {
@@ -90,6 +146,7 @@ type sarifResult struct {
 	Level               string            `json:"level"`
 	Message             sarifText         `json:"message"`
 	Locations           []sarifLocation   `json:"locations,omitempty"`
+	Taxa                []sarifTaxaRef    `json:"taxa,omitempty"`
 	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
 	Properties          map[string]any    `json:"properties,omitempty"`
 }
@@ -123,12 +180,13 @@ type sarifRegion struct {
 // Waived findings are deliberately absent here; emitting them as SARIF
 // suppressions is M3-04.
 func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
-	rules, index := sarifRules(rep.Findings)
+	taxonomy, taxaIndex := astTaxonomy()
+	rules, index := sarifRules(rep.Findings, taxaIndex)
 
 	results := make([]sarifResult, 0, len(rep.Findings))
 	seen := map[string]int{}
 	for _, f := range rep.Findings {
-		results = append(results, sarifResultFor(f, index[f.RuleID], seen))
+		results = append(results, sarifResultFor(f, index[f.RuleID], taxaIndex, seen))
 	}
 
 	run := sarifRun{
@@ -138,7 +196,8 @@ func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
 			InformationURI: toolInfoURI,
 			Rules:          rules,
 		}},
-		Results: results,
+		Taxonomies: []sarifTaxonomy{taxonomy},
+		Results:    results,
 		Properties: map[string]any{
 			"verdict":    string(rep.Verdict),
 			"risk_score": rep.RiskScore,
@@ -155,12 +214,70 @@ func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
 	return enc.Encode(sarifLog{Schema: sarifSchema, Version: sarifVersion, Runs: []sarifRun{run}})
 }
 
+// astTaxonomy renders the OWASP Agentic Skills Top 10 as a SARIF taxonomy
+// component, plus an id → index map for the references that point into it. The
+// catalog comes from pkg/model, never from strings kept here: AST traceability
+// through every output format is a core differentiator, and a second copy of
+// the taxonomy is how it silently rots.
+func astTaxonomy() (sarifTaxonomy, map[string]int) {
+	all := model.ASTAll()
+	taxa := make([]sarifTaxa, 0, len(all))
+	index := make(map[string]int, len(all))
+	for i, ref := range all {
+		index[ref.ID] = i
+		taxa = append(taxa, sarifTaxa{
+			ID:               ref.ID,
+			Name:             ref.Title,
+			ShortDescription: sarifText{Text: ref.Title},
+			HelpURI:          ref.URL,
+		})
+	}
+	return sarifTaxonomy{
+		Name:             astTaxonomyName,
+		GUID:             astTaxonomyGUID,
+		Organization:     astTaxonomyOrg,
+		ShortDescription: sarifText{Text: "OWASP Agentic Skills Top 10 (AST01–AST10)"},
+		InformationURI:   astBaseInfoURI,
+		IsComprehensive:  true,
+		Taxa:             taxa,
+	}, index
+}
+
+// taxaRefs resolves a finding's ast ids to taxonomy references. An id the
+// catalog does not know — an external --rulepack may cite anything — is skipped
+// rather than emitted as a dangling index.
+func taxaRefs(ids []string, taxaIndex map[string]int) []sarifTaxaRef {
+	var out []sarifTaxaRef
+	for _, id := range ids {
+		i, ok := taxaIndex[id]
+		if !ok {
+			continue
+		}
+		out = append(out, sarifTaxaRef{
+			ID:            id,
+			Index:         i,
+			ToolComponent: sarifComponentRef{Name: astTaxonomyName, GUID: astTaxonomyGUID, Index: 0},
+		})
+	}
+	return out
+}
+
+// sarifTags is the rule's tag list. "security" is what makes GitHub treat the
+// alert as a security finding; the AST ids ride alongside so the taxonomy is
+// visible even in a consumer that ignores taxonomies[].
+func sarifTags(ids []string) []string {
+	tags := make([]string, 0, len(ids)+1)
+	tags = append(tags, "security")
+	tags = append(tags, ids...)
+	return tags
+}
+
 // sarifRules builds the driver's rule metadata from the findings themselves —
 // the report carries every field SARIF wants (title, rationale, fix, ast), so
 // the emitter stays decoupled from pkg/rules and an external --rulepack needs
 // no special case. Returned sorted by id, with an id → index map for
 // results[].ruleIndex.
-func sarifRules(findings []model.Finding) ([]sarifRule, map[string]int) {
+func sarifRules(findings []model.Finding, taxaIndex map[string]int) ([]sarifRule, map[string]int) {
 	// A rule can fire many times and its metadata is identical each time —
 	// except severity, which context demotion may have capped on an individual
 	// hit. defaultConfiguration must describe the *rule*, so the worst
@@ -196,7 +313,11 @@ func sarifRules(findings []model.Finding) ([]sarifRule, map[string]int) {
 		}
 		if len(f.AST) > 0 {
 			r.Properties["ast"] = f.AST
+			for _, ref := range taxaRefs(f.AST, taxaIndex) {
+				r.Relationships = append(r.Relationships, sarifRelationship{Target: ref, Kinds: []string{"relevant"}})
+			}
 		}
+		r.Properties["tags"] = sarifTags(f.AST)
 		if f.Engine != "" {
 			r.Properties["engine"] = f.Engine
 		}
@@ -221,7 +342,7 @@ func sarifRules(findings []model.Finding) ([]sarifRule, map[string]int) {
 	return out, index
 }
 
-func sarifResultFor(f model.Finding, ruleIndex int, seen map[string]int) sarifResult {
+func sarifResultFor(f model.Finding, ruleIndex int, taxaIndex map[string]int, seen map[string]int) sarifResult {
 	res := sarifResult{
 		RuleID:    f.RuleID,
 		RuleIndex: ruleIndex,
@@ -258,6 +379,7 @@ func sarifResultFor(f model.Finding, ruleIndex int, seen map[string]int) sarifRe
 	}
 	if len(f.AST) > 0 {
 		res.Properties["ast"] = f.AST
+		res.Taxa = taxaRefs(f.AST, taxaIndex)
 	}
 	return res
 }

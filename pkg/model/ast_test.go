@@ -32,3 +32,21 @@ func TestASTInfoUnknown(t *testing.T) {
 		t.Errorf("unknown ref should still carry id, got %q", ref.ID)
 	}
 }
+
+// TestASTAllIsTheWholeCatalogInOrder: SARIF's taxonomies[] claims to be
+// comprehensive, so a gap or a shuffle here is a wire-format bug elsewhere.
+func TestASTAllIsTheWholeCatalogInOrder(t *testing.T) {
+	all := ASTAll()
+	if len(all) != 10 {
+		t.Fatalf("ASTAll returned %d entries, want 10", len(all))
+	}
+	for i, ref := range all {
+		want := "AST" + string(rune('0'+(i+1)/10)) + string(rune('0'+(i+1)%10))
+		if ref.ID != want {
+			t.Errorf("entry %d = %s, want %s", i, ref.ID, want)
+		}
+		if ref.Title == "" || ref.URL == "" {
+			t.Errorf("%s has an empty title or url", ref.ID)
+		}
+	}
+}

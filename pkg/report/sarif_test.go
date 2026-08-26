@@ -222,3 +222,142 @@ func TestSARIFBenignIsEmpty(t *testing.T) {
 		t.Errorf("run verdict property = %v, want %s", run["properties"], rep.Verdict)
 	}
 }
+
+// TestSARIFTaxonomyIsTheWholeAST is the M3-03 acceptance check, part one: the
+// run must describe all ten OWASP risks, comprehensively and in id order.
+func TestSARIFTaxonomyIsTheWholeAST(t *testing.T) {
+	rep := scanFixture(t, "malicious")
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+
+	taxonomies, ok := run["taxonomies"].([]any)
+	if !ok || len(taxonomies) != 1 {
+		t.Fatalf("want exactly one taxonomy, got %v", run["taxonomies"])
+	}
+	tax := taxonomies[0].(map[string]any)
+	if tax["isComprehensive"] != true {
+		t.Error("taxonomy is not marked comprehensive")
+	}
+	if tax["guid"] == "" || tax["name"] == "" {
+		t.Error("taxonomy needs a stable name and guid to be referenceable")
+	}
+	taxa := tax["taxa"].([]any)
+	if len(taxa) != 10 {
+		t.Fatalf("taxonomy has %d taxa, want 10 (AST01–AST10)", len(taxa))
+	}
+	for i, entry := range taxa {
+		e := entry.(map[string]any)
+		want := model.ASTAll()[i]
+		if e["id"] != want.ID || e["name"] != want.Title || e["helpUri"] != want.URL {
+			t.Errorf("taxon %d = %v, want %+v", i, e, want)
+		}
+	}
+}
+
+// TestSARIFEveryASTFindingCarriesTagsAndTaxa is the M3-03 acceptance check,
+// part two: a rule that cites AST ids must carry both the tags and a resolvable
+// taxa reference, or the OWASP mapping is lost on export.
+func TestSARIFEveryASTFindingCarriesTagsAndTaxa(t *testing.T) {
+	rep := scanFixture(t, "malicious")
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+	taxa := run["taxonomies"].([]any)[0].(map[string]any)["taxa"].([]any)
+
+	checked := 0
+	for _, r := range run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any) {
+		rule := r.(map[string]any)
+		props, _ := rule["properties"].(map[string]any)
+		tags := toStrings(props["tags"])
+		if len(tags) == 0 || tags[0] != "security" {
+			t.Errorf("rule %v tags = %v, want a leading \"security\"", rule["id"], tags)
+		}
+		ids := toStrings(props["ast"])
+		if len(ids) == 0 {
+			continue
+		}
+		checked++
+		for _, id := range ids {
+			if !containsStr(tags, id) {
+				t.Errorf("rule %v cites %s but does not tag it", rule["id"], id)
+			}
+		}
+		rels, _ := rule["relationships"].([]any)
+		if len(rels) != len(ids) {
+			t.Errorf("rule %v cites %d ast ids but has %d relationships", rule["id"], len(ids), len(rels))
+		}
+		for _, rel := range rels {
+			target := rel.(map[string]any)["target"].(map[string]any)
+			idx := int(target["index"].(float64))
+			if idx < 0 || idx >= len(taxa) {
+				t.Fatalf("rule %v relationship index %d out of range", rule["id"], idx)
+			}
+			if got := taxa[idx].(map[string]any)["id"]; got != target["id"] {
+				t.Errorf("rule %v relationship index %d resolves to %v, target says %v",
+					rule["id"], idx, got, target["id"])
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no rule in the fixture cited an AST id; the test would be vacuous")
+	}
+
+	for _, r := range run["results"].([]any) {
+		res := r.(map[string]any)
+		ids := toStrings(res["properties"].(map[string]any)["ast"])
+		refs, _ := res["taxa"].([]any)
+		if len(refs) != len(ids) {
+			t.Errorf("result %v cites %d ast ids but references %d taxa", res["ruleId"], len(ids), len(refs))
+		}
+		for i, ref := range refs {
+			target := ref.(map[string]any)
+			if target["id"] != ids[i] {
+				t.Errorf("result %v taxa[%d] = %v, want %s", res["ruleId"], i, target["id"], ids[i])
+			}
+			if target["toolComponent"].(map[string]any)["guid"] != run["taxonomies"].([]any)[0].(map[string]any)["guid"] {
+				t.Errorf("result %v taxa[%d] points at an unknown tool component", res["ruleId"], i)
+			}
+		}
+	}
+}
+
+// TestSARIFUnknownASTIDIsNotReferenced: an external --rulepack may cite an id
+// outside the catalog. It stays in tags and properties, but must not produce a
+// dangling taxa index.
+func TestSARIFUnknownASTIDIsNotReferenced(t *testing.T) {
+	rep := &scan.Report{
+		Verdict: model.Warn,
+		Findings: []model.Finding{{
+			RuleID: "X-CUSTOM-001", Title: "custom", Severity: model.SevLow,
+			File: "SKILL.md", StartLine: 1, AST: []string{"AST01", "AST99"},
+		}},
+	}
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+	res := run["results"].([]any)[0].(map[string]any)
+	refs := res["taxa"].([]any)
+	if len(refs) != 1 || refs[0].(map[string]any)["id"] != "AST01" {
+		t.Errorf("taxa = %v, want only the known AST01", refs)
+	}
+	tags := toStrings(run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any)[0].(map[string]any)["properties"].(map[string]any)["tags"])
+	if !containsStr(tags, "AST99") {
+		t.Errorf("tags = %v; the unknown id should still be visible", tags)
+	}
+}
+
+func toStrings(v any) []string {
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, e := range list {
+		out = append(out, e.(string))
+	}
+	return out
+}
+
+func containsStr(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
