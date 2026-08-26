@@ -59,7 +59,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
-| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-11 | expanded (rewritten by the M4-01 spike) |
+| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-12 | M4-01…M4-09 done/in flight; M4-12 needs an owner decision |
 | **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
@@ -204,10 +204,11 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | done | M4-01 | #217 |
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
-| M4-08 | Identity-based trust policy in `.skillguard.yaml` | in-progress | M4-07 | #220 |
-| M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
-| M4-10 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-09 | |
-| M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | todo | M4-09 | |
+| M4-08 | Identity-based trust policy in `.skillguard.yaml` | done | M4-07 | #220 |
+| M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | in-progress | M4-07, M4-08 | |
+| M4-12 | Keyless **signing** (Fulcio/Rekor) — needs a dependency decision | blocked | M4-09 | |
+| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | todo | M4-09 | |
+| M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | blocked | M4-12 | |
 
 ### M4-01 — Primary-source spike (do this first)
 **Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
@@ -291,17 +292,44 @@ identities) beside the key roster; multiple roots configurable; **no hard-coded 
 documented precedence between roster and identity rules; revocation still wins.
 **Acceptance.** Table test: matching identity → trusted; near-miss → untrusted; revoked → untrusted.
 
-### M4-09 — Sigstore keyless behind a build tag
-**Goal.** Keyless CI signing without inflicting 90 modules on the default binary.
-**Deliverables.** Fulcio certs from OIDC + Rekor inclusion in an isolated package behind a build
-tag; GitHub Actions OIDC path; documented binary-size and dependency delta.
-**Acceptance.** `go list -deps ./cmd/skill-guard` on the default build contains no `sigstore`
-module; the tagged build signs from a workflow with zero stored secrets.
+### M4-09 — Keyless verification (split from the original card)
+**Goal.** Verify a certificate-bound OMS bundle — the *consuming* half of keyless — with no new
+dependencies.
+**Deliverables.** Certificate and chain extraction; identity + OIDC issuer from the SAN and the
+Fulcio OID extensions; chain verification against **consumer-pinned** `trust.roots` (inline PEM or
+path, resolved relative to the policy file); validity anchored on the transparency-log integrated
+time; the bound identity admitted through M4-08's `trust.identities`.
+**Acceptance.** A certificate-bound bundle verifies against a pinned root and is refused without
+one; `go list -deps ./cmd/skill-guard` contains no Sigstore or protobuf package.
 
-### M4-10 — Offline verification path
-**Deliverables.** Verify a keyless-signed bundle against a pinned trust bundle and a cached Rekor
-proof. Rekor availability is never required for `scan`, and never for `verify` when a pin exists.
-**Acceptance.** Verification succeeds with the network disabled.
+### M4-12 — Keyless signing (Fulcio/Rekor) — **needs an owner decision**
+**Goal.** Produce a keyless signature in CI with no stored secrets.
+**Why it is blocked.** The roadmap says to keep Sigstore "behind a build tag or isolated package
+so the offline core stays lean". A build tag does **not** achieve that: build-tagged files are
+still scanned for imports, so `go.mod`/`go.sum` gain the full ~90-module graph for everyone, and
+`go install` downloads it. The README's "two dependencies" claim would stop being true. Three ways
+out, for the owner to pick:
+
+1. **Separate module** (`keyless/` with its own `go.mod`, or a sibling repo). Core stays at two
+   dependencies; users who want keyless signing install a second binary. Most faithful to the
+   roadmap's stated intent, least convenient.
+2. **Build tag in this module.** One binary, one repo; `go.mod` grows to ~90 modules and the
+   dependency-thinness claim goes with it.
+3. **Implement the Fulcio/Rekor client with stdlib.** Fulcio is an OIDC token plus a CSR over
+   HTTPS; Rekor is a JSON upload. No dependency, but we own the correctness of a security-critical
+   client — and the verification half (M4-09) already shows the shape is tractable.
+
+**Recommendation: (1).** It keeps the property the project advertises, and the split is reversible
+in a way an added dependency graph is not.
+**Acceptance (whichever is chosen).** A workflow signs a skill keylessly with zero stored secrets,
+and the default `skill-guard` binary's dependency graph is unchanged.
+
+### M4-10 — Rekor inclusion-proof checking
+**Deliverables.** M4-09 trusts the bundle's own `integratedTime`; this verifies it — Merkle
+inclusion proof against a checkpoint signed by a **pinned** log key, plus the RFC 3161 timestamp
+when present. Rekor availability is never required: the proof travels in the bundle.
+**Acceptance.** A bundle with a tampered `integratedTime` or a broken inclusion proof is refused,
+with the network disabled.
 
 ### M4-11 — Workflow + docs
 **Deliverables.** Reusable keyless signing workflow; README/docs on OMS vs SGMT-1, the two trust
@@ -366,6 +394,12 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — **M4-09 split.** The original card bundled keyless *verification* and *signing*.
+  Verification needs no new dependency and is done. Signing needs one — and the roadmap's "behind a
+  build tag" instruction does not work: a build tag still puts the whole ~90-module graph in
+  `go.mod` for everyone. That is now **M4-12**, `blocked` on an owner decision between a separate
+  module, accepting the dependency, or a stdlib Fulcio/Rekor client. M4-10 narrowed to
+  inclusion-proof checking, since pinned-root offline verification landed with M4-09.
 - 2026-08-26 — M4-08 implements identity rules as a **narrowing** gate over the key roster, not as
   a way to admit unbound identities: an identity is only usable when the consumer bound it to a key
   in their own roster. Admitting a certificate identity needs the keyless path (M4-09); trusting a

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/attest"
 	"github.com/SVGreg/skill-guard/pkg/policy"
@@ -88,6 +89,20 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 	default:
 		// Present but unverifiable: no trust roster to check the signature bytes against.
 		fmt.Printf("%s: present, signature UNVERIFIED (no trust roster — identity unverified)\n", label)
+	}
+	if res.Present && res.CertIdentity != "" {
+		// Keyless: the identity is the certificate's, and it is worth showing
+		// even when trust was withheld — it is the thing a policy scopes on.
+		fmt.Printf("certificate identity: %s\n", safeText(res.CertIdentity))
+		if res.CertIssuer != "" {
+			fmt.Printf("certificate issuer: %s\n", safeText(res.CertIssuer))
+		}
+		if !res.SignedAt.IsZero() {
+			fmt.Printf("signed at: %s (transparency log)\n", res.SignedAt.UTC().Format(time.RFC3339))
+		}
+	}
+	if res.Present && res.CertError != "" {
+		fmt.Printf("keyless: %s\n", safeText(res.CertError))
 	}
 	if res.Present {
 		mm := "MISMATCH"

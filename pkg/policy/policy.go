@@ -76,6 +76,12 @@ type Trust struct {
 	// Identities restricts which publisher identities are acceptable, on top of
 	// the key roster. See IdentityRule and Allows.
 	Identities []IdentityRule `yaml:"identities"`
+	// Roots are the certificate authorities whose signing certificates may be
+	// trusted, for keyless (certificate-bound) signatures. **Empty by design:**
+	// skill-guard ships no root of trust, vendor or otherwise. A consumer who
+	// wants to accept Sigstore-issued certificates supplies the Fulcio roots
+	// themselves, in their own file, and can pin any other CA the same way.
+	Roots []Root `yaml:"roots"`
 	// Revoked lists key ids **and** identities that are never trusted, whatever
 	// else matches. One list rather than two because revocation is one decision
 	// — "not this publisher, in any form" — and splitting it invites revoking a
@@ -179,6 +185,14 @@ func matchIdentity(pattern, identity string) bool {
 	return strings.HasSuffix(rest, last) && len(rest) >= len(last)
 }
 
+// Root is one trusted certificate authority, given inline or by path. Exactly
+// one of PEM and Path may be set.
+type Root struct {
+	Name string `yaml:"name"`
+	PEM  string `yaml:"pem"`
+	Path string `yaml:"path"`
+}
+
 // Default returns the built-in policy used when no file is present.
 func Default() Policy {
 	return Policy{
@@ -266,6 +280,14 @@ func (p Policy) validate() error {
 			return fmt.Errorf("trust.keys[%d]: duplicate keyid %q (already declared at trust.keys[%d]); the later entry would silently replace the earlier key", i, k.KeyID, j)
 		}
 		seen[k.KeyID] = i
+	}
+	for i, r := range p.Trust.Roots {
+		switch {
+		case r.PEM == "" && r.Path == "":
+			return fmt.Errorf("trust.roots[%d]: needs either pem or path (a root with neither trusts nothing and would silently make every keyless signature unverifiable)", i)
+		case r.PEM != "" && r.Path != "":
+			return fmt.Errorf("trust.roots[%d]: set either pem or path, not both", i)
+		}
 	}
 	for i, rule := range p.Trust.Identities {
 		if rule.Pattern == "" {
