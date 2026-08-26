@@ -94,8 +94,8 @@ visible per finding and waivers shown as suppressions.
 | M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
 | M3-02 | `--format sarif` wired into `scan` | done | M3-01 | #207 |
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | done | M3-01 | #208 |
-| M3-04 | Waivers → SARIF `suppressions`; demotion preserved | in-progress | M3-01 | #209 |
-| M3-05 | Golden-file + offline schema-validation tests | todo | M3-01 | |
+| M3-04 | Waivers → SARIF `suppressions`; demotion preserved | done | M3-01 | #209 |
+| M3-05 | Golden-file + offline schema-validation tests | in-progress | M3-01 | |
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | todo | M3-02 | |
 | M3-07 | Docs: SARIF mapping page, README version reconcile | todo | M3-02 | |
 | M3-08 | Public demo repo showing findings in the Security tab | owner | M3-06 | |
@@ -326,6 +326,11 @@ and the offline path; SGMT-1 marked **legacy but supported** — not removed in 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M3-05 took the golden files from a **hand-built** report plus the finding-free
+  benign fixture, not from `testdata/malicious`: a 65-finding golden would regenerate on every
+  rule-pack tweak, and a golden nobody reads is not a test. The malicious scan is still covered —
+  by schema validation and the determinism test. No JSON-schema dependency was added; the draft-04
+  subset the SARIF schema uses is ~150 test-only lines.
 - 2026-08-26 — M3-04 found the waiver *reason* was computed and discarded by `pkg/scan`, so SARIF
   had no justification to emit; added `Finding.WaiverReason` (additive JSON field) and made
   `Report.Waived` sorted, since it is now rendered output rather than a side list.

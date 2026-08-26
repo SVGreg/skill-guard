@@ -1,0 +1,573 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "skill-guard",
+          "version": "1.2.3",
+          "informationUri": "https://github.com/SVGreg/skill-guard",
+          "rules": [
+            {
+              "id": "SG-EXE-001",
+              "name": "shell execution",
+              "shortDescription": {
+                "text": "shell execution"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast01.html",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "relationships": [
+                {
+                  "target": {
+                    "id": "AST01",
+                    "index": 0,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                }
+              ],
+              "properties": {
+                "ast": [
+                  "AST01"
+                ],
+                "engine": "static",
+                "layer": "code",
+                "severity": "critical",
+                "tags": [
+                  "security",
+                  "AST01"
+                ]
+              }
+            },
+            {
+              "id": "SG-INJ-002",
+              "name": "instruction override in the manifest",
+              "shortDescription": {
+                "text": "instruction override in the manifest"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast04.html",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "relationships": [
+                {
+                  "target": {
+                    "id": "AST04",
+                    "index": 3,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                }
+              ],
+              "properties": {
+                "ast": [
+                  "AST04"
+                ],
+                "engine": "static",
+                "layer": "content",
+                "severity": "high",
+                "tags": [
+                  "security",
+                  "AST04"
+                ]
+              }
+            },
+            {
+              "id": "SG-MTA-003",
+              "name": "manifest declares no allowed-tools",
+              "shortDescription": {
+                "text": "manifest declares no allowed-tools"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast03.html",
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "relationships": [
+                {
+                  "target": {
+                    "id": "AST03",
+                    "index": 2,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                }
+              ],
+              "properties": {
+                "ast": [
+                  "AST03"
+                ],
+                "engine": "static",
+                "layer": "content",
+                "severity": "low",
+                "tags": [
+                  "security",
+                  "AST03"
+                ]
+              }
+            },
+            {
+              "id": "SG-NET-001",
+              "name": "outbound network call",
+              "shortDescription": {
+                "text": "outbound network call"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast05.html",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "relationships": [
+                {
+                  "target": {
+                    "id": "AST05",
+                    "index": 4,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                }
+              ],
+              "properties": {
+                "ast": [
+                  "AST05"
+                ],
+                "engine": "static",
+                "layer": "code",
+                "severity": "high",
+                "tags": [
+                  "security",
+                  "AST05"
+                ]
+              }
+            },
+            {
+              "id": "SG-NET-002",
+              "name": "credential exfiltration to a remote host",
+              "shortDescription": {
+                "text": "credential exfiltration to a remote host"
+              },
+              "fullDescription": {
+                "text": "Sends local credential material to an external host."
+              },
+              "help": {
+                "text": "Remove the upload, or scope it to a reviewed endpoint."
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast01.html",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "relationships": [
+                {
+                  "target": {
+                    "id": "AST01",
+                    "index": 0,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                },
+                {
+                  "target": {
+                    "id": "AST05",
+                    "index": 4,
+                    "toolComponent": {
+                      "name": "OWASP Agentic Skills Top 10",
+                      "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                      "index": 0
+                    }
+                  },
+                  "kinds": [
+                    "relevant"
+                  ]
+                }
+              ],
+              "properties": {
+                "ast": [
+                  "AST01",
+                  "AST05"
+                ],
+                "engine": "static",
+                "layer": "code",
+                "severity": "critical",
+                "tags": [
+                  "security",
+                  "AST01",
+                  "AST05"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "SRCROOT": {
+          "uri": "./my-skill"
+        }
+      },
+      "taxonomies": [
+        {
+          "name": "OWASP Agentic Skills Top 10",
+          "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+          "organization": "OWASP",
+          "shortDescription": {
+            "text": "OWASP Agentic Skills Top 10 (AST01–AST10)"
+          },
+          "informationUri": "https://owasp.org/www-project-agentic-skills-top-10/",
+          "isComprehensive": true,
+          "taxa": [
+            {
+              "id": "AST01",
+              "name": "Malicious Skills",
+              "shortDescription": {
+                "text": "Malicious Skills"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast01.html"
+            },
+            {
+              "id": "AST02",
+              "name": "Supply Chain Compromise",
+              "shortDescription": {
+                "text": "Supply Chain Compromise"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast02.html"
+            },
+            {
+              "id": "AST03",
+              "name": "Over-Privileged Skills",
+              "shortDescription": {
+                "text": "Over-Privileged Skills"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast03.html"
+            },
+            {
+              "id": "AST04",
+              "name": "Insecure Metadata",
+              "shortDescription": {
+                "text": "Insecure Metadata"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast04.html"
+            },
+            {
+              "id": "AST05",
+              "name": "Untrusted External Instructions",
+              "shortDescription": {
+                "text": "Untrusted External Instructions"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast05.html"
+            },
+            {
+              "id": "AST06",
+              "name": "Weak Isolation",
+              "shortDescription": {
+                "text": "Weak Isolation"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast06.html"
+            },
+            {
+              "id": "AST07",
+              "name": "Update Drift",
+              "shortDescription": {
+                "text": "Update Drift"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast07.html"
+            },
+            {
+              "id": "AST08",
+              "name": "Poor Scanning",
+              "shortDescription": {
+                "text": "Poor Scanning"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast08.html"
+            },
+            {
+              "id": "AST09",
+              "name": "No Governance",
+              "shortDescription": {
+                "text": "No Governance"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast09.html"
+            },
+            {
+              "id": "AST10",
+              "name": "Cross-Platform Reuse",
+              "shortDescription": {
+                "text": "Cross-Platform Reuse"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast10.html"
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "SG-NET-002",
+          "ruleIndex": 4,
+          "level": "error",
+          "message": {
+            "text": "credential exfiltration to a remote host"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/setup.sh",
+                  "uriBaseId": "SRCROOT"
+                },
+                "region": {
+                  "startLine": 12,
+                  "endLine": 14
+                }
+              }
+            }
+          ],
+          "taxa": [
+            {
+              "id": "AST01",
+              "index": 0,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            },
+            {
+              "id": "AST05",
+              "index": 4,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "skillGuard/v1": "3dc2e7f37a5d292d"
+          },
+          "properties": {
+            "ast": [
+              "AST01",
+              "AST05"
+            ],
+            "confidence": 0.95,
+            "engine": "static",
+            "layer": "code",
+            "severity": "critical"
+          }
+        },
+        {
+          "ruleId": "SG-INJ-002",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "instruction override in the manifest"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "SKILL.md",
+                  "uriBaseId": "SRCROOT"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "taxa": [
+            {
+              "id": "AST04",
+              "index": 3,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "skillGuard/v1": "fbb908bb67df8c3d"
+          },
+          "properties": {
+            "ast": [
+              "AST04"
+            ],
+            "confidence": 0.8,
+            "engine": "static",
+            "layer": "content",
+            "severity": "high"
+          }
+        },
+        {
+          "ruleId": "SG-EXE-001",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "shell execution"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "SKILL.md",
+                  "uriBaseId": "SRCROOT"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              }
+            }
+          ],
+          "taxa": [
+            {
+              "id": "AST01",
+              "index": 0,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "skillGuard/v1": "6ad8701edb6d94f2"
+          },
+          "properties": {
+            "ast": [
+              "AST01"
+            ],
+            "confidence": 0.6,
+            "demoted_by": "CTX-DOC-EXAMPLE",
+            "engine": "static",
+            "layer": "code",
+            "original_severity": "critical",
+            "severity": "medium"
+          }
+        },
+        {
+          "ruleId": "SG-MTA-003",
+          "ruleIndex": 2,
+          "level": "note",
+          "message": {
+            "text": "manifest declares no allowed-tools"
+          },
+          "taxa": [
+            {
+              "id": "AST03",
+              "index": 2,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "skillGuard/v1": "096494328de0fa83"
+          },
+          "properties": {
+            "ast": [
+              "AST03"
+            ],
+            "confidence": 0.55,
+            "engine": "static",
+            "layer": "content",
+            "severity": "low"
+          }
+        },
+        {
+          "ruleId": "SG-NET-001",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "outbound network call"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/install.sh",
+                  "uriBaseId": "SRCROOT"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "taxa": [
+            {
+              "id": "AST05",
+              "index": 4,
+              "toolComponent": {
+                "name": "OWASP Agentic Skills Top 10",
+                "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+                "index": 0
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "skillGuard/v1": "8d0f11f35aa6db8d"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "justification": "reviewed: pulls from our own package mirror"
+            }
+          ],
+          "properties": {
+            "ast": [
+              "AST05"
+            ],
+            "confidence": 0.7,
+            "engine": "static",
+            "layer": "code",
+            "severity": "high"
+          }
+        }
+      ],
+      "properties": {
+        "counts": {
+          "critical": 1,
+          "high": 1,
+          "medium": 1,
+          "low": 1,
+          "info": 0
+        },
+        "risk_score": 72,
+        "risk_tier": "L2",
+        "verdict": "fail"
+      }
+    }
+  ]
+}
