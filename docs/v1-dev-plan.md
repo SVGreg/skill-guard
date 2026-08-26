@@ -208,7 +208,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
 | M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
-| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | in-progress | M4-09 | |
+| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | in-progress | M4-09 | #224 |
 | M4-11 | SGMT-1 documented as legacy; migration guidance | todo | M4-12 | |
 
 ### M4-01 — Primary-source spike (do this first)
