@@ -206,9 +206,9 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
 | M4-08 | Identity-based trust policy in `.skillguard.yaml` | done | M4-07 | #220 |
 | M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
-| M4-12 | Keyless **signing** in a separate `keyless/` module | in-progress | M4-09 | #222 |
-| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | todo | M4-12 | |
-| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | todo | M4-09 | |
+| M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
+| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
+| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | in-progress | M4-09 | #224 |
 | M4-11 | SGMT-1 documented as legacy; migration guidance | todo | M4-12 | |
 
 ### M4-01 — Primary-source spike (do this first)
@@ -406,6 +406,12 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-10 makes the inclusion proof **mandatory** whenever a log entry carries one,
+  rather than optional: M4-09 anchors certificate validity on `integratedTime`, and an unchecked
+  timestamp is a number the signer wrote. Checkpoint *signature* verification is enforced only when
+  `trust.log_keys` is configured — with no pinned key there is nothing to verify against, and
+  inventing a default log would repeat the default-CA mistake. M4-13 marked `blocked`: it cannot
+  proceed until a core release ships `pkg/attest/oms`.
 - 2026-08-26 — **Owner chose the separate-module option for M4-12.** `keyless/` is its own Go
   module; the core keeps its two dependencies and CI now fails if that ever stops being true.
   Follow-up **M4-13**: the `replace` directive that makes the submodule build against adjacent

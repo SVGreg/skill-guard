@@ -1,7 +1,12 @@
 package verify
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -217,6 +222,14 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 		res.SignedAt = when
 	}
 
+	// The timestamp above is only a claim until the log entry is checked. Doing
+	// it here, before the certificate is chained, means a forged timestamp
+	// cannot smuggle an expired certificate through the validity window.
+	if err := verifyTransparency(res, bundle, roster); err != nil {
+		res.CertError = err.Error()
+		return
+	}
+
 	pool, err := roster.CertPool(policyDir)
 	if err != nil {
 		res.CertError = err.Error()
@@ -268,5 +281,104 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 		res.IdentityRejected = true
 	default:
 		res.Trusted = true
+	}
+}
+
+// verifyTransparency checks the bundle's transparency-log entry: that the
+// inclusion proof reconstructs its claimed root, that the signed checkpoint
+// commits to that same tree, and — when the consumer has pinned log keys — that
+// one of them signed the checkpoint.
+//
+// The inclusion proof is always checked when present, because M4-09 anchors
+// certificate validity on the log's timestamp and an unchecked timestamp is
+// just a number the signer wrote. Checkpoint *signature* verification is
+// enforced only when trust.log_keys is configured: without pinned keys there is
+// nothing to check a signature against, and inventing a default log would be
+// the same mistake as shipping a default CA.
+func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) error {
+	entries, err := oms.TlogEntries(bundle)
+	if err != nil {
+		return err
+	}
+	var lastErr error
+	for _, e := range entries {
+		if e.Proof == nil {
+			continue
+		}
+		if err := e.VerifyInclusion(); err != nil {
+			// A broken proof is evidence, not an absence of it: report the
+			// first one rather than letting a later good entry mask it.
+			return err
+		}
+		res.LogInclusionVerified = true
+
+		cp, err := oms.ParseCheckpoint(e.Proof.Checkpoint)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := cp.MatchesProof(e.Proof); err != nil {
+			return err
+		}
+		if len(roster.LogKeys) == 0 {
+			continue
+		}
+		if err := verifyCheckpointSignature(cp, e.LogKeyID, roster.LogKeys); err != nil {
+			lastErr = err
+			continue
+		}
+		res.LogCheckpointVerified = true
+	}
+
+	if !res.LogInclusionVerified {
+		return oms.ErrNoInclusionProof
+	}
+	if len(roster.LogKeys) > 0 && !res.LogCheckpointVerified {
+		if lastErr != nil {
+			return fmt.Errorf("no configured transparency-log key verified the checkpoint: %w", lastErr)
+		}
+		return errors.New("no configured transparency-log key verified the checkpoint")
+	}
+	return nil
+}
+
+// verifyCheckpointSignature checks the note signature against the pinned log
+// keys. An entry whose key_id is set must match the bundle's log id; an entry
+// without one is tried regardless, since a consumer pinning a single log should
+// not have to look up its id to make it work.
+func verifyCheckpointSignature(cp *oms.Checkpoint, logKeyID []byte, keys []policy.LogKey) error {
+	for _, k := range keys {
+		if k.KeyID != "" && len(logKeyID) > 0 {
+			want, err := base64.StdEncoding.DecodeString(k.KeyID)
+			if err != nil || !bytes.Equal(want, logKeyID) {
+				continue
+			}
+		}
+		der, err := base64.StdEncoding.DecodeString(k.PublicKey)
+		if err != nil {
+			continue
+		}
+		pub, err := x509.ParsePKIXPublicKey(der)
+		if err != nil {
+			continue
+		}
+		if verifyNoteSignature(pub, cp.Signed, cp.Signature) {
+			return nil
+		}
+	}
+	return errors.New("checkpoint signature did not verify against any configured log key")
+}
+
+// verifyNoteSignature verifies a signed-note signature. Rekor signs with ECDSA
+// P-256 over the SHA-256 of the note body; Ed25519 logs sign the body directly.
+func verifyNoteSignature(pub any, signed, sig []byte) bool {
+	switch key := pub.(type) {
+	case *ecdsa.PublicKey:
+		digest := sha256.Sum256(signed)
+		return ecdsa.VerifyASN1(key, digest[:], sig)
+	case ed25519.PublicKey:
+		return ed25519.Verify(key, signed, sig)
+	default:
+		return false
 	}
 }
