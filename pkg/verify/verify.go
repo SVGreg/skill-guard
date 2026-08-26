@@ -3,9 +3,14 @@
 package verify
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/attest"
@@ -91,11 +96,7 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 		if !known {
 			continue // can't verify an unknown key's bytes; handled below
 		}
-		pub, err := base64.StdEncoding.DecodeString(k.PublicKey)
-		if err != nil || len(pub) != ed25519.PublicKeySize {
-			continue
-		}
-		if ed25519.Verify(ed25519.PublicKey(pub), pae, sigBytes) {
+		if verifySignature(k, pae, sigBytes) {
 			anyValid = true
 			if !revoked[sig.KeyID] {
 				anyTrusted = true
@@ -193,5 +194,42 @@ func prv(id string, sev model.Severity, title, rationale, fix string) model.Find
 		Rationale:  rationale,
 		Fix:        fix,
 		Confidence: 1.0,
+	}
+}
+
+// verifySignature checks one signature against one roster key, dispatching on
+// the key's declared algorithm.
+//
+// The algorithm comes from the *roster entry*, never from the attestation: a
+// signature that names its own scheme lets an attacker pick the weaker
+// verification path. An entry with no algorithm is Ed25519, which is what every
+// roster written before ECDSA support contained.
+func verifySignature(k policy.Key, pae, sig []byte) bool {
+	pub, err := base64.StdEncoding.DecodeString(k.PublicKey)
+	if err != nil {
+		return false
+	}
+	switch alg := strings.ToLower(strings.TrimSpace(k.Algorithm)); alg {
+	case "", attest.AlgEd25519:
+		if len(pub) != ed25519.PublicKeySize {
+			return false
+		}
+		return ed25519.Verify(ed25519.PublicKey(pub), pae, sig)
+	case attest.AlgECDSAP256:
+		parsed, err := x509.ParsePKIXPublicKey(pub)
+		if err != nil {
+			return false
+		}
+		ec, ok := parsed.(*ecdsa.PublicKey)
+		if !ok || ec.Curve != elliptic.P256() {
+			return false
+		}
+		digest := sha256.Sum256(pae)
+		return ecdsa.VerifyASN1(ec, digest[:], sig)
+	default:
+		// An unknown algorithm is not a verification failure to paper over —
+		// the key simply cannot establish trust, and the caller reports the
+		// attestation as unverified.
+		return false
 	}
 }

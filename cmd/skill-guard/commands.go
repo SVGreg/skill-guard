@@ -285,12 +285,12 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 }
 
 func keygenCmd() *cobra.Command {
-	var out, keyID, pubOut string
+	var out, keyID, pubOut, keyType string
 	var noPub, force bool
 	cmd := &cobra.Command{
 		Use:   "keygen",
-		Short: "Generate a local Ed25519 signing key",
-		Long: `Generate an Ed25519 key pair for signing skills. Two files are written:
+		Short: "Generate a local signing key",
+		Long: `Generate a signing key pair for skills. Two files are written:
 
   <name>.key   the PRIVATE key (forced to mode 0600) — keep secret, never share/commit.
   <name>.pub   the PUBLIC key (mode 0644 when created) — safe to share, commit, or publish.
@@ -299,16 +299,26 @@ The .key is self-contained (signing needs only it); the .pub is a convenience
 you hand to consumers so they can add you to their policy trust roster
 (trust.keys). Use the .key with 'skill-guard sign'.
 
+ALGORITHM (--type):
+  • ed25519      default; used by skill-guard's own SGMT-1 attestations.
+  • ecdsa-p256   required by OpenSSF Model Signing (OMS), whose algorithm
+                 registry mandates EC P-256/384/521 and does not include
+                 Ed25519. Use this for keys that must verify with OMS tooling.
+
 NOTE: the .key is currently stored unencrypted; protect it with filesystem
 permissions. At-rest encryption is planned.
 
 EXIT CODES: 0 success · 4 internal error.`,
 		Example: `  skill-guard keygen --out publisher.key            # writes publisher.key + publisher.pub
   skill-guard keygen --out publisher.key --keyid team-release-2026
-  skill-guard keygen --out publisher.key --no-pub   # private key only`,
+  skill-guard keygen --out publisher.key --no-pub   # private key only
+  skill-guard keygen --out oms.key --type ecdsa-p256   # OMS-compatible key`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			signer, err := attest.GenerateKey(keyID)
+			if err := validateKeyType(keyType); err != nil {
+				return err
+			}
+			signer, err := attest.GenerateKeyAlg(keyID, keyType)
 			if err != nil {
 				return fail(4, "%v", err)
 			}
@@ -352,6 +362,7 @@ EXIT CODES: 0 success · 4 internal error.`,
 	f := cmd.Flags()
 	f.StringVar(&out, "out", "", "output private key file path (default skill-guard.key)")
 	f.StringVar(&keyID, "keyid", "", "key identifier recorded in signatures (default derived from public key)")
+	f.StringVar(&keyType, "type", attest.AlgEd25519, "key algorithm: ed25519 | ecdsa-p256 (ecdsa-p256 for OMS compatibility)")
 	f.StringVar(&pubOut, "pub", "", "output public key file path (default <name>.pub)")
 	f.BoolVar(&noPub, "no-pub", false, "do not write the .pub public-key file")
 	f.BoolVar(&force, "force", false, "overwrite an existing key file (DESTROYS the old private key)")

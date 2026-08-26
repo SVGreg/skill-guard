@@ -168,14 +168,23 @@ skill-guard scan ./my-skill --rulepack ./extra-rules.yaml   # add rules (repeata
 
 ### `keygen`
 
-Generate an Ed25519 signing key pair. Two files are written:
+Generate a signing key pair. Two files are written:
 
 - `<name>.key` — the **private** key (mode `0600`); keep secret, never share or commit.
 - `<name>.pub` — the **public** key (mode `0644`); safe to share, commit, or publish.
 
 ```sh
-skill-guard keygen --out publisher.key
+skill-guard keygen --out publisher.key                 # ed25519 (default)
+skill-guard keygen --out oms.key --type ecdsa-p256     # OMS-compatible
 ```
+
+**`--type`** picks the algorithm. `ed25519` is the default and is what
+skill-guard's own SGMT-1 attestations use. `ecdsa-p256` exists because
+[OpenSSF Model Signing](docs/oms-notes.md) mandates EC P-256/384/521 for its
+key and certificate signing methods and does not include Ed25519 — so a key
+that must verify with OMS tooling has to be an EC key. Both types sign and
+verify through the same commands; the algorithm is recorded in the key file,
+the `.pub`, and the trust roster entry.
 
 ```
 wrote publisher.key (mode 0600, private — keep secret)
@@ -227,7 +236,7 @@ wrote my-skill/SKILL.md.skillsig
 
 | Flag | Description |
 |------|-------------|
-| `--key` | Ed25519 key file from `keygen` (**required**) |
+| `--key` | key file from `keygen` — `ed25519` or `ecdsa-p256` (**required**) |
 | `--identity` | publisher identity claim, e.g. `oidc:you@example.com` |
 | `--no-scan` | integrity-only attestation (does not embed a scan result) |
 | `--emit-manifest-fields` | also write USF `content_hash`/`signature` into `SKILL.md` front-matter |
@@ -372,7 +381,7 @@ allowlists:
 trust:
   keys:
     - keyid: sg-8f7164b591be
-      algorithm: ed25519
+      algorithm: ed25519          # or ecdsa-p256
       public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=   # from keygen
       identity: oidc:you@example.com
   revoked: []
