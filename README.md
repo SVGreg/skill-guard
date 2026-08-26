@@ -598,9 +598,49 @@ jobs:
       # exit 1 here fails the job when the verdict is "fail"
 ```
 
-To get findings into the GitHub **Security** tab instead, emit SARIF and hand it
-to the code-scanning uploader. `continue-on-error` lets the upload happen even
-when the scan gates the build:
+### GitHub Action
+
+The repo ships a composite action that installs the released binary, scans, and
+uploads the SARIF to the **Security** tab — findings land as code-scanning
+alerts with their OWASP references attached:
+
+```yaml
+# .github/workflows/skill-guard.yml
+name: skill-guard
+on: [push, pull_request]
+permissions:
+  contents: read
+  security-events: write     # required for the SARIF upload
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SVGreg/skill-guard@main    # pin to a release tag for reproducibility
+        with:
+          path: ./my-skill
+```
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `path` | `.` | bundle directory or a single `SKILL.md` |
+| `format` | `sarif` | `sarif`, `json`, `text`, `skill-card` |
+| `output` | `skill-guard.sarif` | file the scan output is written to |
+| `policy` | – | path to a `.skillguard.yaml` |
+| `fail-on` | – | override the fail threshold |
+| `rulepack` | – | extra rule-pack YAML (one path per line) |
+| `version` | `latest` | release to install, or `preinstalled` to use a `skill-guard` already on `PATH` |
+| `upload-sarif` | `true` | upload to code scanning |
+| `fail-on-verdict` | `true` | fail the job on a `fail` verdict |
+
+Outputs: `exit-code` (`0` pass/warn, `1` verdict fail) and `output-file`.
+
+**The upload happens before the gate**, so a failing scan still delivers its
+findings — a build that only tells you it failed is not a review. A usage or
+internal error (exit `3`/`4`) fails the step immediately instead of being
+reported as a clean scan.
+
+To wire it up by hand instead, emit SARIF and call the uploader yourself:
 
 ```yaml
       - run: skill-guard scan ./my-skill --format sarif --out skill-guard.sarif

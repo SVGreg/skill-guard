@@ -1,0 +1,100 @@
+# Exercises the composite action in this repo against the bundled fixtures.
+#
+# The scan runs against a binary built from the checkout (version:
+# preinstalled), not the latest release, so a change to the emitter is tested
+# by the same commit that makes it.
+name: action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate + SARIF artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26" }
+
+      - name: Build skill-guard from this checkout
+        run: |
+          go build -o "$RUNNER_TEMP/bin/skill-guard" ./cmd/skill-guard
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # The malicious fixture must fail the gate. continue-on-error keeps the
+      # job alive so the next step can assert that it *did* fail — an action
+      # that silently passed here would be the bug worth catching.
+      - name: Scan the malicious fixture
+        id: malicious
+        continue-on-error: true
+        uses: ./
+        with:
+          path: testdata/malicious
+          output: malicious.sarif
+          version: preinstalled
+          # Not uploaded: these are 65 deliberate fixture findings, and putting
+          # them in this repo's own Security tab would bury real alerts. The
+          # upload path is exercised by the code-scanning job below.
+          upload-sarif: "false"
+
+      - name: The gate must have failed, and the SARIF must still exist
+        run: |
+          test "${{ steps.malicious.outcome }}" = "failure" \
+            || { echo "the malicious fixture did not fail the gate"; exit 1; }
+          test "${{ steps.malicious.outputs.exit-code }}" = "1" \
+            || { echo "expected exit 1, got ${{ steps.malicious.outputs.exit-code }}"; exit 1; }
+          test -s malicious.sarif || { echo "no SARIF was written"; exit 1; }
+          python3 - <<'PY'
+          import json
+          log = json.load(open("malicious.sarif"))
+          run = log["runs"][0]
+          assert log["version"] == "2.1.0", log["version"]
+          assert run["results"], "no results in the SARIF log"
+          assert len(run["taxonomies"][0]["taxa"]) == 10
+          print(f"{len(run['results'])} results, verdict {run['properties']['verdict']}")
+          PY
+
+      - name: Scan the benign fixture
+        id: benign
+        uses: ./
+        with:
+          path: testdata/benign
+          output: benign.sarif
+          version: preinstalled
+          upload-sarif: "false"
+
+      - name: The benign fixture must pass the gate
+        run: |
+          test "${{ steps.benign.outputs.exit-code }}" = "0" \
+            || { echo "benign fixture did not pass"; exit 1; }
+
+  code-scanning:
+    name: upload to code scanning
+    # Manual only: this uploads fixture findings to this repo's Security tab,
+    # which is useful as a demo but noise as a default.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26" }
+      - name: Build skill-guard from this checkout
+        run: |
+          go build -o "$RUNNER_TEMP/bin/skill-guard" ./cmd/skill-guard
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: ./
+        continue-on-error: true
+        with:
+          path: testdata/malicious
+          output: skill-guard.sarif
+          version: preinstalled
