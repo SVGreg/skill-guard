@@ -28,6 +28,7 @@ into an agent loop (e.g. before a skill is handed to the model).
   - [`verify`](#verify)
 - [Input & output formats](#input--output-formats)
 - [Policy file (`.skillguard.yaml`)](#policy-file-skillguardyaml)
+- [Signature formats: SGMT-1 and OMS](#signature-formats-sgmt-1-and-oms)
 - [Publisher identity & trust (`SG-PRV-005`)](#publisher-identity--trust-sg-prv-005)
 - [Exit codes](#exit-codes)
 - [What it detects](#what-it-detects)
@@ -561,6 +562,37 @@ verifying never do.
 
 ---
 
+## Signature formats: SGMT-1 and OMS
+
+skill-guard writes two detached signatures over the same skill, answering
+different questions:
+
+| | `SKILL.md.skillsig` (SGMT-1) | `skill.oms.sig` (OMS v1.0) |
+|---|---|---|
+| Spec | skill-guard's own | [OpenSSF Model Signing](https://github.com/ossf/model-signing-spec) |
+| Attests a **scan verdict** | yes | no |
+| Carries an expiry | yes | no |
+| Verifiable by other tools | no | **yes** |
+| Keyless signing | no | **yes** (Fulcio + Rekor) |
+
+**SGMT-1 is legacy: fully supported, still the default, and not going away — but
+new capability lands in OMS.** It attests something OMS deliberately does not
+("this bundle was clean when I signed it"), which is why it stays. What it
+cannot do is be checked by anyone else's tooling, and a signature only
+skill-guard can verify is a private note rather than provenance.
+
+Emitting both costs one flag, and `verify` reports each with the trust path it
+used:
+
+```sh
+skill-guard sign ./my-skill --key oms.key --oms
+```
+
+Full comparison, the two trust models, and migration guidance:
+[`docs/signature-formats.md`](docs/signature-formats.md).
+
+---
+
 ## Publisher identity & trust (`SG-PRV-005`)
 
 When `verify` reports:
@@ -657,13 +689,18 @@ out-of-band with what they published) — the roster *is* the trust decision.
 > other publishers but not you, your skill reports the more severe `SG-PRV-002`,
 > not `SG-PRV-005`.
 
-### Roadmap
+### Beyond the roster: certificate-bound identity
 
-Keyless / transparency-log identity (Sigstore-style: a Fulcio certificate bound
-to a real OIDC identity, recorded in a Rekor log) is planned as an alternative
-`Signer`/verification backend, which *would* let identity be checked against an
-external authority rather than a hand-managed roster. Until then, the roster is
-the trust anchor. See [`docs/skill-guard-design.md`](docs/skill-guard-design.md).
+Everything above describes the **local roster**, which is how SGMT-1 and
+key-signed OMS bundles establish trust. An OMS bundle can instead carry a
+short-lived certificate whose SAN holds the signer's OIDC identity — so identity
+is checked against a CA and a transparency log rather than a hand-managed list.
+
+That is implemented: see
+[Keyless (certificate-bound) signatures](#keyless-certificate-bound-signatures).
+It does **not** introduce a global authority — skill-guard pins no CA and no
+log, so the anchors are still ones you chose. What changes is that you pin an
+*issuer* once instead of a key per publisher.
 
 ---
 

@@ -154,6 +154,12 @@ bundle covering the whole directory tree, for verifiers outside skill-guard.
 It is written alongside SKILL.md.skillsig, never instead of it, and requires an
 --type ecdsa-p256 key: the OMS algorithm registry does not include Ed25519.
 
+FORMATS: SGMT-1 (.skillsig) is legacy — supported, still the default, and the
+only format that attests a scan verdict and an expiry. OMS is the one other
+tools can verify, and the one keyless signing uses. Prefer OMS for anything
+published outside your own pipeline; emitting both is normal. See
+docs/signature-formats.md.
+
 IDENTITY (--identity): a free-form publisher claim recorded in the attestation,
 e.g. oidc:you@example.com, email:you@example.com, or a URL.
 

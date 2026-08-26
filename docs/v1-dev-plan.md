@@ -208,8 +208,8 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
 | M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
-| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | in-progress | M4-09 | #224 |
-| M4-11 | SGMT-1 documented as legacy; migration guidance | todo | M4-12 | |
+| M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | done | M4-09 | #224 |
+| M4-11 | SGMT-1 documented as legacy; migration guidance | in-progress | M4-12 | |
 
 ### M4-01 — Primary-source spike (do this first)
 **Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
@@ -343,9 +343,13 @@ when present. Rekor availability is never required: the proof travels in the bun
 **Acceptance.** A bundle with a tampered `integratedTime` or a broken inclusion proof is refused,
 with the network disabled.
 
-### M4-11 — Workflow + docs
-**Deliverables.** Reusable keyless signing workflow; README/docs on OMS vs SGMT-1, the two trust
-models, and the offline path; SGMT-1 marked **legacy but supported** — not removed here.
+### M4-11 — SGMT-1 as legacy; format guidance
+**Deliverables.** `docs/signature-formats.md` comparing the two formats, the two trust models, and
+migration; README section and Contents entry; `sign --help` naming SGMT-1 legacy; the stale
+"Roadmap" note under Publisher identity replaced, since keyless shipped. The reusable signing
+workflow was delivered with M4-12.
+**Acceptance.** SGMT-1 is described as legacy-but-supported wherever a reader chooses a format,
+with no suggestion of removal, and every cross-link resolves.
 
 ---
 
@@ -406,6 +410,9 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-11 replaced the "Roadmap" paragraph under *Publisher identity & trust*, which
+  still described keyless signing as planned after it had shipped — the exact doc drift roadmap
+  §6.5 asks to keep closed.
 - 2026-08-26 — M4-10 makes the inclusion proof **mandatory** whenever a log entry carries one,
   rather than optional: M4-09 anchors certificate validity on `integratedTime`, and an unchecked
   timestamp is a number the signer wrote. Checkpoint *signature* verification is enforced only when
