@@ -500,9 +500,46 @@ Two properties worth knowing:
 
 Verification is offline and needs no Sigstore libraries: `go list -deps` on the
 default build contains no Sigstore or protobuf packages, and the module still
-has two direct dependencies. *Producing* a keyless signature — obtaining a
-Fulcio certificate from an OIDC token — is separate work; see
-[`docs/oms-notes.md`](docs/oms-notes.md).
+has two direct dependencies.
+
+#### Producing a keyless signature
+
+Signing keylessly *does* need a Sigstore client, so it lives in a **separate Go
+module**, [`keyless/`](keyless/), shipped as its own binary:
+
+```sh
+cd keyless && go build -o skill-guard-keyless ./cmd/skill-guard-keyless
+skill-guard-keyless sign ./my-skill
+```
+
+```
+wrote "my-skill/skill.oms.sig" (keyless, Fulcio + Rekor)
+  identity: https://github.com/acme/tools/.github/workflows/release.yml@refs/heads/main
+  issuer:   https://token.actions.githubusercontent.com
+  logged:   2026-08-26T09:14:22Z
+```
+
+In CI, the reusable workflow needs no secrets at all — the job's OIDC token is
+the credential:
+
+```yaml
+jobs:
+  sign:
+    uses: SVGreg/skill-guard/.github/workflows/keyless-sign.yml@main
+    with:
+      path: ./my-skill
+```
+
+**Why a separate module:** the Sigstore client pulls in ~370 modules.
+skill-guard's core has **two** dependencies, and that is a property people
+choose it for, so the graph stays out of it — `go install …/cmd/skill-guard`
+downloads two dependencies whether or not you ever sign keylessly. CI asserts
+it: a job fails if the core module gains a direct dependency or if the
+`skill-guard` binary ever links Sigstore or protobuf code. Details in
+[`keyless/README.md`](keyless/README.md).
+
+**This is the only part of skill-guard that needs network access.** Scanning and
+verifying never do.
 
 ---
 
@@ -708,7 +745,7 @@ Key packages:
 | `pkg/policy` | `.skillguard.yaml` model, thresholds, waivers, trust roster |
 | `pkg/attest` | SGMT-1 Merkle root, DSSE signing, Ed25519 keys |
 | `pkg/verify` | verify attestation, Merkle integrity, trust |
-| `pkg/report` | text / JSON / skill-card formatters |
+| `pkg/report` | text / JSON / SARIF / skill-card formatters |
 
 ---
 
@@ -796,7 +833,15 @@ go vet ./...          # static checks
 # end-to-end smoke test against the fixtures
 go run ./cmd/skill-guard scan testdata/malicious   # verdict: fail, exit 1
 go run ./cmd/skill-guard scan testdata/benign      # verdict: pass, exit 0
+
+# the keyless signer is a separate module — build and test it in its own tree
+cd keyless && go build ./... && go test ./...
 ```
+
+The repository holds **two Go modules**: the core (`.`, two dependencies) and
+[`keyless/`](keyless/) (the Sigstore signer, ~370). `go build ./...` at the root
+never touches the second, which is the point — see
+[`keyless/README.md`](keyless/README.md).
 
 Fixtures live in [`testdata/`](testdata/): `benign/` (a clean skill) and
 `malicious/` (an injection + exfiltration corpus — **do not run** its

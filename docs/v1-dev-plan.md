@@ -59,7 +59,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
-| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-12 | M4-01…M4-09 done/in flight; M4-12 needs an owner decision |
+| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | M4-01…M4-12 done/in flight |
 | **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
@@ -205,10 +205,11 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
 | M4-08 | Identity-based trust policy in `.skillguard.yaml` | done | M4-07 | #220 |
-| M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | in-progress | M4-07, M4-08 | #221 |
-| M4-12 | Keyless **signing** (Fulcio/Rekor) — needs a dependency decision | blocked | M4-09 | |
+| M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
+| M4-12 | Keyless **signing** in a separate `keyless/` module | in-progress | M4-09 | #222 |
+| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | todo | M4-12 | |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | todo | M4-09 | |
-| M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | blocked | M4-12 | |
+| M4-11 | SGMT-1 documented as legacy; migration guidance | todo | M4-12 | |
 
 ### M4-01 — Primary-source spike (do this first)
 **Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
@@ -319,10 +320,21 @@ out, for the owner to pick:
    HTTPS; Rekor is a JSON upload. No dependency, but we own the correctness of a security-critical
    client — and the verification half (M4-09) already shows the shape is tractable.
 
-**Recommendation: (1).** It keeps the property the project advertises, and the split is reversible
-in a way an added dependency graph is not.
-**Acceptance (whichever is chosen).** A workflow signs a skill keylessly with zero stored secrets,
-and the default `skill-guard` binary's dependency graph is unchanged.
+**Owner decision (2026-08-26): option 1, the separate module.**
+**Deliverables.** `keyless/` module (own `go.mod`), `skill-guard-keyless sign`, OIDC identity from
+`--token`/`--token-file`/GitHub Actions with no browser flow, a reusable signing workflow, and a CI
+job that **asserts** the core module stays at two direct dependencies and that the `skill-guard`
+binary links no Sigstore or protobuf code.
+**Acceptance.** A workflow signs a skill keylessly with zero stored secrets, `skill-guard verify`
+reads the result, and the core dependency graph is unchanged.
+
+### M4-13 — Drop the `replace` directive
+`keyless/go.mod` resolves the core module through `replace ../` so it always builds against
+adjacent source. `go install` refuses a module with replaces, so installation is clone-and-build
+until a core release contains `pkg/attest/oms`. Once one is tagged, drop the replace, pin the
+release, and document `go install`.
+**Acceptance.** `go install github.com/SVGreg/skill-guard/keyless/cmd/skill-guard-keyless@latest`
+works from a clean machine.
 
 ### M4-10 — Rekor inclusion-proof checking
 **Deliverables.** M4-09 trusts the bundle's own `integratedTime`; this verifies it — Merkle
@@ -394,6 +406,10 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — **Owner chose the separate-module option for M4-12.** `keyless/` is its own Go
+  module; the core keeps its two dependencies and CI now fails if that ever stops being true.
+  Follow-up **M4-13**: the `replace` directive that makes the submodule build against adjacent
+  source also blocks `go install`, until a core release ships `pkg/attest/oms`.
 - 2026-08-26 — **M4-09 split.** The original card bundled keyless *verification* and *signing*.
   Verification needs no new dependency and is done. Signing needs one — and the roadmap's "behind a
   build tag" instruction does not work: a build tag still puts the whole ~90-module graph in
