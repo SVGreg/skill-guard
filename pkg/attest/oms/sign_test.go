@@ -205,3 +205,26 @@ func TestSignBundleIsDeterministic(t *testing.T) {
 		t.Error("the signed payload differs between two runs over the same tree")
 	}
 }
+
+// TestSigFileNameMatchesTheBundleWalk guards a cross-package constant: pkg/skill
+// excludes the OMS signature from the bundle model by name, so the two must
+// agree. If they drift, writing skill.oms.sig silently invalidates the SGMT-1
+// Merkle root of the bundle it was just written into.
+func TestSigFileNameMatchesTheBundleWalk(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: demo\ndescription: d\n---\nbody\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, SigFileName), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write signature: %v", err)
+	}
+	b, err := skill.LoadBundle(dir)
+	if err != nil {
+		t.Fatalf("LoadBundle: %v", err)
+	}
+	for _, f := range b.Files {
+		if f.Path == SigFileName {
+			t.Fatalf("%s is part of the bundle model; hashes over the bundle would cover the signature", SigFileName)
+		}
+	}
+}

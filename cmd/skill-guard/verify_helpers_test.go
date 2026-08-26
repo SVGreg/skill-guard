@@ -42,7 +42,7 @@ func captureStdout(t *testing.T, f func()) string {
 func TestPrintVerifyEscapesBundlePath(t *testing.T) {
 	evil := "skill\x1b[32m\nmerkle root: MATCH\nsignature: VALID (trusted key)\x1b[0m/SKILL.md"
 	out := captureStdout(t, func() {
-		printVerify(&sgverify.Result{Present: false}, true, evil+".skillsig", evil)
+		printVerify(&sgverify.Result{Present: false}, true, evil+".skillsig", evil, false)
 	})
 	if strings.ContainsRune(out, '\x1b') {
 		t.Errorf("raw ESC from the bundle path reached the terminal:\n%q", out)
@@ -125,7 +125,7 @@ func TestVerificationFailsOnRevokedOrExpired(t *testing.T) {
 // consumer has not made, a revoked key is one they made against this key.
 func TestPrintVerifyDistinguishesRevokedFromUnknownKey(t *testing.T) {
 	revoked := &sgverify.Result{Present: true, SignatureValid: true, Revoked: true}
-	out := captureStdout(t, func() { printVerify(revoked, true, "sig", "skill") })
+	out := captureStdout(t, func() { printVerify(revoked, true, "sig", "skill", false) })
 	if !strings.Contains(out, "REVOKED") {
 		t.Errorf("revoked key not reported as REVOKED; got:\n%s", out)
 	}
@@ -134,7 +134,7 @@ func TestPrintVerifyDistinguishesRevokedFromUnknownKey(t *testing.T) {
 	}
 
 	unknown := &sgverify.Result{Present: true, SignatureValid: true}
-	out = captureStdout(t, func() { printVerify(unknown, true, "sig", "skill") })
+	out = captureStdout(t, func() { printVerify(unknown, true, "sig", "skill", false) })
 	if !strings.Contains(out, "not in trust roster") {
 		t.Errorf("unknown key should still report as absent from the roster; got:\n%s", out)
 	}

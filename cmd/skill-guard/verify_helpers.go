@@ -15,7 +15,11 @@ func verifyBundle(b *skill.Bundle, env *attest.Envelope, pol policy.Policy) *sgv
 	return sgverify.Verify(b, env, pol.Trust)
 }
 
-func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) {
+// printVerify renders one verification result. otherSignature says whether the
+// bundle carries a signature in the *other* format, so an absent .skillsig on a
+// bundle that does carry an OMS signature is not reported as "unsigned" — it is
+// signed, just not in this format.
+func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, otherSignature bool) {
 	c := func(s string) string {
 		if noColor {
 			return ""
@@ -42,26 +46,42 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 	// escapes them and matches how the error paths (loadBundleFriendly, fail)
 	// already quote paths. Findings below are model-owned SG-PRV-* constants, and
 	// merkle_root/keyid are hex/base64, so those stay %s.
+	// The line label names the format, because the two carry different
+	// guarantees: SGMT-1 attests a scan verdict and an expiry, OMS attests file
+	// digests only. Printing both as "attestation" would blur that.
+	label := "attestation"
+	integrity := "merkle root"
+	if res.Format == sgverify.FormatOMS {
+		label = "OMS signature"
+		integrity = "manifest"
+	}
+
 	switch {
 	case !res.Present:
-		fmt.Printf("attestation: absent (no %q)\n", sigPath)
-		fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %q --key <key>\n", skillPath)
+		fmt.Printf("%s: absent (no %q)\n", label, sigPath)
+		switch {
+		case otherSignature:
+			fmt.Printf("  the skill carries the other signature format; add this one with:\n    skill-guard sign %q --key <key>%s\n",
+				skillPath, omsFlagIf(res.Format == sgverify.FormatOMS))
+		case res.Format != sgverify.FormatOMS:
+			fmt.Printf("  this skill is unsigned. create an attestation with:\n    skill-guard sign %q --key <key>\n", skillPath)
+		}
 	case res.SignatureValid && res.Trusted:
-		fmt.Printf("attestation: present, signature %sVALID%s (trusted key)\n", c(green), c(reset))
+		fmt.Printf("%s: present, signature %sVALID%s (trusted key)\n", label, c(green), c(reset))
 	case res.SignatureValid && res.Revoked:
 		// Distinct from the arm below: the key *is* in the roster, listed under
 		// `revoked`. Saying "not in trust roster" here contradicted the
 		// SG-PRV-004 line printed directly underneath, and understated the
 		// state — an unknown key is a decision the consumer has not made, a
 		// revoked one is a decision they made against this key.
-		fmt.Printf("attestation: present, signature VALID but key %sREVOKED%s\n", c(red), c(reset))
+		fmt.Printf("%s: present, signature VALID but key %sREVOKED%s\n", label, c(red), c(reset))
 	case res.SignatureValid:
-		fmt.Printf("attestation: present, signature VALID (key not in trust roster — identity unverified)\n")
+		fmt.Printf("%s: present, signature VALID (key not in trust roster — identity unverified)\n", label)
 	case hasFinding("SG-PRV-002"):
-		fmt.Printf("attestation: present, signature %sINVALID%s (does not verify)\n", c(red), c(reset))
+		fmt.Printf("%s: present, signature %sINVALID%s (does not verify)\n", label, c(red), c(reset))
 	default:
 		// Present but unverifiable: no trust roster to check the signature bytes against.
-		fmt.Printf("attestation: present, signature UNVERIFIED (no trust roster — identity unverified)\n")
+		fmt.Printf("%s: present, signature UNVERIFIED (no trust roster — identity unverified)\n", label)
 	}
 	if res.Present {
 		mm := "MISMATCH"
@@ -69,7 +89,7 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string) 
 		if res.MerkleMatch {
 			mm, col = "MATCH", green
 		}
-		fmt.Printf("merkle root: %s%s%s\n", c(col), mm, c(reset))
+		fmt.Printf("%s: %s%s%s\n", integrity, c(col), mm, c(reset))
 		if res.Statement != nil {
 			if res.Publisher != "" {
 				fmt.Printf("publisher: %s\n", safeText(res.Publisher))
@@ -129,3 +149,11 @@ func verificationFailed(res *sgverify.Result, pol policy.Policy) bool {
 // characters and makes the tampering visible instead of invisible; pkg/report
 // already prints scanned excerpts with %q for exactly this reason.
 func safeText(s string) string { return strconv.Quote(s) }
+
+// omsFlagIf appends the --oms flag when the missing signature is the OMS one.
+func omsFlagIf(oms bool) string {
+	if oms {
+		return " --oms"
+	}
+	return ""
+}

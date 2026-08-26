@@ -275,9 +275,32 @@ P-256/384/521 — and the refusal happens before anything is written. See
 
 ### `verify`
 
-Check a skill's attestation: that the signature is valid, that the recomputed
-Merkle root still matches the signed one (no tampering or drift), and — with a
-trust roster — that the signing key is trusted.
+Check a skill's signatures: that each is valid, that the content still matches
+what was signed (no tampering or drift), and — with a trust roster — that the
+signing key is trusted.
+
+**Both signature formats are detected automatically.** `verify` reports each one
+it finds, so you can see which trust path produced the verdict:
+
+- `SKILL.md.skillsig` — skill-guard's SGMT-1 attestation: Merkle root, publisher
+  identity, expiry, and the scan verdict recorded at signing time.
+- `skill.oms.sig` — the OMS bundle: per-file digests only. It carries no scan
+  result and no expiry, which `verify` states rather than leaving you to assume.
+
+```
+attestation: present, signature VALID (trusted key)
+merkle root: MATCH
+publisher: "oidc:demo@example.com"
+scan-at-signing: "pass" (risk 0/100)
+
+OMS signature: present, signature VALID (trusted key)
+manifest: MATCH
+  SG-PRV-006  low  OMS signature carries no scan result
+```
+
+A failure in **either** format exits `2`. OMS manifest verification also flags
+files present in the bundle that the signature does not cover — a payload added
+after signing is caught even though every signed file still matches.
 
 ```sh
 skill-guard verify ./my-skill --policy .skillguard.yaml

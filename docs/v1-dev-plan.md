@@ -202,8 +202,8 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | done | M4-02 | #215 |
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | done | M4-03 | #216 |
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | done | M4-01 | #217 |
-| M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | in-progress | M4-04, M4-05 | #218 |
-| M4-07 | OMS verifier + signature-type auto-detection in `verify` | todo | M4-06 | |
+| M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
+| M4-07 | OMS verifier + signature-type auto-detection in `verify` | in-progress | M4-06 | |
 | M4-08 | Identity-based trust policy in `.skillguard.yaml` | todo | M4-07 | |
 | M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
 | M4-10 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-09 | |
@@ -366,6 +366,11 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-07 caught a real M4-06 bug: `skill.oms.sig` was a Merkle leaf, so writing it
+  invalidated the `.skillsig` written moments earlier — a freshly signed bundle verified as
+  MISMATCH. `pkg/skill` now excludes it from the bundle model exactly as it excludes `.skillsig`;
+  a signature must never cover another signature. Also: an OMS file that exists but is empty is
+  reported as **malformed**, not absent, so a truncated signature cannot look like an unsigned skill.
 - 2026-08-26 — M4-06 validates the key algorithm **before** writing anything: `--oms` with an
   Ed25519 key was leaving a valid `.skillsig` behind and then failing, which reads like a partial
   success. `pkg/attest/oms` imports `pkg/attest` (for PAE and the algorithm ids) and never the
