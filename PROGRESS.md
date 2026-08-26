@@ -54,8 +54,13 @@ SGMT-1 Merkle + DSSE Ed25519 signing/verification, policy/trust, and TP/FP fixtu
 6. Set up the scheduled cloud agent (schedule skill) for autonomous continuation.
 7. Report first-runnable status to the user.
 
+## Shipped after the first drop
+- SARIF 2.1.0 output (`scan --format sarif`), AST taxonomy export, waivers as SARIF
+  suppressions, golden + offline schema validation, and a composite GitHub Action —
+  roadmap M3-01…M3-07, tracked in `docs/v1-dev-plan.md`. Mapping: `docs/sarif-mapping.md`.
+
 ## Deferred to later milestones (explicitly NOT in first drop)
-- SARIF output + `report merge` (M3), full skill-card envelope split (M3)
+- `report merge` (M3), full skill-card envelope split (M3)
 - `secret` entropy engine breadth, OSV/CVE (M3/M5), taint/dataflow SG-TAINT-* (M3)
 - LLM (T3) + dynamic + YARA engines (M5)
 - C-ABI / Python / Node / Rust bindings + daemon (M4)
