@@ -87,6 +87,11 @@ type Finding struct {
 	DemotedBy        string   `json:"demoted_by,omitempty"`
 	OriginalSeverity Severity `json:"original_severity,omitempty"`
 	Waived           bool     `json:"waived,omitempty"`
+	// WaiverReason is the policy waiver's stated reason, kept so a report can
+	// say *why* a finding was suppressed rather than just that it was — SARIF
+	// suppressions require a justification, and a reviewer reading JSON needs
+	// the same thing. Empty unless Waived.
+	WaiverReason string `json:"waiver_reason,omitempty"`
 }
 
 // Counts summarizes findings by severity (waived excluded).
