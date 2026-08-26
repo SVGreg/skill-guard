@@ -228,3 +228,98 @@ trust:
 		t.Fatalf("the design doc's own \u00a710.4 example policy no longer loads: %v", err)
 	}
 }
+
+// TestTrustAllowsIdentityPatterns is the M4-08 acceptance table: a matching
+// identity is admitted, a near miss is not, and no rules at all admits
+// everything (identity rules narrow a roster; they are not a gate that every
+// existing policy must now opt into).
+func TestTrustAllowsIdentityPatterns(t *testing.T) {
+	rules := []IdentityRule{
+		{Pattern: "repo:acme/*"},
+		{Pattern: "oidc:release@acme.example"},
+		{Pattern: "https://github.com/acme/*/.github/workflows/*.yml@refs/heads/main"},
+	}
+	trust := Trust{Identities: rules}
+
+	allowed := []string{
+		"repo:acme/tools",
+		"repo:acme/tools/nested", // `*` crosses `/` on purpose
+		"oidc:release@acme.example",
+		"https://github.com/acme/tools/.github/workflows/sign.yml@refs/heads/main",
+	}
+	for _, id := range allowed {
+		if !trust.Allows(id, "") {
+			t.Errorf("Allows(%q) = false, want true", id)
+		}
+	}
+
+	rejected := []string{
+		"repo:acme-evil/tools", // prefix must not be a substring match
+		"repo:notacme/tools",
+		"oidc:release@acme.example.evil.com", // exact rule, suffix appended
+		"oidc:other@acme.example",
+		"https://github.com/acme/tools/.github/workflows/sign.yml@refs/heads/attacker",
+		"",
+	}
+	for _, id := range rejected {
+		if trust.Allows(id, "") {
+			t.Errorf("Allows(%q) = true, want false", id)
+		}
+	}
+
+	if !(Trust{}).Allows("anything", "") {
+		t.Error("with no identity rules configured, every identity should be admissible")
+	}
+}
+
+// TestTrustAllowsIssuerScoping: a rule naming an issuer only applies to that
+// issuer, so a pattern cannot be satisfied by an identity minted elsewhere.
+func TestTrustAllowsIssuerScoping(t *testing.T) {
+	trust := Trust{Identities: []IdentityRule{
+		{Pattern: "repo:acme/*", Issuer: "https://token.actions.githubusercontent.com"},
+	}}
+	if !trust.Allows("repo:acme/tools", "https://token.actions.githubusercontent.com") {
+		t.Error("matching pattern and issuer should be admitted")
+	}
+	if trust.Allows("repo:acme/tools", "https://evil.example/oidc") {
+		t.Error("the same identity from another issuer must not be admitted")
+	}
+	if trust.Allows("repo:acme/tools", "") {
+		t.Error("an issuer-scoped rule must not match when no issuer is known")
+	}
+}
+
+// TestTrustRevokesKeyOrIdentity: revocation covers both, from one list.
+func TestTrustRevokesKeyOrIdentity(t *testing.T) {
+	trust := Trust{Revoked: []string{"sg-deadbeef", "oidc:leaver@acme.example"}}
+	if !trust.Revokes("sg-deadbeef", "") {
+		t.Error("a revoked key id was not reported as revoked")
+	}
+	if !trust.Revokes("sg-unknown", "oidc:leaver@acme.example") {
+		t.Error("a revoked identity was not reported as revoked")
+	}
+	if trust.Revokes("sg-other", "oidc:current@acme.example") {
+		t.Error("an unrelated key/identity was reported as revoked")
+	}
+	if trust.Revokes("", "") {
+		t.Error("empty values must not match a revocation entry")
+	}
+}
+
+// TestValidateRejectsUselessIdentityRules: a rule that cannot work should fail
+// at load, not silently admit or reject everything at verify time.
+func TestValidateRejectsUselessIdentityRules(t *testing.T) {
+	base := Default()
+	base.Trust.Identities = []IdentityRule{{Pattern: ""}}
+	if err := base.validate(); err == nil {
+		t.Error("an empty identity pattern was accepted")
+	}
+	base.Trust.Identities = []IdentityRule{{Pattern: "repo:acme/?"}}
+	if err := base.validate(); err == nil {
+		t.Error("a pattern using ? was accepted without explanation")
+	}
+	base.Trust.Identities = []IdentityRule{{Pattern: "repo:acme/*"}}
+	if err := base.validate(); err != nil {
+		t.Errorf("a valid identity rule was rejected: %v", err)
+	}
+}

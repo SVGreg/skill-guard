@@ -203,8 +203,8 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | done | M4-03 | #216 |
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | done | M4-01 | #217 |
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
-| M4-07 | OMS verifier + signature-type auto-detection in `verify` | in-progress | M4-06 | #219 |
-| M4-08 | Identity-based trust policy in `.skillguard.yaml` | todo | M4-07 | |
+| M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
+| M4-08 | Identity-based trust policy in `.skillguard.yaml` | in-progress | M4-07 | #220 |
 | M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
 | M4-10 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-09 | |
 | M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | todo | M4-09 | |
@@ -366,6 +366,12 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-08 implements identity rules as a **narrowing** gate over the key roster, not as
+  a way to admit unbound identities: an identity is only usable when the consumer bound it to a key
+  in their own roster. Admitting a certificate identity needs the keyless path (M4-09); trusting a
+  statement's self-asserted `publisher` field would be no trust at all. A scoped-out identity is
+  SG-PRV-005 (non-gating, like an unknown key), not SG-PRV-004 — the consumer scoped, they did not
+  revoke.
 - 2026-08-26 — M4-07 caught a real M4-06 bug: `skill.oms.sig` was a Merkle leaf, so writing it
   invalidated the `.skillsig` written moments earlier — a freshly signed bundle verified as
   MISMATCH. `pkg/skill` now excludes it from the bundle model exactly as it excludes `.skillsig`;

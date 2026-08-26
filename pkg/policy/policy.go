@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/model"
@@ -72,7 +73,38 @@ type Trust struct {
 	Include  []string `yaml:"include"`
 	Keys     []Key    `yaml:"keys"`
 	PackKeys []Key    `yaml:"pack_keys"`
-	Revoked  []string `yaml:"revoked"`
+	// Identities restricts which publisher identities are acceptable, on top of
+	// the key roster. See IdentityRule and Allows.
+	Identities []IdentityRule `yaml:"identities"`
+	// Revoked lists key ids **and** identities that are never trusted, whatever
+	// else matches. One list rather than two because revocation is one decision
+	// — "not this publisher, in any form" — and splitting it invites revoking a
+	// key while leaving its identity admissible.
+	Revoked []string `yaml:"revoked"`
+}
+
+// IdentityRule admits publisher identities by pattern rather than by key, which
+// is how CI-signed skills are trusted: the signing key is short-lived and
+// unknowable in advance, but the identity ("repo:org/repo") is stable.
+//
+// **The identity must be cryptographically bound to the signature** before a
+// rule can admit it. Today that means a roster key's own identity field; the
+// keyless path (M4-09) will supply certificate identities. A self-asserted
+// identity from an attestation's publisher block is never sufficient — anyone
+// can write any identity into a statement they sign with their own key.
+//
+// No issuer or root is built in. skill-guard has no vendor root of trust and
+// will not acquire one: the consumer decides who they trust, in their own file.
+type IdentityRule struct {
+	// Pattern is matched against the identity claim. `*` matches any run of
+	// characters, including `/`, so "repo:acme/*" covers "repo:acme/tools" and
+	// "repo:acme/tools/sub". An empty pattern is rejected at load: a rule that
+	// matches everything is what having no rules already means.
+	Pattern string `yaml:"pattern"`
+	// Issuer, when set, must equal the OIDC issuer the identity came from. It
+	// has no effect until certificate identities land (M4-09); it is accepted
+	// now so a policy written today keeps its meaning then.
+	Issuer string `yaml:"issuer"`
 }
 
 // Key is a trusted public key/identity.
@@ -81,6 +113,70 @@ type Key struct {
 	Algorithm string `yaml:"algorithm"`
 	PublicKey string `yaml:"public_key"` // base64
 	Identity  string `yaml:"identity"`
+}
+
+// Revokes reports whether the roster revokes this key id or identity. Both are
+// checked against one list, so revoking "oidc:sam@example.com" also stops a
+// signature whose key id is unknown but whose bound identity matches.
+func (t Trust) Revokes(values ...string) bool {
+	for _, r := range t.Revoked {
+		for _, v := range values {
+			if v != "" && r == v {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Allows reports whether a bound identity is admissible under the identity
+// rules. With no rules configured it returns true — identity rules narrow an
+// existing roster, they are not a second gate everyone must opt into, and
+// making them mandatory would break every policy written before they existed.
+//
+// issuer is compared only against rules that specify one.
+func (t Trust) Allows(identity, issuer string) bool {
+	if len(t.Identities) == 0 {
+		return true
+	}
+	for _, rule := range t.Identities {
+		if rule.Issuer != "" && rule.Issuer != issuer {
+			continue
+		}
+		if matchIdentity(rule.Pattern, identity) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchIdentity implements the `*` glob. filepath.Match is deliberately not
+// used: its `*` stops at `/`, which would make "repo:acme/*" fail to match
+// "repo:acme/tools/sub" — the opposite of what a reader of that pattern
+// expects. `?` and `[` are not special here, so an identity containing them is
+// matched literally.
+func matchIdentity(pattern, identity string) bool {
+	if pattern == "" || identity == "" {
+		return false
+	}
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == identity
+	}
+	rest := identity
+	if !strings.HasPrefix(rest, parts[0]) {
+		return false
+	}
+	rest = rest[len(parts[0]):]
+	for i := 1; i < len(parts)-1; i++ {
+		idx := strings.Index(rest, parts[i])
+		if idx < 0 {
+			return false
+		}
+		rest = rest[idx+len(parts[i]):]
+	}
+	last := parts[len(parts)-1]
+	return strings.HasSuffix(rest, last) && len(rest) >= len(last)
 }
 
 // Default returns the built-in policy used when no file is present.
@@ -170,6 +266,14 @@ func (p Policy) validate() error {
 			return fmt.Errorf("trust.keys[%d]: duplicate keyid %q (already declared at trust.keys[%d]); the later entry would silently replace the earlier key", i, k.KeyID, j)
 		}
 		seen[k.KeyID] = i
+	}
+	for i, rule := range p.Trust.Identities {
+		if rule.Pattern == "" {
+			return fmt.Errorf("trust.identities[%d]: pattern is required (an empty pattern matches nothing, and a rule matching everything is what omitting the section already means)", i)
+		}
+		if strings.ContainsAny(rule.Pattern, "?[") {
+			return fmt.Errorf("trust.identities[%d]: pattern %q uses %q, which is matched literally here — only %q is a wildcard", i, rule.Pattern, "?[", "*")
+		}
 	}
 	if len(p.Trust.Include) > 0 {
 		return errors.New("trust.include is documented but not implemented — the listed rosters would be ignored and every signature would report as unverified; inline the keys under trust.keys for now")

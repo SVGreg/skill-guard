@@ -234,3 +234,46 @@ func TestOMSSignatureFileIsNotSelfCovering(t *testing.T) {
 		t.Errorf("Merkle root changed when %s was added: %s → %s", oms.SigFileName, rootBefore, got)
 	}
 }
+
+// TestVerifyOMSIdentityRules: identity rules gate trust on top of the key
+// roster, and are distinguishable from revocation.
+func TestVerifyOMSIdentityRules(t *testing.T) {
+	b, data, roster := omsFixture(t) // roster identity: oidc:demo@example.com
+
+	match := roster
+	match.Identities = []policy.IdentityRule{{Pattern: "oidc:*@example.com"}}
+	if res := VerifyOMS(b, data, match); !res.Trusted || res.IdentityRejected {
+		t.Errorf("a matching identity was not trusted: %+v", res)
+	}
+
+	miss := roster
+	miss.Identities = []policy.IdentityRule{{Pattern: "oidc:*@other.example"}}
+	res := VerifyOMS(b, data, miss)
+	if res.Trusted {
+		t.Error("an identity matching no rule was trusted")
+	}
+	if !res.IdentityRejected {
+		t.Error("IdentityRejected was not set")
+	}
+	if res.Revoked {
+		t.Error("a non-matching identity must not be reported as revoked — the consumer scoped, they did not revoke")
+	}
+	if !hasRule(res, "SG-PRV-005") {
+		t.Errorf("want SG-PRV-005, got %+v", res.Findings)
+	}
+	// The signature itself is still valid; only trust was withheld.
+	if !res.SignatureValid {
+		t.Error("signature validity should be unaffected by identity policy")
+	}
+
+	// Revocation wins over a matching identity rule.
+	revoked := match
+	revoked.Revoked = []string{"oidc:demo@example.com"}
+	res = VerifyOMS(b, data, revoked)
+	if res.Trusted {
+		t.Error("a revoked identity was trusted despite matching a rule")
+	}
+	if !res.Revoked {
+		t.Error("revocation by identity was not reported")
+	}
+}

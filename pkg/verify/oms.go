@@ -64,17 +64,18 @@ func VerifyOMS(b *skill.Bundle, data []byte, roster policy.Trust) *Result {
 	// optional and unused, since the key travels in verificationMaterial. So
 	// every roster key is tried, which is also what lets a bundle signed by
 	// another implementation verify here.
-	revoked := map[string]bool{}
-	for _, r := range roster.Revoked {
-		revoked[r] = true
-	}
 	for _, sig := range sigs {
 		for _, k := range roster.Keys {
 			if !verifySignature(k, pae, sig) {
 				continue
 			}
 			res.SignatureValid = true
-			if !revoked[k.KeyID] {
+			switch {
+			case roster.Revokes(k.KeyID, k.Identity):
+				res.Revoked = true
+			case !roster.Allows(k.Identity, ""):
+				res.IdentityRejected = true
+			default:
 				res.Trusted = true
 				if k.Identity != "" {
 					res.Publisher = k.Identity
@@ -94,6 +95,11 @@ func VerifyOMS(b *skill.Bundle, data []byte, roster policy.Trust) *Result {
 			"Invalid or untrusted OMS signature",
 			"No signature in the OMS bundle verified against a key in the roster.",
 			"Confirm the signing key is trusted and the bundle is authentic."))
+	case !res.Trusted && res.IdentityRejected:
+		res.Findings = append(res.Findings, prv("SG-PRV-005", model.SevMedium,
+			"Publisher identity not permitted",
+			"The OMS signature is valid and the key is in the roster, but its identity matches no trust.identities rule.",
+			"Add a matching pattern under trust.identities, or remove the key from the roster."))
 	case !res.Trusted:
 		res.Revoked = true
 		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
