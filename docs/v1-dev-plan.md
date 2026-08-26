@@ -199,8 +199,8 @@ if effort must be cut, cut M6/M7, never this.**
 |---|---|---|---|---|
 | M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | done | — | #213 |
 | M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | done | M4-01 | #214 |
-| M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | in-progress | M4-02 | #215 |
-| M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | todo | M4-03 | |
+| M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | done | M4-02 | #215 |
+| M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | in-progress | M4-03 | |
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | todo | M4-01 | |
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | todo | M4-04, M4-05 | |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | todo | M4-06 | |
