@@ -209,7 +209,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
 | M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | done | M4-09 | #224 |
-| M4-11 | SGMT-1 documented as legacy; migration guidance | in-progress | M4-12 | |
+| M4-11 | SGMT-1 documented as legacy; migration guidance | in-progress | M4-12 | #225 |
 
 ### M4-01 — Primary-source spike (do this first)
 **Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
