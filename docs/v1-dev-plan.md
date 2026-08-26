@@ -205,7 +205,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
 | M4-08 | Identity-based trust policy in `.skillguard.yaml` | done | M4-07 | #220 |
-| M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | in-progress | M4-07, M4-08 | |
+| M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | in-progress | M4-07, M4-08 | #221 |
 | M4-12 | Keyless **signing** (Fulcio/Rekor) — needs a dependency decision | blocked | M4-09 | |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | todo | M4-09 | |
 | M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | blocked | M4-12 | |
