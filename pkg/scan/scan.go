@@ -109,6 +109,7 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 	for i := range findings {
 		if reason := s.policy.WaiverFor(findings[i].RuleID, findings[i].File); reason != "" {
 			findings[i].Waived = true
+			findings[i].WaiverReason = reason
 			rep.Waived = append(rep.Waived, findings[i])
 			continue
 		}
@@ -119,6 +120,10 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 		}
 	}
 	sortFindings(rep.Findings)
+	// Waived findings are sorted too: they are reported (JSON, SARIF
+	// suppressions), so their order is part of the output and must not depend
+	// on rule-evaluation order.
+	sortFindings(rep.Waived)
 	rep.RiskScore = riskScore(rep.Findings, s.policy)
 	rep.RiskTier = tier(rep.RiskScore)
 	rep.Verdict = s.verdict(rep, b)

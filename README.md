@@ -299,7 +299,10 @@ open an identical one. Severity maps onto SARIF's three levels
 the raw severity, confidence, and `ast` ids preserved in `properties`. The full
 OWASP AST01–AST10 catalog is exported as a SARIF `taxonomies` component, and
 every rule and result points into it — so the OWASP mapping survives the export
-instead of degrading into an opaque rule id.
+instead of degrading into an opaque rule id. Findings waived by policy are
+emitted as SARIF `suppressions` carrying the waiver's stated reason, rather than
+dropped — a waiver stays visible to review instead of silently shrinking the
+report.
 
 Each finding carries its OWASP `ast` ids, and the report includes an
 `ast_references` map resolving every cited id to its title and page — so

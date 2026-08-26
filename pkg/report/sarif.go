@@ -140,15 +140,24 @@ type sarifText struct {
 	Text string `json:"text"`
 }
 
+// sarifSuppression records that policy suppressed a result. kind "external"
+// is the SARIF value for "suppressed outside the tool's own configuration",
+// which is what a .skillguard.yaml waiver is.
+type sarifSuppression struct {
+	Kind          string `json:"kind"`
+	Justification string `json:"justification,omitempty"`
+}
+
 type sarifResult struct {
-	RuleID              string            `json:"ruleId"`
-	RuleIndex           int               `json:"ruleIndex"`
-	Level               string            `json:"level"`
-	Message             sarifText         `json:"message"`
-	Locations           []sarifLocation   `json:"locations,omitempty"`
-	Taxa                []sarifTaxaRef    `json:"taxa,omitempty"`
-	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
-	Properties          map[string]any    `json:"properties,omitempty"`
+	RuleID              string             `json:"ruleId"`
+	RuleIndex           int                `json:"ruleIndex"`
+	Level               string             `json:"level"`
+	Message             sarifText          `json:"message"`
+	Locations           []sarifLocation    `json:"locations,omitempty"`
+	Taxa                []sarifTaxaRef     `json:"taxa,omitempty"`
+	PartialFingerprints map[string]string  `json:"partialFingerprints,omitempty"`
+	Suppressions        []sarifSuppression `json:"suppressions,omitempty"`
+	Properties          map[string]any     `json:"properties,omitempty"`
 }
 
 type sarifLocation struct {
@@ -177,15 +186,18 @@ type sarifRegion struct {
 // can be golden-tested and so two scans of an unchanged bundle produce
 // byte-identical logs.
 //
-// Waived findings are deliberately absent here; emitting them as SARIF
-// suppressions is M3-04.
+// Waived findings are emitted as suppressed results rather than dropped, so a
+// policy waiver stays visible to review with its stated justification.
 func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
 	taxonomy, taxaIndex := astTaxonomy()
-	rules, index := sarifRules(rep.Findings, taxaIndex)
+	// Waived findings are described by rules[] too, or their results would
+	// reference a rule the log never defines.
+	all := append(append([]model.Finding{}, rep.Findings...), rep.Waived...)
+	rules, index := sarifRules(all, taxaIndex)
 
-	results := make([]sarifResult, 0, len(rep.Findings))
+	results := make([]sarifResult, 0, len(all))
 	seen := map[string]int{}
-	for _, f := range rep.Findings {
+	for _, f := range all {
 		results = append(results, sarifResultFor(f, index[f.RuleID], taxaIndex, seen))
 	}
 
@@ -370,6 +382,18 @@ func sarifResultFor(f model.Finding, ruleIndex int, taxaIndex map[string]int, se
 			loc.PhysicalLocation.Region = r
 		}
 		res.Locations = []sarifLocation{loc}
+	}
+	if f.Waived {
+		// Suppressed, not dropped: a consumer sees the finding, sees that
+		// policy waived it, and sees the stated reason. Silently omitting it
+		// would make the waiver invisible to review.
+		res.Suppressions = []sarifSuppression{{Kind: "external", Justification: f.WaiverReason}}
+	}
+	if f.DemotedBy != "" {
+		// level already carries the capped severity; these say what it would
+		// have been and which context rule capped it.
+		res.Properties["demoted_by"] = f.DemotedBy
+		res.Properties["original_severity"] = f.OriginalSeverity.String()
 	}
 	if f.Engine != "" {
 		res.Properties["engine"] = f.Engine

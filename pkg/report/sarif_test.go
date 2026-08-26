@@ -361,3 +361,131 @@ func containsStr(list []string, want string) bool {
 	}
 	return false
 }
+
+// scanFixtureWithPolicy is scanFixture with a caller-supplied policy, for the
+// waiver path.
+func scanFixtureWithPolicy(t *testing.T, dir string, pol policy.Policy) *scan.Report {
+	t.Helper()
+	b, err := skill.LoadBundle(filepath.Join("..", "..", "testdata", dir))
+	if err != nil {
+		t.Fatalf("LoadBundle(%s): %v", dir, err)
+	}
+	packs, err := rules.Builtin()
+	if err != nil {
+		t.Fatalf("Builtin: %v", err)
+	}
+	return scan.New(rules.AllRules(packs), pol).
+		WithContexts(rules.AllContexts(packs)).Scan(b)
+}
+
+// TestSARIFWaiverBecomesSuppression is the M3-04 acceptance check: a waived
+// rule appears exactly once, suppressed, with the waiver's reason as the
+// justification — and the run's counts still exclude it.
+func TestSARIFWaiverBecomesSuppression(t *testing.T) {
+	const waivedRule = "SG-NET-002"
+	const reason = "reviewed: vendored installer, egress is to our own mirror"
+
+	base := scanFixture(t, "malicious")
+	var want int
+	for _, f := range base.Findings {
+		if f.RuleID == waivedRule {
+			want++
+		}
+	}
+	if want == 0 {
+		t.Fatalf("%s does not fire on the fixture; pick another rule", waivedRule)
+	}
+
+	pol := policy.Default()
+	pol.Waivers = append(pol.Waivers, policy.Waiver{Rule: waivedRule, Reason: reason})
+	rep := scanFixtureWithPolicy(t, "malicious", pol)
+	if len(rep.Waived) != want {
+		t.Fatalf("policy waived %d findings, want %d", len(rep.Waived), want)
+	}
+
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+	results := run["results"].([]any)
+
+	suppressed, plain := 0, 0
+	for _, r := range results {
+		res := r.(map[string]any)
+		sup, has := res["suppressions"].([]any)
+		if res["ruleId"] == waivedRule {
+			if !has || len(sup) != 1 {
+				t.Fatalf("waived result %v has suppressions %v, want exactly one", res["ruleId"], res["suppressions"])
+			}
+			s := sup[0].(map[string]any)
+			if s["kind"] != "external" {
+				t.Errorf("suppression kind = %v, want external", s["kind"])
+			}
+			if s["justification"] != reason {
+				t.Errorf("justification = %v, want the waiver's reason", s["justification"])
+			}
+			suppressed++
+			continue
+		}
+		if has {
+			t.Errorf("result %v is suppressed but was not waived", res["ruleId"])
+		}
+		plain++
+	}
+	if suppressed != want {
+		t.Errorf("emitted %d suppressed results, want %d", suppressed, want)
+	}
+	if plain != len(rep.Findings) {
+		t.Errorf("emitted %d unsuppressed results, want %d", plain, len(rep.Findings))
+	}
+
+	// The waiver must not leak into the run's severity counts.
+	counts := run["properties"].(map[string]any)["counts"].(map[string]any)
+	total := 0.0
+	for _, v := range counts {
+		total += v.(float64)
+	}
+	if int(total) != len(rep.Findings) {
+		t.Errorf("counts total %v, want %d (waived excluded)", total, len(rep.Findings))
+	}
+}
+
+// TestSARIFWaivedRuleIsDefined: a suppressed result must still resolve to a
+// rules[] entry, or the log references a rule it never defines.
+func TestSARIFWaivedRuleIsDefined(t *testing.T) {
+	pol := policy.Default()
+	pol.Waivers = append(pol.Waivers, policy.Waiver{Rule: "SG-NET-002", Reason: "reviewed"})
+	rep := scanFixtureWithPolicy(t, "malicious", pol)
+
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+	defined := map[string]bool{}
+	for _, r := range run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any) {
+		defined[r.(map[string]any)["id"].(string)] = true
+	}
+	for _, r := range run["results"].([]any) {
+		if id := r.(map[string]any)["ruleId"].(string); !defined[id] {
+			t.Errorf("result cites %s, which rules[] does not define", id)
+		}
+	}
+}
+
+// TestSARIFDemotionPropertiesSurvive: the capped level is what a consumer
+// gates on, but the original severity and the capping rule stay visible.
+func TestSARIFDemotionPropertiesSurvive(t *testing.T) {
+	rep := &scan.Report{
+		Verdict: model.Warn,
+		Findings: []model.Finding{{
+			RuleID: "SG-EXE-001", Title: "shell exec", Severity: model.SevMedium,
+			OriginalSeverity: model.SevCritical, DemotedBy: "CTX-DOC",
+			File: "SKILL.md", StartLine: 4,
+		}},
+	}
+	run := run0(t, decodeSARIF(t, rep, Options{Version: "test"}))
+	props := run["results"].([]any)[0].(map[string]any)["properties"].(map[string]any)
+	if props["demoted_by"] != "CTX-DOC" {
+		t.Errorf("demoted_by = %v, want CTX-DOC", props["demoted_by"])
+	}
+	if props["original_severity"] != "critical" {
+		t.Errorf("original_severity = %v, want critical", props["original_severity"])
+	}
+	if props["severity"] != "medium" {
+		t.Errorf("severity = %v, want the capped medium", props["severity"])
+	}
+}
