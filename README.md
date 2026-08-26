@@ -438,8 +438,31 @@ trust:
       algorithm: ed25519          # or ecdsa-p256
       public_key: xllKlT5UIVX+Pw1QC+W2SDzM8mYCeebWrW+mOuA2/aM=   # from keygen
       identity: oidc:you@example.com
+
+  # Optional: narrow which publisher identities are acceptable. Useful when
+  # skills are signed in CI, where the key rotates but the identity does not.
+  identities:
+    - pattern: "repo:acme/*"          # `*` matches any run of characters, including `/`
+    # - pattern: "repo:acme/*"        # scoped to one OIDC issuer (takes effect with keyless signing)
+    #   issuer: "https://token.actions.githubusercontent.com"
+
+  # Key ids AND identities that are never trusted, whatever else matches.
   revoked: []
 ```
+
+**Precedence**, in order: a signature must verify cryptographically; the key id
+and its identity must not appear under `revoked`; and if `identities` is
+present, the identity must match one of its patterns. With no `identities`
+section, every roster key is admissible — the rules **narrow** an existing
+roster rather than adding a gate every policy must opt into.
+
+The identity checked is the one **you** bound to the key in your roster, never
+the `publisher` field inside the attestation: anyone can write any identity into
+a statement they signed with their own key. Certificate-bound identities from
+keyless signing arrive with that milestone.
+
+There is no built-in issuer or root of trust, and there will not be one — see
+[Publisher identity & trust](#publisher-identity--trust-sg-prv-005).
 
 ---
 

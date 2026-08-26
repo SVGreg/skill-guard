@@ -75,6 +75,12 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 		// state — an unknown key is a decision the consumer has not made, a
 		// revoked one is a decision they made against this key.
 		fmt.Printf("%s: present, signature VALID but key %sREVOKED%s\n", label, c(red), c(reset))
+	case res.SignatureValid && res.IdentityRejected:
+		// Distinct from the arm below: the key *is* in the roster. What the
+		// policy declined is its identity, which is a narrower and more
+		// actionable statement than "unknown key".
+		fmt.Printf("%s: present, signature VALID but identity %sNOT PERMITTED%s by trust.identities\n",
+			label, c(red), c(reset))
 	case res.SignatureValid:
 		fmt.Printf("%s: present, signature VALID (key not in trust roster — identity unverified)\n", label)
 	case hasFinding("SG-PRV-002"):

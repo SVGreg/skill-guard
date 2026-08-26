@@ -298,3 +298,33 @@ func TestVerifyEd25519RosterUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// TestVerifyIdentityRulesGateTrust mirrors the OMS test on the SGMT-1 path:
+// both formats must apply the same trust decision, or a publisher rejected in
+// one would be accepted in the other.
+func TestVerifyIdentityRulesGateTrust(t *testing.T) {
+	b, env, _, roster := signedFixture(t)
+	roster.Keys[0].Identity = "repo:acme/tools"
+
+	match := roster
+	match.Identities = []policy.IdentityRule{{Pattern: "repo:acme/*"}}
+	if res := Verify(b, env, match); !res.Trusted || res.IdentityRejected {
+		t.Errorf("matching identity not trusted: %+v", res)
+	}
+
+	miss := roster
+	miss.Identities = []policy.IdentityRule{{Pattern: "repo:other/*"}}
+	res := Verify(b, env, miss)
+	if res.Trusted || !res.IdentityRejected {
+		t.Errorf("non-matching identity handled wrong: %+v", res)
+	}
+	if res.Revoked {
+		t.Error("scoping an identity out is not revocation")
+	}
+
+	revoked := match
+	revoked.Revoked = []string{"repo:acme/tools"}
+	if res := Verify(b, env, revoked); res.Trusted || !res.Revoked {
+		t.Errorf("revocation by identity failed: %+v", res)
+	}
+}

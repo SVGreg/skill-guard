@@ -40,12 +40,18 @@ type Result struct {
 	// is simply absent from the roster leaves both false, and the two states need
 	// different words — "the key is revoked" is a decision the consumer made,
 	// "the key is unknown" is one they have not made yet.
-	Revoked     bool
-	MerkleMatch bool
-	Expired     bool
-	Publisher   string
-	Statement   *attest.Statement
-	Findings    []model.Finding
+	Revoked bool
+	// IdentityRejected reports a signature that verified with a roster key
+	// whose identity no trust.identities rule admits. It is distinct from
+	// Revoked — the consumer did not reject *this publisher*, they scoped which
+	// identities they accept — and from an unknown key, which is no decision at
+	// all.
+	IdentityRejected bool
+	MerkleMatch      bool
+	Expired          bool
+	Publisher        string
+	Statement        *attest.Statement
+	Findings         []model.Finding
 }
 
 // Verify checks env (may be nil) against the bundle under the trust roster.
@@ -86,11 +92,6 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 	for _, k := range roster.Keys {
 		keys[k.KeyID] = k
 	}
-	revoked := map[string]bool{}
-	for _, r := range roster.Revoked {
-		revoked[r] = true
-	}
-
 	// Reuse the payload DecodeStatement already decoded rather than base64-decoding
 	// env.Payload a second time. The old helper discarded its error, so a payload
 	// that decoded here but not there would have silently produced a PAE over nil
@@ -109,7 +110,17 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 		}
 		if verifySignature(k, pae, sigBytes) {
 			anyValid = true
-			if !revoked[sig.KeyID] {
+			// Trust needs three things, in order: the signature verifies, the
+			// key and its identity are not revoked, and the identity is one the
+			// policy admits. The identity here is the roster's own — bound to
+			// the key by the consumer who added it — never the statement's
+			// self-asserted publisher block, which anyone can write.
+			switch {
+			case roster.Revokes(sig.KeyID, k.Identity):
+				res.Revoked = true
+			case !roster.Allows(k.Identity, ""):
+				res.IdentityRejected = true
+			default:
 				anyTrusted = true
 			}
 			if k.Identity != "" {
@@ -133,6 +144,11 @@ func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result 
 			"Invalid or untrusted signature",
 			"No signature verified against a trusted key in the roster.",
 			"Confirm the signing key is trusted and the bundle is authentic."))
+	case !anyTrusted && res.IdentityRejected:
+		res.Findings = append(res.Findings, prv("SG-PRV-005", model.SevMedium,
+			"Publisher identity not permitted",
+			"The signature is valid and the key is in the roster, but its identity matches no trust.identities rule.",
+			"Add a matching pattern under trust.identities, or remove the key from the roster."))
 	case !anyTrusted:
 		res.Revoked = true
 		res.Findings = append(res.Findings, prv("SG-PRV-004", model.SevHigh,
