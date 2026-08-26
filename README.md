@@ -486,6 +486,7 @@ OMS signature: present, signature VALID (trusted key)
 certificate identity: https://github.com/acme/tools/.github/workflows/sign.yml@refs/heads/main
 certificate issuer: https://token.actions.githubusercontent.com
 signed at: 2026-05-14T09:31:02Z (transparency log)
+transparency log: inclusion proof verified, checkpoint signed by a pinned log key
 manifest: MATCH
 ```
 
@@ -497,6 +498,23 @@ Two properties worth knowing:
   Fulcio certificates live for minutes, so asking "is this certificate valid
   now?" would reject every keyless signature within the hour. A bundle with no
   log entry is refused rather than verified against the current time.
+- **That timestamp is verified, not believed.** The RFC 6962 inclusion proof
+  travelling in the bundle is recomputed, and the signed checkpoint must commit
+  to the same tree — so a forged `integratedTime` cannot smuggle an expired
+  certificate through its validity window. Pin the log's key to go further:
+
+  ```yaml
+  trust:
+    log_keys:
+      - name: rekor.sigstore.dev
+        key_id: wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=
+        public_key: <base64 PKIX DER>
+  ```
+
+  Configuring `log_keys` makes checkpoint-signature verification **mandatory**:
+  a bundle no configured log signed is not trusted. With none configured, the
+  proof's arithmetic is still checked — that proves the entry is in *a* tree,
+  just not whose.
 
 Verification is offline and needs no Sigstore libraries: `go list -deps` on the
 default build contains no Sigstore or protobuf packages, and the module still

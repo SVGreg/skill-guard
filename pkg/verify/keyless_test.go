@@ -38,6 +38,57 @@ type keylessFixture struct {
 	issuer   string
 	signedAt time.Time
 	skill    *skill.Bundle
+	// logKeyPKIX is the base64 PKIX public key of the fixture's transparency
+	// log, for tests that pin it; logKeyID is the matching log id.
+	logKeyPKIX string
+	logKeyID   string
+}
+
+// signedLogEntry builds a one-entry transparency log containing body: a
+// size-1 tree, whose root is the leaf hash and whose audit path is empty, plus
+// a checkpoint signed by a freshly generated log key. Small, but a real proof —
+// the same code path verifies Rekor's 476-million-entry one.
+func signedLogEntry(t *testing.T, body []byte, at time.Time) (entry json.RawMessage, keyPKIX, keyID string) {
+	t.Helper()
+
+	leaf := sha256.Sum256(append([]byte{0x00}, body...))
+	root := leaf[:]
+
+	logKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("log key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&logKey.PublicKey)
+	if err != nil {
+		t.Fatalf("log key PKIX: %v", err)
+	}
+	id := sha256.Sum256(der)
+
+	note := "test-log\n1\n" + base64.StdEncoding.EncodeToString(root) + "\n"
+	digest := sha256.Sum256([]byte(note))
+	sig, err := ecdsa.SignASN1(rand.Reader, logKey, digest[:])
+	if err != nil {
+		t.Fatalf("sign checkpoint: %v", err)
+	}
+	envelope := note + "\n— test-log " + base64.StdEncoding.EncodeToString(append(id[:4], sig...)) + "\n"
+
+	raw, err := json.Marshal(map[string]any{
+		"logIndex":          "0",
+		"integratedTime":    at.Unix(),
+		"logId":             map[string]any{"keyId": base64.StdEncoding.EncodeToString(id[:])},
+		"canonicalizedBody": base64.StdEncoding.EncodeToString(body),
+		"inclusionProof": map[string]any{
+			"logIndex":   "0",
+			"treeSize":   "1",
+			"rootHash":   base64.StdEncoding.EncodeToString(root),
+			"hashes":     []string{},
+			"checkpoint": map[string]any{"envelope": envelope},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal log entry: %v", err)
+	}
+	return raw, base64.StdEncoding.EncodeToString(der), base64.StdEncoding.EncodeToString(id[:])
 }
 
 func newKeylessFixture(t *testing.T, identity, issuer string, signedAt time.Time) keylessFixture {
@@ -117,13 +168,9 @@ func newKeylessFixture(t *testing.T, identity, issuer string, signedAt time.Time
 		t.Fatalf("sign: %v", err)
 	}
 
-	tlog, err := json.Marshal(map[string]any{
-		"logIndex":       "1",
-		"integratedTime": signedAt.Unix(),
-	})
-	if err != nil {
-		t.Fatalf("tlog: %v", err)
-	}
+	// The log entry commits to the signature that was just made, as Rekor's
+	// does — so tampering with either is detectable.
+	tlog, logKeyPKIX, logKeyID := signedLogEntry(t, sig, signedAt)
 	bundle := &oms.Bundle{
 		MediaType: oms.BundleMediaType,
 		VerificationMaterial: &oms.VerificationMaterial{
@@ -141,7 +188,10 @@ func newKeylessFixture(t *testing.T, identity, issuer string, signedAt time.Time
 		t.Fatalf("marshal bundle: %v", err)
 	}
 	rootPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}))
-	return keylessFixture{bundle: data, rootPEM: rootPEM, identity: identity, issuer: issuer, signedAt: signedAt, skill: sk}
+	return keylessFixture{
+		bundle: data, rootPEM: rootPEM, identity: identity, issuer: issuer,
+		signedAt: signedAt, skill: sk, logKeyPKIX: logKeyPKIX, logKeyID: logKeyID,
+	}
 }
 
 const testIdentity = "https://github.com/acme/tools/.github/workflows/sign.yml@refs/heads/main"
@@ -334,5 +384,80 @@ func TestKeylessReportsTimestampWithoutRoots(t *testing.T) {
 	}
 	if !res.SignedAt.Equal(signedAt) {
 		t.Errorf("SignedAt = %v, want %v", res.SignedAt, signedAt)
+	}
+}
+
+// TestTransparencyInclusionIsRequired: the certificate's validity window is
+// anchored on the log timestamp, so an entry whose inclusion proof does not
+// reconstruct its root must not be believed. Otherwise the timestamp is just a
+// number the signer wrote.
+func TestTransparencyInclusionIsRequired(t *testing.T) {
+	f := newKeylessFixture(t, testIdentity, testIssuer, time.Now())
+	roster := policy.Trust{Roots: []policy.Root{{Name: "test-fulcio", PEM: f.rootPEM}}}
+
+	// Sanity: the untouched fixture verifies, inclusion included.
+	res := VerifyOMS(f.skill, f.bundle, roster)
+	if !res.Trusted || !res.LogInclusionVerified {
+		t.Fatalf("clean fixture not trusted: %+v", res)
+	}
+	// No log keys pinned, so the checkpoint signature is not enforced.
+	if res.LogCheckpointVerified {
+		t.Error("checkpoint reported as verified with no log keys configured")
+	}
+
+	// Corrupt the audit root: the entry no longer proves membership.
+	var raw map[string]any
+	if err := json.Unmarshal(f.bundle, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	entry := raw["verificationMaterial"].(map[string]any)["tlogEntries"].([]any)[0].(map[string]any)
+	proof := entry["inclusionProof"].(map[string]any)
+	bad := sha256.Sum256([]byte("not the root"))
+	proof["rootHash"] = base64.StdEncoding.EncodeToString(bad[:])
+	tampered, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	res = VerifyOMS(f.skill, tampered, roster)
+	if res.Trusted || res.LogInclusionVerified {
+		t.Errorf("a bundle with a broken inclusion proof was trusted: %+v", res)
+	}
+	if res.CertError == "" {
+		t.Error("no explanation for the rejected log entry")
+	}
+}
+
+// TestTransparencyCheckpointEnforcedWhenPinned: configuring log keys makes
+// checkpoint verification mandatory — that is the point of configuring them.
+func TestTransparencyCheckpointEnforcedWhenPinned(t *testing.T) {
+	f := newKeylessFixture(t, testIdentity, testIssuer, time.Now())
+	base := policy.Trust{Roots: []policy.Root{{Name: "test-fulcio", PEM: f.rootPEM}}}
+
+	pinned := base
+	pinned.LogKeys = []policy.LogKey{{Name: "test-log", KeyID: f.logKeyID, PublicKey: f.logKeyPKIX}}
+	res := VerifyOMS(f.skill, f.bundle, pinned)
+	if !res.Trusted || !res.LogCheckpointVerified {
+		t.Fatalf("a checkpoint signed by the pinned key was not accepted: %+v (%s)", res, res.CertError)
+	}
+
+	// A key id that matches but the wrong key material must not verify.
+	other := newKeylessFixture(t, testIdentity, testIssuer, time.Now())
+	wrongKey := base
+	wrongKey.LogKeys = []policy.LogKey{{Name: "wrong", KeyID: f.logKeyID, PublicKey: other.logKeyPKIX}}
+	if res := VerifyOMS(f.skill, f.bundle, wrongKey); res.Trusted || res.LogCheckpointVerified {
+		t.Error("a checkpoint verified against the wrong log key")
+	}
+
+	// A pinned log the bundle was not logged in: nothing matches, so trust is
+	// withheld rather than falling back to the unpinned behavior.
+	otherLog := base
+	otherLog.LogKeys = []policy.LogKey{{Name: "other", KeyID: other.logKeyID, PublicKey: other.logKeyPKIX}}
+	res = VerifyOMS(f.skill, f.bundle, otherLog)
+	if res.Trusted {
+		t.Error("trust was granted although no configured log signed the checkpoint")
+	}
+	if res.CertError == "" {
+		t.Error("no explanation for the unverified checkpoint")
 	}
 }

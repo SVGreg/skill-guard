@@ -82,6 +82,12 @@ type Trust struct {
 	// wants to accept Sigstore-issued certificates supplies the Fulcio roots
 	// themselves, in their own file, and can pin any other CA the same way.
 	Roots []Root `yaml:"roots"`
+	// LogKeys are the transparency logs whose signed checkpoints are accepted.
+	// Configuring any makes checkpoint verification **mandatory**: a bundle
+	// whose checkpoint no configured key signs is not trusted. Leaving the
+	// section out keeps the inclusion proof's arithmetic check (which proves
+	// the entry is in *a* tree) without requiring proof of *whose*.
+	LogKeys []LogKey `yaml:"log_keys"`
 	// Revoked lists key ids **and** identities that are never trusted, whatever
 	// else matches. One list rather than two because revocation is one decision
 	// — "not this publisher, in any form" — and splitting it invites revoking a
@@ -183,6 +189,15 @@ func matchIdentity(pattern, identity string) bool {
 	}
 	last := parts[len(parts)-1]
 	return strings.HasSuffix(rest, last) && len(rest) >= len(last)
+}
+
+// LogKey is one trusted transparency log. KeyID is the base64 log id carried in
+// the bundle's tlogEntries; PublicKey is base64 PKIX DER, as produced by
+// `openssl x509 -pubkey` or Rekor's published key material.
+type LogKey struct {
+	Name      string `yaml:"name"`
+	KeyID     string `yaml:"key_id"`
+	PublicKey string `yaml:"public_key"`
 }
 
 // Root is one trusted certificate authority, given inline or by path. Exactly
@@ -287,6 +302,11 @@ func (p Policy) validate() error {
 			return fmt.Errorf("trust.roots[%d]: needs either pem or path (a root with neither trusts nothing and would silently make every keyless signature unverifiable)", i)
 		case r.PEM != "" && r.Path != "":
 			return fmt.Errorf("trust.roots[%d]: set either pem or path, not both", i)
+		}
+	}
+	for i, k := range p.Trust.LogKeys {
+		if k.PublicKey == "" {
+			return fmt.Errorf("trust.log_keys[%d]: public_key is required (an entry without one would make every checkpoint unverifiable while looking configured)", i)
 		}
 	}
 	for i, rule := range p.Trust.Identities {

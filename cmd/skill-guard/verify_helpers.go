@@ -101,6 +101,13 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 			fmt.Printf("signed at: %s (transparency log)\n", res.SignedAt.UTC().Format(time.RFC3339))
 		}
 	}
+	if res.Present && res.LogInclusionVerified {
+		note := "inclusion proof verified"
+		if res.LogCheckpointVerified {
+			note += ", checkpoint signed by a pinned log key"
+		}
+		fmt.Printf("transparency log: %s\n", note)
+	}
 	if res.Present && res.CertError != "" {
 		fmt.Printf("keyless: %s\n", safeText(res.CertError))
 	}

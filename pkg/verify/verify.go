@@ -56,10 +56,17 @@ type Result struct {
 	CertIssuer   string
 	CertError    string
 	SignedAt     time.Time
-	Expired      bool
-	Publisher    string
-	Statement    *attest.Statement
-	Findings     []model.Finding
+	// LogInclusionVerified reports that the transparency-log inclusion proof
+	// reconstructs its claimed root — the entry really is in that tree.
+	// LogCheckpointVerified additionally reports that a log key the consumer
+	// pinned signed the checkpoint committing to that tree, which is what makes
+	// it *the* log rather than any tree at all.
+	LogInclusionVerified  bool
+	LogCheckpointVerified bool
+	Expired               bool
+	Publisher             string
+	Statement             *attest.Statement
+	Findings              []model.Finding
 }
 
 // Verify checks env (may be nil) against the bundle under the trust roster.
