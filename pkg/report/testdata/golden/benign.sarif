@@ -1,0 +1,128 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "skill-guard",
+          "version": "1.2.3",
+          "informationUri": "https://github.com/SVGreg/skill-guard",
+          "rules": []
+        }
+      },
+      "originalUriBaseIds": {
+        "SRCROOT": {
+          "uri": "testdata/benign"
+        }
+      },
+      "taxonomies": [
+        {
+          "name": "OWASP Agentic Skills Top 10",
+          "guid": "6f5b7b8a-3f2e-4d31-9a0c-2c9a1f0e7d10",
+          "organization": "OWASP",
+          "shortDescription": {
+            "text": "OWASP Agentic Skills Top 10 (AST01–AST10)"
+          },
+          "informationUri": "https://owasp.org/www-project-agentic-skills-top-10/",
+          "isComprehensive": true,
+          "taxa": [
+            {
+              "id": "AST01",
+              "name": "Malicious Skills",
+              "shortDescription": {
+                "text": "Malicious Skills"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast01.html"
+            },
+            {
+              "id": "AST02",
+              "name": "Supply Chain Compromise",
+              "shortDescription": {
+                "text": "Supply Chain Compromise"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast02.html"
+            },
+            {
+              "id": "AST03",
+              "name": "Over-Privileged Skills",
+              "shortDescription": {
+                "text": "Over-Privileged Skills"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast03.html"
+            },
+            {
+              "id": "AST04",
+              "name": "Insecure Metadata",
+              "shortDescription": {
+                "text": "Insecure Metadata"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast04.html"
+            },
+            {
+              "id": "AST05",
+              "name": "Untrusted External Instructions",
+              "shortDescription": {
+                "text": "Untrusted External Instructions"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast05.html"
+            },
+            {
+              "id": "AST06",
+              "name": "Weak Isolation",
+              "shortDescription": {
+                "text": "Weak Isolation"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast06.html"
+            },
+            {
+              "id": "AST07",
+              "name": "Update Drift",
+              "shortDescription": {
+                "text": "Update Drift"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast07.html"
+            },
+            {
+              "id": "AST08",
+              "name": "Poor Scanning",
+              "shortDescription": {
+                "text": "Poor Scanning"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast08.html"
+            },
+            {
+              "id": "AST09",
+              "name": "No Governance",
+              "shortDescription": {
+                "text": "No Governance"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast09.html"
+            },
+            {
+              "id": "AST10",
+              "name": "Cross-Platform Reuse",
+              "shortDescription": {
+                "text": "Cross-Platform Reuse"
+              },
+              "helpUri": "https://owasp.org/www-project-agentic-skills-top-10/ast10.html"
+            }
+          ]
+        }
+      ],
+      "results": [],
+      "properties": {
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0
+        },
+        "risk_score": 0,
+        "risk_tier": "L0",
+        "verdict": "pass"
+      }
+    }
+  ]
+}

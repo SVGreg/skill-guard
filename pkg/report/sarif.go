@@ -19,9 +19,12 @@ import (
 
 const (
 	sarifVersion = "2.1.0"
-	sarifSchema  = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
-	toolName     = "skill-guard"
-	toolInfoURI  = "https://github.com/SVGreg/skill-guard"
+	// The same URL testdata/sarif-schema-2.1.0.json was vendored from, so the
+	// document says what it was validated against. (The older
+	// master/Schemata/… path is the pre-rename location of this same file.)
+	sarifSchema = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
+	toolName    = "skill-guard"
+	toolInfoURI = "https://github.com/SVGreg/skill-guard"
 
 	// srcRoot names the base every artifact URI is relative to. Findings carry
 	// bundle-relative paths ("SKILL.md", "scripts/setup.sh"), not
