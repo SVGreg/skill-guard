@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/SVGreg/skill-guard/pkg/attest"
 	"github.com/SVGreg/skill-guard/pkg/model"
 	"github.com/SVGreg/skill-guard/pkg/skill"
 	"github.com/spf13/cobra"
@@ -81,6 +82,17 @@ func validateFormat(f string) error {
 		}
 	}
 	return fail(3, "unknown --format %q\n  valid formats: %s", f, strings.Join(validFormats, ", "))
+}
+
+// validateKeyType rejects an unknown --type up-front, listing what is
+// available, rather than letting keygen fail deeper with a less useful message.
+func validateKeyType(t string) error {
+	for _, v := range attest.SupportedAlgorithms {
+		if t == v {
+			return nil
+		}
+	}
+	return fail(3, "unknown --type %q\n  valid key types: %s", t, strings.Join(attest.SupportedAlgorithms, ", "))
 }
 
 // validateSeverity rejects an unknown severity threshold (e.g. --fail-on).

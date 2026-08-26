@@ -3,10 +3,17 @@ package attest
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -175,10 +182,11 @@ func TestSaveKeyRefusesSymlink(t *testing.T) {
 	}
 }
 
-// TestLoadKeyEnforcesAlgorithm covers the three cases the declared algorithm can
-// take: absent (pre-field keys, accepted), "ed25519" (accepted), and anything
-// else (rejected). Without the check a key file naming ecdsa-p256 was loaded as
-// Ed25519 and every attestation it produced claimed "ed25519".
+// TestLoadKeyEnforcesAlgorithm covers what the declared algorithm can take:
+// absent (pre-field keys, accepted as Ed25519), "ed25519" (accepted), an
+// unsupported scheme (rejected), and — since ecdsa-p256 became supported — a
+// label that disagrees with the key bytes, which must still be rejected rather
+// than loaded under the wrong scheme.
 func TestLoadKeyEnforcesAlgorithm(t *testing.T) {
 	signer, err := GenerateKey("alg-test")
 	if err != nil {
@@ -212,7 +220,7 @@ func TestLoadKeyEnforcesAlgorithm(t *testing.T) {
 		{"cased.key", "Ed25519", false},
 		{"absent.key", "-", false},
 		{"empty.key", "", false},
-		{"wrong.key", "ecdsa-p256", true},
+		{"mislabelled.key", "ecdsa-p256", true}, // Ed25519 seed, ECDSA label
 		{"rsa.key", "rsa-pss-sha256", true},
 	} {
 		_, err := LoadKey(write(tc.name, tc.alg))
@@ -361,5 +369,127 @@ func TestLoadKeyRefusesOversizedFile(t *testing.T) {
 	}
 	if _, err := LoadKey(path); err == nil || !contains(err.Error(), "size cap") {
 		t.Fatalf("oversized key file: got %v, want a size-cap error", err)
+	}
+}
+
+// TestECDSAP256RoundTrip covers the OMS-required algorithm end to end:
+// generate, save, reload, sign, and verify — plus the properties that make it
+// safe to have two schemes in one key format.
+func TestECDSAP256RoundTrip(t *testing.T) {
+	signer, err := GenerateKeyAlg("", AlgECDSAP256)
+	if err != nil {
+		t.Fatalf("GenerateKeyAlg: %v", err)
+	}
+	if signer.Algorithm() != AlgECDSAP256 {
+		t.Fatalf("algorithm = %q, want %q", signer.Algorithm(), AlgECDSAP256)
+	}
+	if signer.KeyID() == "" {
+		t.Error("key id was not derived")
+	}
+
+	path := filepath.Join(t.TempDir(), "oms.key")
+	if err := SaveKey(signer, path); err != nil {
+		t.Fatalf("SaveKey: %v", err)
+	}
+	loaded, err := LoadKey(path)
+	if err != nil {
+		t.Fatalf("LoadKey: %v", err)
+	}
+	if loaded.Algorithm() != AlgECDSAP256 || loaded.KeyID() != signer.KeyID() {
+		t.Errorf("reloaded key = %s/%s, want %s/%s",
+			loaded.Algorithm(), loaded.KeyID(), signer.Algorithm(), signer.KeyID())
+	}
+	if loaded.PublicKeyBase64() != signer.PublicKeyBase64() {
+		t.Error("public key changed across save/load")
+	}
+
+	// The saved public key must be parseable PKIX DER for a P-256 point —
+	// that is what a verifier and any OMS consumer will do with it.
+	der, err := base64.StdEncoding.DecodeString(loaded.PublicKeyBase64())
+	if err != nil {
+		t.Fatalf("public key is not base64: %v", err)
+	}
+	parsed, err := x509.ParsePKIXPublicKey(der)
+	if err != nil {
+		t.Fatalf("public key is not PKIX DER: %v", err)
+	}
+	ec, ok := parsed.(*ecdsa.PublicKey)
+	if !ok || ec.Curve != elliptic.P256() {
+		t.Fatalf("public key is not ECDSA P-256: %T", parsed)
+	}
+
+	pae := PAE(PayloadType, []byte(`{"hello":"world"}`))
+	sig, err := loaded.Sign(context.Background(), pae)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	digest := sha256.Sum256(pae)
+	if !ecdsa.VerifyASN1(ec, digest[:], sig) {
+		t.Error("signature did not verify against the saved public key")
+	}
+	// Wrong payload must not verify — guards against signing a constant.
+	other := sha256.Sum256(PAE(PayloadType, []byte(`{"hello":"tampered"}`)))
+	if ecdsa.VerifyASN1(ec, other[:], sig) {
+		t.Error("signature verified over the wrong payload")
+	}
+}
+
+// TestEd25519StaysTheDefault: adding a second algorithm must not change what
+// existing callers get, or every stored key and roster entry would shift under
+// them.
+func TestEd25519StaysTheDefault(t *testing.T) {
+	signer, err := GenerateKey("")
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	if signer.Algorithm() != AlgEd25519 {
+		t.Errorf("default algorithm = %q, want %q", signer.Algorithm(), AlgEd25519)
+	}
+	raw, err := base64.StdEncoding.DecodeString(signer.PublicKeyBase64())
+	if err != nil || len(raw) != ed25519.PublicKeySize {
+		t.Errorf("Ed25519 public key encoding changed: %d bytes, err %v", len(raw), err)
+	}
+}
+
+// TestLoadKeyRejectsMismatchedAlgorithm: a key file must not be loaded under a
+// scheme it does not contain, or it would sign while claiming an algorithm the
+// bytes do not support.
+func TestLoadKeyRejectsMismatchedAlgorithm(t *testing.T) {
+	dir := t.TempDir()
+
+	ed, err := GenerateKey("")
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	path := filepath.Join(dir, "mislabelled.key")
+	if err := SaveKey(ed, path); err != nil {
+		t.Fatalf("SaveKey: %v", err)
+	}
+	// Relabel an Ed25519 key file as ECDSA.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	swapped := strings.Replace(string(data), `"algorithm": "ed25519"`, `"algorithm": "ecdsa-p256"`, 1)
+	if err := os.WriteFile(path, []byte(swapped), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadKey(path); err == nil {
+		t.Error("an Ed25519 key file labelled ecdsa-p256 was accepted")
+	}
+
+	unknown := strings.Replace(string(data), `"algorithm": "ed25519"`, `"algorithm": "rsa-4096"`, 1)
+	unknownPath := filepath.Join(dir, "unknown.key")
+	if err := os.WriteFile(unknownPath, []byte(unknown), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadKey(unknownPath); !errors.Is(err, ErrUnsupportedAlgorithm) {
+		t.Errorf("unknown algorithm error = %v, want ErrUnsupportedAlgorithm", err)
+	}
+}
+
+func TestGenerateKeyAlgRejectsUnknown(t *testing.T) {
+	if _, err := GenerateKeyAlg("", "rsa-4096"); !errors.Is(err, ErrUnsupportedAlgorithm) {
+		t.Errorf("error = %v, want ErrUnsupportedAlgorithm", err)
 	}
 }

@@ -234,3 +234,67 @@ func TestVerifyMarksRevokedDistinctlyFromUnknown(t *testing.T) {
 		t.Error("an unknown key must not be reported as revoked")
 	}
 }
+
+// TestVerifyAcceptsECDSAP256: an OMS-compatible key in the roster verifies its
+// own attestation, and the roster's declared algorithm — never the
+// attestation's — decides how the signature is checked.
+func TestVerifyAcceptsECDSAP256(t *testing.T) {
+	signer, err := attest.GenerateKeyAlg("oms-key", attest.AlgECDSAP256)
+	if err != nil {
+		t.Fatalf("GenerateKeyAlg: %v", err)
+	}
+	pae := attest.PAE(attest.PayloadType, []byte(`{"subject":"demo"}`))
+	sig, err := signer.Sign(context.Background(), pae)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+
+	key := policy.Key{
+		KeyID:     signer.KeyID(),
+		Algorithm: attest.AlgECDSAP256,
+		PublicKey: signer.PublicKeyBase64(),
+	}
+	if !verifySignature(key, pae, sig) {
+		t.Error("a valid ECDSA P-256 signature did not verify")
+	}
+
+	// Tampered payload must fail.
+	if verifySignature(key, attest.PAE(attest.PayloadType, []byte(`{"subject":"other"}`)), sig) {
+		t.Error("signature verified over a different payload")
+	}
+
+	// A roster entry that mislabels the algorithm must not verify: the roster
+	// is the authority, so an ECDSA key declared as Ed25519 simply fails.
+	mislabelled := key
+	mislabelled.Algorithm = attest.AlgEd25519
+	if verifySignature(mislabelled, pae, sig) {
+		t.Error("ECDSA key labelled ed25519 verified an ECDSA signature")
+	}
+
+	// An unknown algorithm cannot establish trust.
+	unknown := key
+	unknown.Algorithm = "rsa-4096"
+	if verifySignature(unknown, pae, sig) {
+		t.Error("unknown algorithm verified a signature")
+	}
+}
+
+// TestVerifyEd25519RosterUnchanged: entries with no algorithm keep working,
+// which is every roster written before ECDSA support existed.
+func TestVerifyEd25519RosterUnchanged(t *testing.T) {
+	signer, err := attest.GenerateKey("legacy")
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	pae := attest.PAE(attest.PayloadType, []byte(`{"subject":"demo"}`))
+	sig, err := signer.Sign(context.Background(), pae)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	for _, alg := range []string{"", "ed25519", "Ed25519"} {
+		key := policy.Key{KeyID: signer.KeyID(), Algorithm: alg, PublicKey: signer.PublicKeyBase64()}
+		if !verifySignature(key, pae, sig) {
+			t.Errorf("roster algorithm %q failed to verify an Ed25519 signature", alg)
+		}
+	}
+}
