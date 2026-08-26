@@ -58,8 +58,8 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
-| **M3** | SARIF output + CI surface | M3-01 … M3-09 | expanded |
-| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-09 | expanded |
+| **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
+| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-11 | expanded (rewritten by the M4-01 spike) |
 | **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
@@ -91,13 +91,13 @@ visible per finding and waivers shown as suppressions.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | in-progress | — | #205 |
+| M3-01 | SARIF 2.1.0 emitter in `pkg/report` | done | — | #205 |
 | M3-02 | `--format sarif` wired into `scan` | done | M3-01 | #207 |
 | M3-03 | AST01–AST10 carried into SARIF taxonomy | done | M3-01 | #208 |
 | M3-04 | Waivers → SARIF `suppressions`; demotion preserved | done | M3-01 | #209 |
 | M3-05 | Golden-file + offline schema-validation tests | done | M3-01 | #210 |
 | M3-06 | GitHub Action (`action.yml`) running scan + upload-sarif | done | M3-02 | #211 |
-| M3-07 | Docs: SARIF mapping page, README version reconcile | in-progress | M3-02 | #212 |
+| M3-07 | Docs: SARIF mapping page, README version reconcile | done | M3-02 | #212 |
 | M3-08 | Public demo repo showing findings in the Security tab | owner | M3-06 | |
 | M3-09 | Artifact URIs resolvable from the repo workspace (GitHub alert linking) | todo | M3-06 | |
 
@@ -197,75 +197,115 @@ if effort must be cut, cut M6/M7, never this.**
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | todo | — | |
-| M4-02 | Bundle-tree canonicalization compatible with OMS | todo | M4-01 | |
-| M4-03 | OMS signer — emit `skill.oms.sig` alongside `.skillsig` | todo | M4-02 | |
-| M4-04 | OMS verifier + signature-type auto-detection in `verify` | todo | M4-03 | |
-| M4-05 | Sigstore keyless signing (Fulcio/Rekor), isolated behind a build tag | todo | M4-03 | |
-| M4-06 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-05 | |
-| M4-07 | Identity-based trust policy in `.skillguard.yaml` | todo | M4-04 | |
-| M4-08 | Cross-verification interop test vs an independent OMS implementation | todo | M4-04 | |
-| M4-09 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | todo | M4-05 | |
+| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | in-progress | — | |
+| M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | todo | M4-01 | |
+| M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | todo | M4-02 | |
+| M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | todo | M4-03 | |
+| M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | todo | M4-01 | |
+| M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | todo | M4-04, M4-05 | |
+| M4-07 | OMS verifier + signature-type auto-detection in `verify` | todo | M4-06 | |
+| M4-08 | Identity-based trust policy in `.skillguard.yaml` | todo | M4-07 | |
+| M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
+| M4-10 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-09 | |
+| M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | todo | M4-09 | |
 
 ### M4-01 — Primary-source spike (do this first)
-**Goal.** Roadmap §6.3: the roadmap's format assumptions must be re-checked before code.
-**Deliverables.** `docs/oms-notes.md` recording, with links and access dates: the current OMS
-signature layout and manifest/canonicalization rules; which Go libraries are viable
-(`sigstore-go`, `protobuf-specs`) and their dependency weight; how OMS names and locates the
-signature file; whether `skill.oms.sig` is still the expected filename. Ends by **rewriting
-M4-02 … M4-09 in this plan** to match what was found — including dropping tasks that reality
-invalidates.
-**Acceptance.** Every factual claim in the notes cites a primary source; the plan's M4 cards are
-updated in the same PR. No code in this PR.
+**Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
+spec, its algorithm registry, its test vectors, and the `sigstore-go` release/dependency surface.
+The M4 cards below were rewritten from those findings; three roadmap assumptions were wrong and
+one of them changes what `sign` must produce. Summary:
 
-### M4-02 — Canonicalization
-**Goal.** Byte-exact tree canonicalization; a mismatch here fails cross-verification *silently*.
-**Deliverables.** File ordering, path normalization (Unicode, separators, case), symlink policy,
-empty-dir handling, and exclusion rules stated as a spec section and implemented in `pkg/attest`
-next to SGMT-1 (shared walk, separate serialization). Test vectors committed.
-**Acceptance.** Vectors match an independent implementation's digests for the same tree.
+- OMS v1.0 **is** fully specified — canonicalization (§6.1.2), symlinks (§6.1.1), exclusions
+  (§6.2), root digest (§6.5.1) — so this is implementing a written spec, not reverse-engineering.
+- **Key algorithm is the real finding:** the `key`/`certificate` methods require **EC
+  P-256/384/521**. skill-guard signs with **Ed25519**, so an OMS bundle needs a new EC path.
+- `sigstore-go` v1.3.0 pulls **90 modules** (measured). Fulcio/Rekor must be behind a build tag;
+  the bundle format itself is stdlib-only JSON + DSSE + in-toto.
+- The spec ships **test vectors**, so interop testing is offline and cheap.
+- Empty directories cannot occur (only regular files are enumerated), and the signature filename
+  is not mandated — `skill.oms.sig` is our choice, and conformant.
 
-### M4-03 — OMS signer
-**Deliverables.** `sign --format oms` (default stays SGMT-1; both may be emitted) writing
-`skill.oms.sig` covering the **whole bundle tree**, not just `SKILL.md`. Existing `.skillsig`
-output and its tests unchanged.
-**Acceptance.** Signing the benign fixture yields both files; SGMT-1 tests still pass byte-identically.
+### M4-02 — Vendor the OMS v1.0 test vectors
+**Goal.** Get the interop oracle in-tree before writing code against the spec.
+**Deliverables.** `valid/{key,certificate,sigstore}.bundle.json`, the `invalid/` and
+`invalid-payload/` cases, and a provenance note (source, commit, retrieval date) under
+`pkg/attest/testdata/oms/` or `pkg/verify/testdata/oms/`. A test that parses each valid bundle
+into our types and round-trips it, ignoring nothing silently.
+**Acceptance.** `go test ./pkg/...` parses every vendored valid vector and reports, per file, the
+predicate type, resource count, and signing method — with the network off.
 
-### M4-04 — OMS verifier + auto-detect
-**Deliverables.** `verify` detects which signature(s) are present, verifies each, and reports
-**which trust path was used** in text and JSON. New `SG-PRV-*` states only if genuinely new;
-reuse existing ids where the meaning matches (`docs/rule-verification.md` is the authority).
-**Acceptance.** Bundle with only `.skillsig`, only `skill.oms.sig`, and both — all three verify
-with correct provenance reporting; tamper still exits 2.
+### M4-03 — Path canonicalization and file enumeration
+**Goal.** Byte-exact agreement with spec §6.1–§6.2; a mismatch here fails cross-verification
+*silently*, which is the worst failure mode available.
+**Deliverables.** Enumerate regular files only; `/` separators; reject `../`, leading `/`, and
+non-UTF-8 names; collapse `./` and `//`; no trailing `/`; single-file bundles use the basename;
+byte-exact case-sensitive comparison; default exclusions `.git`, `.gitignore`, `.gitattributes`,
+`.github`, plus the signature files themselves; `allow_symlinks: false` (which matches
+skill-guard's existing refusal to follow symlinks). Shares the walk with SGMT-1, not the
+serialization.
+**Acceptance.** Table test covering every §6.1.2 rule, including the rejection cases; a bundle
+with a non-UTF-8 filename is refused rather than transcoded.
 
-### M4-05 — Sigstore keyless
-**Deliverables.** Fulcio short-lived certs from OIDC, Rekor inclusion, GitHub Actions OIDC path.
-**Isolated package + build tag** so the default binary stays lean and offline; document the
-resulting binary-size / dependency delta.
-**Acceptance.** Default build has no Sigstore imports in `go list -deps ./cmd/skill-guard`; the
-tagged build signs from a workflow with zero stored secrets.
+### M4-04 — Manifest, root digest, in-toto statement
+**Goal.** Produce the signed payload OMS verifiers expect.
+**Deliverables.** `predicate.resources[]` (`name`/`digest`/`algorithm`, sorted lexicographically
+by name in code-point order, files only); `predicate.serialization`
+(`method: "files"`, `hash_type: "sha256"`, `allow_symlinks: false`, `ignore_paths`); root digest
+= SHA-256 over concatenated **raw** resource-digest bytes in canonical order (§6.5.1);
+`subject[0] = {name: <bundle dir basename>, digest: {sha256: …}}`; statement `_type`
+`https://in-toto.io/Statement/v1` and `predicateType`
+`https://model_signing/signature/v1.0`.
+**Acceptance.** Recomputing the statement for a vendored valid vector's file set reproduces that
+vector's `subject[0].digest.sha256` byte for byte.
 
-### M4-06 — Offline verification path
-**Deliverables.** Verify against a pinned trust bundle and a cached Rekor proof; **Rekor
-availability is never required for `scan`**, and never for `verify` when a pin is configured.
-**Acceptance.** Verification of a keyless-signed bundle succeeds with the network disabled.
+### M4-05 — ECDSA P-256 signing path
+**Goal.** Sign with an algorithm OMS verifiers are required to support.
+**Deliverables.** `keygen --type ecdsa-p256` (Ed25519 stays the default for SGMT-1); signer
+interface extended rather than replaced; key files distinguish their type; `verify` handles both.
+**Acceptance.** An ECDSA P-256 key signs and verifies end to end; every existing Ed25519
+attestation still verifies unchanged.
 
-### M4-07 — Identity trust policy
+### M4-06 — OMS bundle writer
+**Goal.** Emit a real Sigstore bundle.
+**Deliverables.** DSSE envelope (`payloadType: application/vnd.in-toto+json`, PAE, base64
+payload) wrapped in a Sigstore bundle with `verificationMaterial.publicKey` for the `key` method
+(hex fingerprint `hint`); written as `skill.oms.sig` **alongside** the existing `.skillsig`,
+never instead of it. Document that the filename is skill-guard's choice — the spec only asks for
+a `.sig` extension beside the bundle.
+**Acceptance.** `sign` produces both files; the OMS bundle validates against the OMS JSON schema;
+SGMT-1 output is byte-identical to before.
+
+### M4-07 — OMS verifier + auto-detection
+**Goal.** `verify` accepts either format and says which trust path it used.
+**Deliverables.** Detect which signature file(s) are present; verify the DSSE signature, then
+each file digest per §8.4; report the trust path in text and JSON. Reuse existing `SG-PRV-*` ids
+where the meaning matches — `docs/rule-verification.md` is the authority. Reject the vendored
+`invalid/` and `invalid-payload/` vectors with distinguishable errors.
+**Acceptance.** Bundle with only `.skillsig`, only `skill.oms.sig`, and both — all verify
+correctly; every vendored invalid vector is rejected; tamper still exits 2.
+
+### M4-08 — Identity-based trust policy
+**Goal.** Trust an identity pattern, not only a key.
 **Deliverables.** `.skillguard.yaml` gains identity-pattern trust (e.g. `repo:org/*` OIDC
-identities) beside the existing key roster; multiple roots configurable; **no hard-coded vendor
-root** (roadmap §5). Precedence between key roster and identity rules documented.
-**Acceptance.** Policy table test: matching identity → trusted; near-miss pattern → untrusted;
-revoked entry still wins.
+identities) beside the key roster; multiple roots configurable; **no hard-coded vendor root**;
+documented precedence between roster and identity rules; revocation still wins.
+**Acceptance.** Table test: matching identity → trusted; near-miss → untrusted; revoked → untrusted.
 
-### M4-08 — Interop test
-**Deliverables.** A test (or documented, scripted manual procedure if the counterpart tool cannot
-run in CI) proving both directions: our signature verifies under an independent OMS verifier, and
-an OMS-signed bundle verifies with `skill-guard verify`.
-**Acceptance.** Both directions demonstrated with recorded output.
+### M4-09 — Sigstore keyless behind a build tag
+**Goal.** Keyless CI signing without inflicting 90 modules on the default binary.
+**Deliverables.** Fulcio certs from OIDC + Rekor inclusion in an isolated package behind a build
+tag; GitHub Actions OIDC path; documented binary-size and dependency delta.
+**Acceptance.** `go list -deps ./cmd/skill-guard` on the default build contains no `sigstore`
+module; the tagged build signs from a workflow with zero stored secrets.
 
-### M4-09 — Workflow + docs
-**Deliverables.** Reusable signing workflow; README/docs section on OMS vs SGMT-1, trust models,
-and the offline path; SGMT-1 marked **legacy but supported** — not removed in this milestone.
+### M4-10 — Offline verification path
+**Deliverables.** Verify a keyless-signed bundle against a pinned trust bundle and a cached Rekor
+proof. Rekor availability is never required for `scan`, and never for `verify` when a pin exists.
+**Acceptance.** Verification succeeds with the network disabled.
+
+### M4-11 — Workflow + docs
+**Deliverables.** Reusable keyless signing workflow; README/docs on OMS vs SGMT-1, the two trust
+models, and the offline path; SGMT-1 marked **legacy but supported** — not removed here.
 
 ---
 
@@ -326,6 +366,12 @@ and the offline path; SGMT-1 marked **legacy but supported** — not removed in 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — **M4-01 spike done** (`docs/oms-notes.md`); M4 re-planned from primary sources.
+  M4-02…M4-09 became M4-02…M4-11: canonicalization split from manifest/root-digest, a new ECDSA
+  P-256 card added (OMS requires EC P-256/384/521 — skill-guard signs Ed25519), and the interop
+  test moved *earlier* and became offline because the spec ships test vectors. Also reconciled two
+  stale rows: M3-01 and M3-07 were left `in-progress` after their PRs merged, because a status
+  edit silently no-matched — status edits now assert before replacing.
 - 2026-08-26 — M3-07 also refreshed `PROGRESS.md`, which still listed SARIF as deferred; the card
   named only the README, but leaving the other status file stale would have reproduced exactly the
   drift §6.5 of the roadmap asked to close.
