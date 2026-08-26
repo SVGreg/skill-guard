@@ -39,3 +39,47 @@ jobs:
           go build -o skill-guard ./cmd/skill-guard
           ./skill-guard scan testdata/malicious && exit 1 || [ $? -eq 1 ]
           ./skill-guard scan testdata/benign
+
+  keyless:
+    # The keyless signing module is built and tested separately because it is a
+    # separate module — that is the whole point of the split. Its dependency
+    # graph (~370 modules) must never leak into the job above, so this one runs
+    # entirely inside keyless/.
+    name: keyless module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: keyless/go.mod
+          cache-dependency-path: keyless/go.sum
+
+      - name: gofmt
+        working-directory: keyless
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt needed on:" && echo "$out" && exit 1
+          fi
+
+      - name: go vet
+        working-directory: keyless
+        run: go vet ./...
+
+      - name: go test
+        working-directory: keyless
+        run: go test ./...
+
+      - name: the core module must stay lean
+        # The reason this module exists. If the Sigstore graph ever reaches the
+        # core go.mod, the core stops being a two-dependency offline tool and
+        # the README stops being true — so it is asserted, not assumed.
+        run: |
+          direct=$(go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all | grep -v '^github.com/SVGreg/skill-guard$' | grep -c . || true)
+          echo "core direct dependencies: $direct"
+          [ "$direct" -le 2 ] || { echo "core module gained dependencies"; go list -m all; exit 1; }
+          if go list -deps ./cmd/skill-guard | grep -q 'sigstore\|protobuf'; then
+            echo "the skill-guard binary now links Sigstore or protobuf code"
+            exit 1
+          fi

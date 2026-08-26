@@ -1,0 +1,73 @@
+# Reusable keyless signing: sign a skill with Sigstore, with zero stored secrets.
+#
+# The job's OIDC token *is* the credential — nothing is kept in repository
+# secrets, and no long-lived signing key exists to leak. The identity bound into
+# the signature is this workflow's own, which is what consumers scope on in
+# their trust.identities.
+name: keyless-sign
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Skill bundle directory to sign.
+        required: true
+        type: string
+      artifact-name:
+        description: Name of the artifact the signature is uploaded as.
+        required: false
+        default: skill-oms-signature
+        type: string
+  workflow_dispatch:
+    inputs:
+      path:
+        description: Skill bundle directory to sign.
+        required: true
+        default: testdata/benign
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write        # the only credential involved
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: keyless/go.mod
+          cache-dependency-path: keyless/go.sum
+
+      - name: Build the signers
+        run: |
+          go build -o "$RUNNER_TEMP/skill-guard" ./cmd/skill-guard
+          cd keyless && go build -o "$RUNNER_TEMP/skill-guard-keyless" ./cmd/skill-guard-keyless
+
+      - name: Sign keylessly
+        run: |
+          "$RUNNER_TEMP/skill-guard-keyless" sign "${{ inputs.path }}"
+
+      # Proof the signature is usable, not merely produced: the same file is
+      # read back by the core binary, which shares no code path with the
+      # Sigstore client that wrote it.
+      - name: Verify the signature is well-formed and identity-bound
+        run: |
+          sig="${{ inputs.path }}/skill.oms.sig"
+          test -s "$sig"
+          "$RUNNER_TEMP/skill-guard" verify "${{ inputs.path }}" | tee out.txt
+          grep -q "certificate identity:" out.txt
+          grep -q "signed at:" out.txt
+          # No roots are pinned here, so trust is correctly withheld; pinning
+          # Fulcio's roots is the consumer's decision, not this workflow's.
+          grep -q "keyless:" out.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name || 'skill-oms-signature' }}
+          path: ${{ inputs.path }}/skill.oms.sig
+          if-no-files-found: error
