@@ -201,8 +201,8 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | done | M4-01 | #214 |
 | M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | done | M4-02 | #215 |
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | done | M4-03 | #216 |
-| M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | in-progress | M4-01 | #217 |
-| M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | todo | M4-04, M4-05 | |
+| M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | done | M4-01 | #217 |
+| M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | in-progress | M4-04, M4-05 | #218 |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | todo | M4-06 | |
 | M4-08 | Identity-based trust policy in `.skillguard.yaml` | todo | M4-07 | |
 | M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
@@ -366,6 +366,10 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-06 validates the key algorithm **before** writing anything: `--oms` with an
+  Ed25519 key was leaving a valid `.skillsig` behind and then failing, which reads like a partial
+  success. `pkg/attest/oms` imports `pkg/attest` (for PAE and the algorithm ids) and never the
+  reverse, so the CLI stays the single place the two signature formats are composed.
 - 2026-08-26 — M4-05 takes the verification algorithm from the **trust roster entry**, never from
   the attestation: a signature that names its own scheme would let an attacker choose the weaker
   verification path. A roster entry with no algorithm stays Ed25519, so existing rosters are

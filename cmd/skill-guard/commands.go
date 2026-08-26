@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SVGreg/skill-guard/pkg/attest"
+	"github.com/SVGreg/skill-guard/pkg/attest/oms"
 	"github.com/SVGreg/skill-guard/pkg/model"
 	"github.com/SVGreg/skill-guard/pkg/policy"
 	"github.com/SVGreg/skill-guard/pkg/report"
@@ -132,20 +133,25 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 
 func signCmd() *cobra.Command {
 	var keyPath, identity string
-	var noScan, emitFields bool
+	var noScan, emitFields, withOMS bool
 	var ttlDays int
 
 	cmd := &cobra.Command{
 		Use:   "sign <path>",
 		Short: "Merkle-hash and DSSE-sign a bundle (writes SKILL.md.skillsig)",
 		Long: `Compute the bundle's SGMT-1 Merkle root and produce a detached DSSE
-attestation signed with your Ed25519 key. The attestation is written next to
+attestation signed with your key. The attestation is written next to
 the skill as SKILL.md.skillsig and, by default, embeds the result of a scan.
 
 INPUT <path>: a bundle directory or a single SKILL.md file (as with 'scan').
 
-KEY (--key): an Ed25519 key file created by 'skill-guard keygen'. Keep it
-secret; publishers add the matching public key to a verifier's trust roster.
+KEY (--key): a key file created by 'skill-guard keygen'. Keep it secret;
+publishers add the matching public key to a verifier's trust roster.
+
+OMS (--oms): additionally write skill.oms.sig, an OpenSSF Model Signing v1.0
+bundle covering the whole directory tree, for verifiers outside skill-guard.
+It is written alongside SKILL.md.skillsig, never instead of it, and requires an
+--type ecdsa-p256 key: the OMS algorithm registry does not include Ed25519.
 
 IDENTITY (--identity): a free-form publisher claim recorded in the attestation,
 e.g. oidc:you@example.com, email:you@example.com, or a URL.
@@ -154,7 +160,8 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 		Example: `  skill-guard keygen --out publisher.key
   skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
   skill-guard sign ./my-skill --key publisher.key --no-scan          # integrity-only
-  skill-guard sign ./my-skill --key publisher.key --emit-manifest-fields`,
+  skill-guard sign ./my-skill --key publisher.key --emit-manifest-fields
+  skill-guard sign ./my-skill --key oms.key --oms   # also write skill.oms.sig`,
 		Args: bundlePathArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if keyPath == "" {
@@ -171,6 +178,20 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 			b, err := loadBundleFriendly(args[0])
 			if err != nil {
 				return err
+			}
+			// Checked before anything is written: otherwise --oms with an
+			// Ed25519 key leaves a valid .skillsig behind and then errors,
+			// which reads like a partial success.
+			if withOMS {
+				if b.SingleFile {
+					return fail(3, "--oms needs a bundle directory\n"+
+						"  an OMS bundle describes a directory tree; point --oms at the skill folder.")
+				}
+				if signer.Algorithm() != attest.AlgECDSAP256 {
+					return fail(3, "%v\n"+
+						"  create one with: skill-guard keygen --out oms.key --type ecdsa-p256",
+						fmt.Errorf("%w (this key is %s)", oms.ErrNotECDSA, signer.Algorithm()))
+				}
 			}
 
 			var summary *attest.ScanSummary
@@ -201,6 +222,24 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 			}
 			fmt.Printf("wrote %q\n  merkle_root %s\n  %s\n", sigPath, st.Subject.MerkleRoot, scanNote)
 
+			if withOMS {
+				omsBundle, err := oms.SignBundle(context.Background(), b, signer, oms.EnumOptions{})
+				if err != nil {
+					return fail(4, "oms: %v", err)
+				}
+				omsPath := oms.SigPath(b.Root)
+				if err := oms.Write(omsPath, omsBundle); err != nil {
+					return fail(4, "oms write: %v", err)
+				}
+				st, err := omsBundle.Statement()
+				if err != nil {
+					return fail(4, "oms: %v", err)
+				}
+				root, _ := st.RootDigest()
+				fmt.Printf("  wrote %q (OMS v1.0, %d files, root %s)\n",
+					omsPath, len(st.Predicate.Resources), root)
+			}
+
 			if emitFields {
 				ch, sig, err := attest.USFFields(context.Background(), b, signer)
 				if err != nil {
@@ -216,7 +255,8 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&keyPath, "key", "", "Ed25519 key file from 'keygen' (required)")
+	f.StringVar(&keyPath, "key", "", "key file from 'keygen' (required)")
+	f.BoolVar(&withOMS, "oms", false, "also write skill.oms.sig (OpenSSF Model Signing v1.0; needs an ecdsa-p256 key)")
 	f.StringVar(&identity, "identity", "", "publisher identity claim, e.g. oidc:you@example.com")
 	f.BoolVar(&noScan, "no-scan", false, "integrity-only attestation: do not embed a scan result")
 	f.BoolVar(&emitFields, "emit-manifest-fields", false, "also write USF content_hash/signature into SKILL.md front-matter")
