@@ -204,7 +204,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | done | M4-01 | #217 |
 | M4-06 | OMS bundle writer — `skill.oms.sig` alongside `.skillsig` | done | M4-04, M4-05 | #218 |
 | M4-07 | OMS verifier + signature-type auto-detection in `verify` | done | M4-06 | #219 |
-| M4-08 | Identity-based trust policy in `.skillguard.yaml` | in-progress | M4-07 | |
+| M4-08 | Identity-based trust policy in `.skillguard.yaml` | in-progress | M4-07 | #220 |
 | M4-09 | Sigstore keyless (Fulcio/Rekor) behind a build tag | todo | M4-07 | |
 | M4-10 | Offline verification: pinned trust bundle / cached inclusion proof | todo | M4-09 | |
 | M4-11 | Keyless-signing workflow + docs; SGMT-1 documented as legacy | todo | M4-09 | |
