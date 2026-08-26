@@ -59,7 +59,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
-| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | M4-01…M4-12 done/in flight |
+| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
 | **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
@@ -209,7 +209,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
 | M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | done | M4-09 | #224 |
-| M4-11 | SGMT-1 documented as legacy; migration guidance | in-progress | M4-12 | #225 |
+| M4-11 | SGMT-1 documented as legacy; migration guidance | done | M4-12 | #225 |
 
 ### M4-01 — Primary-source spike (do this first)
 **Done.** Findings in [`docs/oms-notes.md`](oms-notes.md), read 2026-08-26 from the OMS v1.0
