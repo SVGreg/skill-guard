@@ -197,8 +197,8 @@ if effort must be cut, cut M6/M7, never this.**
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | in-progress | — | #213 |
-| M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | todo | M4-01 | |
+| M4-01 | Spike: re-verify OMS spec + Sigstore Go surface against primary sources | done | — | #213 |
+| M4-02 | Vendor the OMS v1.0 test vectors as the interop oracle | in-progress | M4-01 | #214 |
 | M4-03 | OMS path canonicalization + file enumeration (spec §6.1–§6.2) | todo | M4-02 | |
 | M4-04 | OMS manifest, root digest, in-toto statement (spec §5, §6.4–§6.6) | todo | M4-03 | |
 | M4-05 | ECDSA P-256 signing path (`keygen`/`sign`), Ed25519 kept for SGMT-1 | todo | M4-01 | |
@@ -366,6 +366,9 @@ models, and the offline path; SGMT-1 marked **legacy but supported** — not rem
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-26 — M4-02 landed the OMS wire types (`pkg/attest/oms`) alongside the vectors: the card
+  said "parses into our types", and those types did not exist yet. They are JSON structs plus
+  structural validation, stdlib only — no dependency added, and M4-04/M4-06 now have their shape.
 - 2026-08-26 — **M4-01 spike done** (`docs/oms-notes.md`); M4 re-planned from primary sources.
   M4-02…M4-09 became M4-02…M4-11: canonicalization split from manifest/root-digest, a new ECDSA
   P-256 card added (OMS requires EC P-256/384/521 — skill-guard signs Ed25519), and the interop
