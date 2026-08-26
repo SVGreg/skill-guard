@@ -464,6 +464,46 @@ keyless signing arrive with that milestone.
 There is no built-in issuer or root of trust, and there will not be one — see
 [Publisher identity & trust](#publisher-identity--trust-sg-prv-005).
 
+#### Keyless (certificate-bound) signatures
+
+An OMS bundle signed with a short-lived certificate carries its signer identity
+in the certificate rather than in a key you registered in advance — which is how
+CI signing works, where no long-lived key exists to distribute. `verify` checks
+such a bundle against **roots you pin yourself**:
+
+```yaml
+trust:
+  roots:
+    - name: sigstore-public
+      path: ./fulcio-roots.pem      # relative to this policy file
+  identities:
+    - pattern: "https://github.com/acme/*/.github/workflows/*.yml@refs/heads/main"
+      issuer: "https://token.actions.githubusercontent.com"
+```
+
+```
+OMS signature: present, signature VALID (trusted key)
+certificate identity: https://github.com/acme/tools/.github/workflows/sign.yml@refs/heads/main
+certificate issuer: https://token.actions.githubusercontent.com
+signed at: 2026-05-14T09:31:02Z (transparency log)
+manifest: MATCH
+```
+
+Two properties worth knowing:
+
+- **With no `trust.roots`, a keyless signature is reported as unverifiable, never
+  as valid.** skill-guard ships no CA and will not fall back to one.
+- **Validity is anchored on the transparency-log timestamp, not on the clock.**
+  Fulcio certificates live for minutes, so asking "is this certificate valid
+  now?" would reject every keyless signature within the hour. A bundle with no
+  log entry is refused rather than verified against the current time.
+
+Verification is offline and needs no Sigstore libraries: `go list -deps` on the
+default build contains no Sigstore or protobuf packages, and the module still
+has two direct dependencies. *Producing* a keyless signature — obtaining a
+Fulcio certificate from an OIDC token — is separate work; see
+[`docs/oms-notes.md`](docs/oms-notes.md).
+
 ---
 
 ## Publisher identity & trust (`SG-PRV-005`)

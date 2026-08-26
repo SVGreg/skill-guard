@@ -48,10 +48,18 @@ type Result struct {
 	// all.
 	IdentityRejected bool
 	MerkleMatch      bool
-	Expired          bool
-	Publisher        string
-	Statement        *attest.Statement
-	Findings         []model.Finding
+	// Certificate-bound (keyless) details, set only for a certificate or
+	// sigstore OMS bundle. CertError explains why such a signature could not be
+	// established — most often that no roots are configured, which is a
+	// consumer decision rather than a defect.
+	CertIdentity string
+	CertIssuer   string
+	CertError    string
+	SignedAt     time.Time
+	Expired      bool
+	Publisher    string
+	Statement    *attest.Statement
+	Findings     []model.Finding
 }
 
 // Verify checks env (may be nil) against the bundle under the trust roster.
@@ -221,6 +229,22 @@ func prv(id string, sev model.Severity, title, rationale, fix string) model.Find
 		Rationale:  rationale,
 		Fix:        fix,
 		Confidence: 1.0,
+	}
+}
+
+// verifyWithPublicKey verifies a DSSE signature with a public key taken from a
+// certificate rather than a roster entry. The key's own type decides the
+// scheme — a certificate names its algorithm in its SubjectPublicKeyInfo, so
+// unlike a roster entry there is nothing an attacker could mislabel.
+func verifyWithPublicKey(pub any, pae, sig []byte) bool {
+	switch key := pub.(type) {
+	case *ecdsa.PublicKey:
+		digest := sha256.Sum256(pae)
+		return ecdsa.VerifyASN1(key, digest[:], sig)
+	case ed25519.PublicKey:
+		return ed25519.Verify(key, pae, sig)
+	default:
+		return false
 	}
 }
 

@@ -283,7 +283,9 @@ Signing v1.0 bundle, written by 'sign --oms'). A failure in either exits 2.
 
 TRUST (--policy .skillguard.yaml): without a trust roster the signature cannot
 be cryptographically checked, so the publisher is reported as UNVERIFIED. Add
-the publisher's public key under trust.keys to establish trust:
+the publisher's public key under trust.keys to establish trust — or, for
+keyless (certificate-bound) signatures, pin the issuing CA under trust.roots
+and scope the identity under trust.identities:
 
   trust:
     keys:
@@ -333,7 +335,14 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 			}
 			if hasOMS {
 				fmt.Println()
-				omsRes := sgverify.VerifyOMS(b, omsData, pol.Trust)
+				// Relative trust.roots paths resolve against the policy file's
+				// own directory, so a policy means the same thing wherever the
+				// command is run from.
+				policyDir := "."
+				if policyPath != "" {
+					policyDir = filepath.Dir(policyPath)
+				}
+				omsRes := sgverify.VerifyOMSAt(b, omsData, pol.Trust, policyDir)
 				printVerify(omsRes, noColorOut, omsPath, args[0], env != nil)
 				failed = failed || verificationFailed(omsRes, pol)
 			}
