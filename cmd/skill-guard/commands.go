@@ -14,6 +14,7 @@ import (
 	"github.com/SVGreg/skill-guard/pkg/report"
 	"github.com/SVGreg/skill-guard/pkg/rules"
 	"github.com/SVGreg/skill-guard/pkg/scan"
+	sgverify "github.com/SVGreg/skill-guard/pkg/verify"
 	"github.com/spf13/cobra"
 )
 
@@ -275,8 +276,10 @@ func verifyCmd() *cobra.Command {
 that the recomputed Merkle root still matches the signed one (no tampering or
 drift), and — with a trust roster — that the signing key is trusted.
 
-INPUT <path>: a bundle directory or a single SKILL.md file. verify reads the
-attestation from SKILL.md.skillsig next to it (produced by 'skill-guard sign').
+INPUT <path>: a bundle directory or a single SKILL.md file. verify reads
+whichever signatures are present next to it and reports each: SKILL.md.skillsig
+(skill-guard's own SGMT-1 attestation) and skill.oms.sig (an OpenSSF Model
+Signing v1.0 bundle, written by 'sign --oms'). A failure in either exits 2.
 
 TRUST (--policy .skillguard.yaml): without a trust roster the signature cannot
 be cryptographically checked, so the publisher is reported as UNVERIFIED. Add
@@ -303,15 +306,40 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 				return fail(3, "cannot use policy %q: %v\n  expected a valid .skillguard.yaml file with a trust roster.", policyPath, err)
 			}
 			sigPath := attest.SigPath(args[0])
+			omsPath := oms.SigPath(b.Root)
+			omsData, omsErr := os.ReadFile(omsPath)
+			// Presence is the file existing, not its being non-empty: a
+			// truncated signature must be reported as malformed, never as an
+			// unsigned skill.
+			hasOMS := omsErr == nil
+
+			// Signature-type auto-detection: whichever formats are present are
+			// verified, and each is reported with the trust path it used. A
+			// bundle carrying only an OMS signature is not "unsigned", which is
+			// what reading SKILL.md.skillsig alone would have reported.
 			env, err := attest.ReadEnvelope(sigPath)
-			if err != nil {
+			if err != nil && !hasOMS {
 				return fail(3, "cannot read attestation %q: %v\n  re-create it with: skill-guard sign %s --key <key>", sigPath, err, args[0])
 			}
-			res := verifyBundle(b, env, pol)
-			printVerify(res, noColor || report.ColorDisabled(os.Stdout), sigPath, args[0])
+
+			noColorOut := noColor || report.ColorDisabled(os.Stdout)
+			failed := false
+			if err == nil {
+				res := verifyBundle(b, env, pol)
+				printVerify(res, noColorOut, sigPath, args[0], hasOMS)
+				failed = failed || verificationFailed(res, pol)
+			} else {
+				fmt.Printf("attestation: absent (no %q)\n", sigPath)
+			}
+			if hasOMS {
+				fmt.Println()
+				omsRes := sgverify.VerifyOMS(b, omsData, pol.Trust)
+				printVerify(omsRes, noColorOut, omsPath, args[0], env != nil)
+				failed = failed || verificationFailed(omsRes, pol)
+			}
 
 			// Exit 2 on verification failure (design §10.5).
-			if verificationFailed(res, pol) {
+			if failed {
 				return exitErr{code: 2, msg: "verification failed"}
 			}
 			return nil

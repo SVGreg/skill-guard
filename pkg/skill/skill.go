@@ -71,6 +71,12 @@ type Bundle struct {
 	SingleFile     bool          `json:"single_file"` // stdin / single SKILL.md mode
 }
 
+// omsSigName is the OpenSSF Model Signing bundle written by `sign --oms`. It is
+// named here rather than imported from pkg/attest/oms because that package
+// depends on this one; the constant is one string and is asserted equal in a
+// test there.
+const omsSigName = "skill.oms.sig"
+
 var (
 	frontMatterRe = regexp.MustCompile(`(?s)\A\x{FEFF}?---\r?\n(.*?)\r?\n---\r?\n?`)
 	urlRe         = regexp.MustCompile(`https?://[^\s"'` + "`" + `)\]<>]+`)
@@ -162,7 +168,12 @@ func loadDir(root string) (*Bundle, error) {
 		if d.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("bundle contains symlink %s (rejected)", p)
 		}
-		if strings.HasSuffix(name, ".skillsig") {
+		// Detached signatures are excluded from the bundle model, and so from
+		// every hash computed over it. A signature that covered another
+		// signature would be self-invalidating: writing skill.oms.sig after
+		// SKILL.md.skillsig changed the SGMT-1 leaf set and turned a
+		// just-signed bundle into a Merkle MISMATCH.
+		if strings.HasSuffix(name, ".skillsig") || name == omsSigName {
 			return nil
 		}
 		info, err := d.Info()

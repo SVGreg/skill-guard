@@ -19,8 +19,19 @@ import (
 	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
+// Signature formats a Result can describe. A consumer reads Format to know
+// which trust path produced the verdict — the two formats have different
+// guarantees, and reporting one as the other would hide that.
+const (
+	FormatSGMT1 = "sgmt-1"
+	FormatOMS   = "oms"
+)
+
 // Result summarizes verification.
 type Result struct {
+	// Format is the signature format this result describes (FormatSGMT1 or
+	// FormatOMS).
+	Format         string
 	Present        bool
 	SignatureValid bool // at least one cryptographically valid signature
 	Trusted        bool // a valid signature from a roster key
@@ -39,7 +50,7 @@ type Result struct {
 
 // Verify checks env (may be nil) against the bundle under the trust roster.
 func Verify(b *skill.Bundle, env *attest.Envelope, roster policy.Trust) *Result {
-	res := &Result{}
+	res := &Result{Format: FormatSGMT1}
 	if env == nil {
 		res.Findings = append(res.Findings, prv("SG-PRV-001", model.SevMedium,
 			"No attestation present",
