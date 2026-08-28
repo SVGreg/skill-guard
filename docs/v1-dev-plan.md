@@ -370,8 +370,8 @@ milliseconds on the cached path.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | in-progress | — | #228 |
-| M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | todo | — | |
+| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | done | — | #228 |
+| M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | in-progress | — | #229 |
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | todo | M5-02 | |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
 | M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
@@ -528,6 +528,11 @@ install-time gating with the measured numbers; note the cached-path budget from 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-28 — M5-02 puts **provenance findings ahead of scan findings** in a decision, and denies
+  on a broken signature before consulting any verdict: "verdict: pass" printed over a tamper
+  finding would be actively misleading. Writing the test caught the bug that made this explicit —
+  the scan's findings were being assigned *over* the provenance ones, so a tampered bundle that
+  otherwise scanned clean lost its tamper finding entirely.
 - 2026-08-28 — **M5-01 spike done.** The roadmap's "agentskills.io / NVIDIA-style skill card
   schema" does not exist: agentskills.io specifies the skill *format* with no provenance concept,
   and NVIDIA's skill card is a prose disclosure template with no hash, tier, findings, or signature
