@@ -370,26 +370,46 @@ milliseconds on the cached path.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | todo | — | |
+| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | in-progress | — | #228 |
 | M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | todo | — | |
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | todo | M5-02 | |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
 | M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
-| M5-06 | Skill cards: conform to the schema M5-01 identifies; emit **and** verify | todo | M5-01 | |
+| M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | todo | M5-01 | |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
 | M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
 
-### M5-01 — Skill-card schema spike (do this first)
-**Goal.** Find out what "the agentskills.io / NVIDIA-style skill card schema" actually is before
-committing our `scan.Card` to it. M4-01 is the precedent: that spike found three roadmap
-assumptions wrong, one of which changed what `sign` had to produce.
-**Deliverables.** `docs/skill-card-notes.md` recording, with links and access dates: whether
-agentskills.io publishes a normative schema and at what version; what NVIDIA's card actually
-contains and whether it is a *model* card being borrowed for skills; any OpenSSF/AAIF work in the
-same space; and how each compares to our existing `scan.Card` (`_type`, verdict, risk tier,
-counts, `ast_findings`, permissions, attestation). Ends by **rewriting M5-06** to match reality —
-including dropping it to "keep our own shape, documented" if no normative schema exists.
-**Acceptance.** Every claim cites a primary source; M5-06 is rewritten in the same PR. No code.
+### M5-01 — Skill-card schema spike
+**Done.** Findings in [`docs/skill-card-notes.md`](skill-card-notes.md), read 2026-08-28 from the
+agentskills.io specification, the NVIDIA Trustworthy-AI card templates, and NVIDIA's verified-skills
+announcement. **Neither source defines the artifact the roadmap describes:**
+
+- **agentskills.io** specifies the *skill format* — frontmatter, directories, progressive
+  disclosure, validation — and contains no card, provenance, signature, or hash concept at all.
+- **NVIDIA's "skill card"** is a CC0 **prose disclosure template** (owner, licence, deployment
+  geography, known risks, evaluation results, ethical considerations). It has no `content_hash`,
+  no risk tier, no findings summary, and no signature status; "Skill Version: [Signing Identifier]"
+  is a human-typed line. Its fields are publisher disclosures a scanner cannot honestly derive.
+- What NVIDIA *does* do machine-readably is **sign**: `skill.oms.sig`, OMS, verified against
+  `nv-agent-root-cert.pem`. That corroborates M4 three ways — our filename matches the ecosystem
+  convention, OMS-over-a-skill-directory is no longer unproven (`oms-notes.md §7`), and the vendor
+  root is exactly what consumer-pinned `trust.roots` exists to avoid.
+
+**Consequence:** there is no schema to conform to, so M5-06 changes from translation work to the
+one real gap — `scan.Card` carries every field the roadmap listed **except `content_hash`**, and
+without that a card cannot be tied to the bundle it describes.
+
+### M5-06 — Skill cards: content hash, documented schema, verifiable
+**Goal.** Make our card the thing nobody else offers — one that can be *checked* against its
+subject — rather than a translation of a schema that does not exist (M5-01).
+**Deliverables.** `content_hash` on `scan.Card` (the SGMT-1 root where a signature exists, a
+recomputed root otherwise, so it means the same thing either way); a documented, versioned schema
+in `docs/skill-card-schema.md` with the `_type` version marker explained; `skill-guard verify
+--card <file>` checking a card against a bundle — content hash match, not merely schema validity;
+and a note in the card when the bundle ships a publisher-authored card of its own, without
+attempting to parse prose.
+**Acceptance.** A card emitted for a bundle verifies against that bundle and **fails against the
+same bundle with one byte changed**; the emitted card validates against the documented schema.
 
 ### M5-02 — `Guard()`: the agent-loop entrypoint
 **Goal.** One call that answers "may this skill enter the model's context?" — the API
@@ -508,6 +528,13 @@ install-time gating with the measured numbers; note the cached-path budget from 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-28 — **M5-01 spike done.** The roadmap's "agentskills.io / NVIDIA-style skill card
+  schema" does not exist: agentskills.io specifies the skill *format* with no provenance concept,
+  and NVIDIA's skill card is a prose disclosure template with no hash, tier, findings, or signature
+  status. M5-06 rewritten from schema-conformance to the one real gap — `content_hash` and a
+  *verifiable* card. Corroboration for M4 recorded: NVIDIA signs skills as `skill.oms.sig` with
+  OMS against a vendor root, which settles `oms-notes.md §7`'s open question about OMS being used
+  for skill directories.
 - 2026-08-28 — **M5 expanded** into eight cards. Two repo facts moved it away from the roadmap's
   framing: `hooks/` already implements the load-time gate (so M5-07 finishes an integration rather
   than starting one), and `design §11.1` already specifies `Guard()` and a merkle-keyed cache (so
