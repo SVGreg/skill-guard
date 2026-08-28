@@ -49,6 +49,15 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
    mapping is for planning only.
 4. **README lag.** README's install snippet still pins `VERSION=v0.1.0` and its status section says
    "beyond M1/M2 … not yet implemented". Reconciling it is task **M3-07**, per roadmap §6.5.
+6. **A load-time gate already exists.** `hooks/` ships a Claude Code `PreToolUse` hook (pure
+   stdlib Python) that resolves a skill name to a bundle, runs `skill-guard verify`, and
+   allows/blocks the call. The roadmap describes M5's reference integration as unbuilt; it is
+   substantially built, so M5-07 *finishes* it — the hook currently parses `verify`'s **text**
+   output to re-derive a decision, which is the part worth replacing.
+7. **The design already specifies this milestone's API.** `docs/skill-guard-design.md §11.1`
+   defines `Guard()` as the agent-loop entrypoint and `WithVerdictCache` as merkle-root-keyed.
+   M5-02/M5-03 implement that spec rather than inventing one, and §15's open question 1 (what
+   `fail_on` `Guard()` defaults to) is surfaced on the M5-02 card as an owner decision.
 5. **Waivers already survive scanning** — `scan.Report.Waived` keeps waived findings rather than
    dropping them, so the SARIF `suppressions` requirement (M3-04) needs no scan-engine change.
 
@@ -60,7 +69,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
-| **M5** | Load-time / install-time gate + skill cards | titles only | needs `/sg-plan` |
+| **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-08 | expanded |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
 | **M8** | Hardening (parallel) | titles only | needs `/sg-plan` |
@@ -353,14 +362,103 @@ with no suggestion of removal, and every cross-link resolves.
 
 ---
 
-## M5 — Load-time verification hook + skill cards *(titles only — run `/sg-plan M5`)*
+## M5 — Load-time verification hook + skill cards
 
-- M5-01 Fast embeddable gate API in `pkg/verify` (single-digit-ms cached path)
-- M5-02 Verification cache keyed by content hash
-- M5-03 Install-time gate mode with allow / deny / warn outcomes
-- M5-04 Skill cards conforming to the agentskills.io / NVIDIA-style schema (emit **and** verify)
-- M5-05 Reference integration wiring the gate into a real skill loader
-- M5-06 Latency benchmark + docs
+**Goal (roadmap §M5):** verify at the moment a skill is installed or loaded into an agent, and
+emit a machine-readable trust artifact downstream tools can consume. Latency budget: single-digit
+milliseconds on the cached path.
+
+| ID | Task | Status | Deps | PR |
+|---|---|---|---|---|
+| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | todo | — | |
+| M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | todo | — | |
+| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | todo | M5-02 | |
+| M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
+| M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
+| M5-06 | Skill cards: conform to the schema M5-01 identifies; emit **and** verify | todo | M5-01 | |
+| M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
+| M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
+
+### M5-01 — Skill-card schema spike (do this first)
+**Goal.** Find out what "the agentskills.io / NVIDIA-style skill card schema" actually is before
+committing our `scan.Card` to it. M4-01 is the precedent: that spike found three roadmap
+assumptions wrong, one of which changed what `sign` had to produce.
+**Deliverables.** `docs/skill-card-notes.md` recording, with links and access dates: whether
+agentskills.io publishes a normative schema and at what version; what NVIDIA's card actually
+contains and whether it is a *model* card being borrowed for skills; any OpenSSF/AAIF work in the
+same space; and how each compares to our existing `scan.Card` (`_type`, verdict, risk tier,
+counts, `ast_findings`, permissions, attestation). Ends by **rewriting M5-06** to match reality —
+including dropping it to "keep our own shape, documented" if no normative schema exists.
+**Acceptance.** Every claim cites a primary source; M5-06 is rewritten in the same PR. No code.
+
+### M5-02 — `Guard()`: the agent-loop entrypoint
+**Goal.** One call that answers "may this skill enter the model's context?" — the API
+`docs/skill-guard-design.md §11.1` already specifies.
+**Deliverables.** `Guard(ctx, path, opts...) (*Decision, error)` in a new `pkg/guard`: load the
+bundle, verify whichever signatures are present (both formats — `pkg/verify` handles that since
+M4-07), scan unless the caller opts out, apply policy, and return one `Decision` carrying the
+outcome, the reason, the verdict, and the signature state. Options mirror §11.1 (`WithPolicy`,
+`WithoutScan`, `WithVerdictCache`). Dependency-light: no new module dependencies.
+**Acceptance.** Table test over the fixtures: `testdata/malicious` → deny, `testdata/benign` →
+allow, unsigned-but-clean → the policy's configured outcome; every case names its reason.
+
+**Owner decision needed:** `design §15` open question 1 asks what `fail_on` an agent-loop `Guard()`
+should default to, recommending `high` (the CLI default). This card assumes **`high`**, so a skill
+that fails a normal `scan` is denied at load. Say so if you want the gate stricter than the CLI.
+
+### M5-03 — Verdict cache
+**Goal.** Make the repeated-load path cheap enough to sit in an agent loop.
+**Deliverables.** A `Cache` interface (get/put by content key) and an in-process implementation
+keyed by the bundle's **content hash** — the SGMT-1 Merkle root where a signature exists, a
+recomputed root otherwise — so a changed byte is a cache miss by construction, never a stale
+allow. Optional on-disk cache under the user cache dir, off by default. Entries record the policy
+digest too: a policy change must invalidate, or the cache would answer yesterday's question.
+**Acceptance.** Benchmark showing the second `Guard()` on an unchanged bundle skips scanning; a
+test proving one changed byte and one changed policy each miss.
+
+### M5-04 — `skill-guard guard`
+**Goal.** The gate as a command, for callers that are not Go.
+**Deliverables.** `skill-guard guard <path>` with `--format json` emitting the `Decision`
+(outcome, reason, verdict, risk, signature state, cache hit) and exit codes distinguishing
+**allow (0)**, **warn (0 + warning)** and **deny (1)** — reusing the established contract rather
+than inventing codes, with `3`/`4` unchanged. `--policy`, `--no-scan`, `--cache-dir` flags.
+**Acceptance.** `guard testdata/malicious` → deny, exit 1, parseable JSON naming the rule that
+denied it; `guard testdata/benign` → allow, exit 0.
+
+### M5-05 — Install-time gate
+**Goal.** The same decision at install time, where the blast radius is smaller.
+**Deliverables.** `--mode load|install` on `guard`. Install mode is stricter by default: it
+requires an attestation when the policy asks for one and reports the skill's declared capability
+surface (`allowed-tools`, external refs) so a human approving an install sees what they are
+admitting. Documented recipe for wrapping a `git clone`/copy install step.
+**Acceptance.** A policy with `attestation.required: true` denies an unsigned skill at install
+while still allowing it at load, proving the modes differ where they should.
+
+### M5-06 — Skill cards *(to be rewritten by M5-01)*
+**Goal.** Emit and verify a machine-readable trust artifact a downstream tool can consume.
+**Provisional deliverables** — the shape depends on what M5-01 finds: `content_hash`, risk tier,
+AST findings summary, declared capabilities and signature status in the emitted card; a
+`--verify-card` path that checks a card against the bundle it claims to describe (content hash
+match, not just schema validity).
+**Acceptance.** A card emitted for a bundle verifies against that bundle and fails against a
+modified one.
+
+### M5-07 — Wire the existing hook to the gate
+**Goal.** The reference integration the roadmap asks for — mostly **already shipped**, and this
+card finishes it rather than starting it (see §0.6).
+**Deliverables.** `hooks/skillguard_hook.py` calls `skill-guard guard --format json` instead of
+parsing `verify` text output, so the hook stops re-deriving a decision the binary already makes;
+its `classify()`/`decide()` collapse into reading one JSON field. Keep the pure-stdlib property
+and the existing config surface. Demonstrate a **malicious skill blocked at load** end to end.
+**Acceptance.** `python3 -m unittest` in `hooks/tests` green; a recorded run showing the hook
+denying `testdata/malicious` and allowing `testdata/benign`.
+
+### M5-08 — Latency benchmark and docs
+**Goal.** Prove the budget rather than assert it.
+**Deliverables.** `go test -bench` over cold and cached `Guard()`; README section on load-time and
+install-time gating with the measured numbers; note the cached-path budget from roadmap §2
+(single-digit ms) and say plainly whether it is met.
+**Acceptance.** Benchmark output in the PR; the README quotes the measured figure, not the target.
 
 ## M6 — Taint analysis engine *(titles only)*
 
@@ -410,6 +508,12 @@ with no suggestion of removal, and every cross-link resolves.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-28 — **M5 expanded** into eight cards. Two repo facts moved it away from the roadmap's
+  framing: `hooks/` already implements the load-time gate (so M5-07 finishes an integration rather
+  than starting one), and `design §11.1` already specifies `Guard()` and a merkle-keyed cache (so
+  M5-02/M5-03 implement a written spec). M5-01 is a skill-card schema spike first, on the M4-01
+  precedent — "conform to the agentskills.io / NVIDIA-style schema" is an assumption about an
+  external spec, and the last such assumption was wrong three ways.
 - 2026-08-26 — M4-11 replaced the "Roadmap" paragraph under *Publisher identity & trust*, which
   still described keyless signing as planned after it had shipped — the exact doc drift roadmap
   §6.5 asks to keep closed.
