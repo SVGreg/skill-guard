@@ -370,7 +370,7 @@ milliseconds on the cached path.
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | in-progress | — | |
+| M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | in-progress | — | #228 |
 | M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | todo | — | |
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | todo | M5-02 | |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
