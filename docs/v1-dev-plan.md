@@ -371,8 +371,8 @@ milliseconds on the cached path.
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
 | M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | done | — | #228 |
-| M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | in-progress | — | #229 |
-| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | todo | M5-02 | |
+| M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | done | — | #229 |
+| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | in-progress | M5-02 | #230 |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
 | M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | todo | M5-01 | |
@@ -478,6 +478,10 @@ denying `testdata/malicious` and allowing `testdata/benign`.
 **Deliverables.** `go test -bench` over cold and cached `Guard()`; README section on load-time and
 install-time gating with the measured numbers; note the cached-path budget from roadmap §2
 (single-digit ms) and say plainly whether it is met.
+**Data already in hand from M5-03** (`-benchtime 20x`, this machine): cached **0.58 ms** — inside
+budget; cold **268 ms**, of which **~110 ms is compiling the built-in rule packs on every call**
+(prebuilt rules: 158 ms). So the guidance for a long-lived host is *reuse the rules and the cache*,
+and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on other hardware.
 **Acceptance.** Benchmark output in the PR; the README quotes the measured figure, not the target.
 
 ## M6 — Taint analysis engine *(titles only)*
@@ -528,6 +532,11 @@ install-time gating with the measured numbers; note the cached-path budget from 
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-29 — M5-03 keys the cache on **content hash + policy digest + `SkipScan`**, not content
+  alone: a decision reached without scanning must never satisfy a caller who asked for one, and a
+  policy change must invalidate or the cache answers yesterday's question. The policy digest hashes
+  the whole struct rather than a hand-picked subset — a subset means remembering to update it every
+  time policy grows a field, and forgetting once yields a cache that ignores the new setting.
 - 2026-08-28 — M5-02 puts **provenance findings ahead of scan findings** in a decision, and denies
   on a broken signature before consulting any verdict: "verdict: pass" printed over a tamper
   finding would be actively misleading. Writing the test caught the bug that made this explicit —
