@@ -72,6 +72,12 @@ type Decision struct {
 	// Scanned is false when the caller opted out of scanning, so a consumer can
 	// tell "nothing found" from "nothing looked".
 	Scanned bool `json:"scanned"`
+
+	// CacheHit reports that this decision was served from a cache rather than
+	// recomputed. It is not part of the decision — the same bytes under the
+	// same policy yield the same answer either way — but a caller measuring
+	// latency, or debugging a surprise, needs to know.
+	CacheHit bool `json:"cache_hit,omitempty"`
 }
 
 // SignatureState summarizes provenance for the decision.
@@ -96,6 +102,10 @@ type Options struct {
 	// Rules overrides the built-in rule set. Nil loads the built-ins.
 	Rules    []*rules.Rule
 	Contexts []*rules.ContextRule
+	// Cache serves repeated decisions about unchanged bytes. Nil disables
+	// caching entirely — the default, because a cache is a promise about
+	// invalidation and the caller should opt into it.
+	Cache Cache
 }
 
 // Guard loads, verifies and scans a skill, and returns one decision.
@@ -110,14 +120,29 @@ func Guard(path string, opt Options) (*Decision, error) {
 		pol = policy.Default()
 	}
 
+	// The bundle is loaded even on a cache hit: the content hash *is* the
+	// bundle's contents, so there is no way to know whether an entry applies
+	// without reading them. Loading is the cheap part — parsing and hashing a
+	// few files — and scanning is what the cache actually saves.
 	b, err := skill.LoadBundle(path)
 	if err != nil {
 		return nil, fmt.Errorf("guard: cannot read skill at %q: %w", path, err)
 	}
 
+	contentHash := attest.MerkleRoot(attest.BundleLeaves(b))
+	var key string
+	if opt.Cache != nil {
+		key = CacheKey(contentHash, pol, opt)
+		if cached, ok := opt.Cache.Get(key); ok {
+			cached.CacheHit = true
+			cached.Path = path
+			return cached, nil
+		}
+	}
+
 	d := &Decision{
 		Path:        path,
-		ContentHash: attest.MerkleRoot(attest.BundleLeaves(b)),
+		ContentHash: contentHash,
 		Outcome:     Allow,
 		Reason:      "no gating findings",
 	}
@@ -148,6 +173,10 @@ func Guard(path string, opt Options) (*Decision, error) {
 	d.Findings = append(provenance, d.Findings...)
 
 	decide(d, pol)
+
+	if opt.Cache != nil {
+		opt.Cache.Put(key, d)
+	}
 	return d, nil
 }
 
