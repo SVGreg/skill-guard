@@ -372,8 +372,8 @@ milliseconds on the cached path.
 |---|---|---|---|---|
 | M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | done | — | #228 |
 | M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | done | — | #229 |
-| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | in-progress | M5-02 | #230 |
-| M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
+| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | done | M5-02 | #230 |
+| M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | in-progress | M5-02, M5-03 | |
 | M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | todo | M5-01 | |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
@@ -532,6 +532,11 @@ and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on o
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-29 — M5-04 truncates the **human** finding list to five and leaves the **JSON** complete.
+  The malicious fixture yields 65 gating findings; printing all of them buries the decision the
+  reader came for, while a machine consumer wants every one. Also exported `report.Sanitize` so the
+  CLI can escape rule-pack-supplied titles without `%q`-quoting readable text — an external
+  `--rulepack` can name a rule anything, including terminal escapes that forge the decision line.
 - 2026-08-29 — M5-03 keys the cache on **content hash + policy digest + `SkipScan`**, not content
   alone: a decision reached without scanning must never satisfy a caller who asked for one, and a
   policy change must invalidate or the cache answers yesterday's question. The policy digest hashes

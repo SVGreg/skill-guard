@@ -24,6 +24,7 @@ A skill <path> is either:
 
 COMMANDS:
   scan     find injection/exfiltration/exec/secret/metadata risks
+  guard    decide whether a skill may be loaded: allow, warn, or deny
   sign     Merkle-hash + DSSE-sign a bundle (writes SKILL.md.skillsig)
   verify   check a signature, Merkle root, and trust
   keygen   create an Ed25519 signing key
@@ -35,11 +36,12 @@ EXIT CODES: 0 ok · 1 scan verdict fail · 2 verification failed · 3 usage · 4
 		Example: `  skill-guard scan ./my-skill
   skill-guard keygen --out publisher.key
   skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
-  skill-guard verify ./my-skill --policy .skillguard.yaml`,
+  skill-guard verify ./my-skill --policy .skillguard.yaml
+  skill-guard guard ./my-skill --format json`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(scanCmd(), signCmd(), verifyCmd(), keygenCmd(), versionCmd())
+	root.AddCommand(scanCmd(), guardCmd(), signCmd(), verifyCmd(), keygenCmd(), versionCmd())
 
 	if err := root.Execute(); err != nil {
 		// Cobra usage/flag errors → exit 3; command errors set their own code

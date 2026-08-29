@@ -26,6 +26,7 @@ into an agent loop (e.g. before a skill is handed to the model).
   - [`keygen`](#keygen)
   - [`sign`](#sign)
   - [`verify`](#verify)
+  - [`guard`](#guard)
 - [Input & output formats](#input--output-formats)
 - [Policy file (`.skillguard.yaml`)](#policy-file-skillguardyaml)
 - [Signature formats: SGMT-1 and OMS](#signature-formats-sgmt-1-and-oms)
@@ -331,6 +332,54 @@ public key under `trust.keys` to establish trust.
 |------|-------------|
 | `--policy` | policy file providing the trust roster |
 | `--no-color` | disable ANSI color |
+
+---
+
+### `guard`
+
+Decide whether a skill may be loaded — `scan` and `verify` collapsed into the
+answer a caller actually needs. An agent loop, a `PreToolUse` hook, or an
+install wrapper acts on the outcome without re-deriving one from a report.
+
+```sh
+skill-guard guard ./my-skill
+```
+
+```
+deny  scan verdict: fail (critical findings, risk 100/100)
+  scan: fail  risk 100/100 (L3)  [crit 13, high 46, med 6, low 0, info 0]
+  signature: none
+  SG-NET-007  critical  Rendered-image/link data exfiltration
+  SG-INJ-002  critical  Hidden or obfuscated instructions
+  … and 60 more — run `skill-guard scan` for the full report
+```
+
+| Outcome | Meaning | Exit |
+|---------|---------|------|
+| `allow` | nothing policy gates on | `0` |
+| `warn` | proceed, but a human should look — a warn verdict, or a missing attestation under a policy that only warns | `0` |
+| `deny` | do not load — the scan verdict failed, or verification did | `1` |
+
+**Provenance outranks the verdict.** A signature that does not match its
+content, does not verify, or comes from a revoked key denies whatever the scan
+found — reporting "verdict: pass" over a tamper finding would be actively
+misleading.
+
+| Flag | Description |
+|------|-------------|
+| `--format` | `text` (default) or `json` — the JSON carries every finding, the text truncates |
+| `--policy` | policy file with thresholds and the trust roster |
+| `--cache-dir` | cache decisions in this directory (`-` for the user cache dir) |
+| `--no-scan` | decide on provenance alone |
+
+**Caching** keys on the bundle's content hash, a digest of the policy, and
+whether scanning was skipped — so one changed byte or one changed setting is a
+miss, and a decision made without scanning is never served to a caller who
+asked for one. Measured on this repo's fixtures: **0.58 ms cached** against
+268 ms cold.
+
+The same decision is available as a Go call for embedding — `guard.Guard(path,
+guard.Options{...})` returns the identical `Decision` the CLI prints.
 
 ---
 

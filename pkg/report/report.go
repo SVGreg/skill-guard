@@ -217,6 +217,12 @@ func SkillCard(w io.Writer, rep *scan.Report, opt Options) error {
 // publisher label. That one is right for a standalone field; it is not usable
 // here because it also adds surrounding quotes, and File is printed in a
 // `path:line` position that must stay copy-pasteable.
+func Sanitize(s string) string { return sanitize(s) }
+
+// sanitize is the internal spelling; Sanitize is exported for cmd/, which
+// prints the same attacker-controlled strings (finding titles, publisher
+// identities) outside this package. Quoting via strconv.Quote would also be
+// safe but adds noise to text a reader is meant to skim.
 func sanitize(s string) string {
 	// Fast path. ValidString is part of the test, not an extra: a lone 0x9b is
 	// invalid UTF-8, decodes to RuneError, and would otherwise slip past
