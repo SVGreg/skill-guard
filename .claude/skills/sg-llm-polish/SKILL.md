@@ -1,12 +1,15 @@
 ---
 name: sg-llm-polish
-description: Improve skill-guard's optional LLM (T3 semantic) analysis prompt — fold in newly-discovered cases, harden it against hijack by scanned content, and check efficiency. Guarded stub while the LLM engine is unimplemented (M5); it self-checks and no-ops, accumulating prompt-design notes instead. Use when asked to polish the LLM prompt or improve semantic analysis.
+description: Improve skill-guard's optional LLM (T3 semantic) analysis prompt — fold in newly-discovered cases, harden it against hijack by scanned content, and check efficiency. Guarded stub while the LLM engine is unimplemented (M7); it self-checks and no-ops, accumulating prompt-design notes instead. Use when asked to polish the LLM prompt or improve semantic analysis.
 ---
 
 # Polish the LLM (T3 semantic) prompt
 
-The optional LLM/semantic engine is milestone **M5** and is **not built yet** — there is no prompt
-file and no client in `pkg/`. This skill therefore runs in one of two modes depending on whether the
+The optional LLM/semantic engine is milestone **M7** in `docs/v1-dev-plan.md` and is **not built
+yet** — there is no prompt file and no client in `pkg/`. (It was M5 in an earlier numbering; the
+roadmap moved it deliberately behind SARIF, OMS interop, the load-time gate and taint analysis,
+because building it early would trade the determinism moat for a me-too feature. See
+`docs/v1-dev-roadmap.md §M7`.) This skill therefore runs in one of two modes depending on whether the
 engine exists.
 
 ## 0. Check whether the engine exists
@@ -41,11 +44,12 @@ starts strong:
      question a T3 prompt should ask
 
    This is a **non-code** PR, so merge it once CI is green.
-4. If there is nothing new to add, **no-op**: log "LLM engine not implemented (M5) — skipping, no
+4. If there is nothing new to add, **no-op**: log "LLM engine not implemented (M7) — skipping, no
    new notes" and end the cycle without a PR.
 
 This skill is intentionally **not** in the `sg-maintain` round-robin ring while dormant; it only
-runs when invoked directly.
+runs when invoked directly. It wakes when **M7-01** lands (the pluggable backend interface), not
+before — check `docs/v1-dev-plan.md` rather than assuming.
 
 ## Mode B — active (engine has shipped)
 
