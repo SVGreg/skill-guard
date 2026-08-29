@@ -211,3 +211,125 @@ func TestGuardMissingPath(t *testing.T) {
 		t.Error("a missing bundle was accepted")
 	}
 }
+
+// TestInstallModeEscalatesProvenanceWarnings is the M5-05 acceptance, in the
+// direction that is actually safe: the modes differ by *escalation*. A policy
+// that merely warns about a missing attestation denies at install, where a
+// human is present and the fix is cheap, and still warns at load, where the
+// operator has already accepted the skill and a hard block lands mid-session.
+func TestInstallModeEscalatesProvenanceWarnings(t *testing.T) {
+	pol := policy.Default() // WarnIfMissing: true, Required: false
+	path := fixture(t, "benign")
+
+	load, err := Guard(path, Options{Policy: pol, Mode: ModeLoad})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	if load.Outcome != Warn {
+		t.Errorf("load outcome = %s, want warn", load.Outcome)
+	}
+	if load.Mode != ModeLoad {
+		t.Errorf("mode = %s, want load", load.Mode)
+	}
+
+	install, err := Guard(path, Options{Policy: pol, Mode: ModeInstall})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	if install.Outcome != Deny {
+		t.Errorf("install outcome = %s, want deny (%s)", install.Outcome, install.Reason)
+	}
+	if install.Mode != ModeInstall {
+		t.Errorf("mode = %s, want install", install.Mode)
+	}
+	if install.Reason == load.Reason {
+		t.Error("the install denial should say why it is stricter than the load warning")
+	}
+}
+
+// TestInstallModeNeverRelaxes: whatever load denies, install denies too. The
+// modes are ordered, and an inversion would mean a skill could be installed
+// that could not then be loaded.
+func TestInstallModeNeverRelaxes(t *testing.T) {
+	for _, name := range []string{"malicious", "benign"} {
+		for _, pol := range []policy.Policy{policy.Default(), strictPolicy(), lenientPolicy()} {
+			load, err := Guard(fixture(t, name), Options{Policy: pol, Mode: ModeLoad})
+			if err != nil {
+				t.Fatalf("Guard: %v", err)
+			}
+			install, err := Guard(fixture(t, name), Options{Policy: pol, Mode: ModeInstall})
+			if err != nil {
+				t.Fatalf("Guard: %v", err)
+			}
+			if rank(install.Outcome) < rank(load.Outcome) {
+				t.Errorf("%s: install (%s) is laxer than load (%s)", name, install.Outcome, load.Outcome)
+			}
+		}
+	}
+}
+
+// TestInstallModeReportsCapabilities: a human approving an install should see
+// what they are admitting.
+func TestInstallModeReportsCapabilities(t *testing.T) {
+	d, err := Guard(fixture(t, "malicious"), Options{Mode: ModeInstall})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	if len(d.Capabilities.AllowedTools) == 0 && len(d.Capabilities.ExternalRefs) == 0 {
+		t.Error("no capability surface reported for a bundle that declares tools and reaches the network")
+	}
+	// Reported, not judged: the same surface appears at load too, since the
+	// data is free and a consumer may want it either way.
+	loadDecision, err := Guard(fixture(t, "malicious"), Options{Mode: ModeLoad})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	if len(loadDecision.Capabilities.ExternalRefs) != len(d.Capabilities.ExternalRefs) {
+		t.Error("capability surface differs between modes; it is disclosure, not policy")
+	}
+}
+
+// TestModeIsInTheCacheKey: the same bundle under the same policy legitimately
+// yields different outcomes per mode, so one must never be served for the other.
+func TestModeIsInTheCacheKey(t *testing.T) {
+	c := NewMemoryCache()
+	path := fixture(t, "benign")
+
+	load, err := Guard(path, Options{Cache: c, Mode: ModeLoad})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	install, err := Guard(path, Options{Cache: c, Mode: ModeInstall})
+	if err != nil {
+		t.Fatalf("Guard: %v", err)
+	}
+	if install.CacheHit {
+		t.Fatal("an install decision was served from a load-mode entry")
+	}
+	if install.Outcome == load.Outcome {
+		t.Fatalf("the fixture does not distinguish the modes; the test proves nothing")
+	}
+}
+
+func strictPolicy() policy.Policy {
+	p := policy.Default()
+	p.Attestation.Required = true
+	return p
+}
+
+func lenientPolicy() policy.Policy {
+	p := policy.Default()
+	p.Attestation.WarnIfMissing = false
+	return p
+}
+
+func rank(o Outcome) int {
+	switch o {
+	case Deny:
+		return 2
+	case Warn:
+		return 1
+	default:
+		return 0
+	}
+}

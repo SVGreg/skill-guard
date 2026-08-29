@@ -43,7 +43,7 @@ type Cache interface {
 // would silently downgrade the gate.
 func CacheKey(contentHash string, pol policy.Policy, opt Options) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v1\x00%s\x00%t\x00", contentHash, opt.SkipScan)
+	fmt.Fprintf(h, "v1\x00%s\x00%t\x00%s\x00", contentHash, opt.SkipScan, mode(opt))
 	h.Write(policyDigest(pol))
 	// A caller supplying its own rules is not running the built-in set, so its
 	// decisions must not be served to a caller who is. The count is a weak
