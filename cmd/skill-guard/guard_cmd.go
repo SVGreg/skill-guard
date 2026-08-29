@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/SVGreg/skill-guard/pkg/guard"
 	"github.com/SVGreg/skill-guard/pkg/policy"
@@ -13,7 +14,7 @@ import (
 )
 
 func guardCmd() *cobra.Command {
-	var policyPath, format, cacheDir string
+	var policyPath, format, cacheDir, gateMode string
 	var noScan, noColor bool
 
 	cmd := &cobra.Command{
@@ -36,6 +37,12 @@ DECISION:
 PROVENANCE OUTRANKS THE VERDICT: a signature that does not match its content,
 does not verify, or comes from a revoked key denies whatever the scan found.
 
+MODE (--mode load|install): install mode is stricter, never laxer. It turns a
+provenance warning into a denial — at install a human is present, the fix is
+cheap, and nothing is mid-session — and prints the capability surface the skill
+declares, so whoever approves it sees what they are admitting. Whatever load
+denies, install denies too.
+
 CACHING (--cache-dir): decisions are keyed by the bundle's content hash, the
 policy, and whether scanning was skipped, so one changed byte or one changed
 setting is a miss. Off unless asked for.
@@ -43,7 +50,8 @@ setting is a miss. Off unless asked for.
 EXIT CODES: 0 allow or warn · 1 deny · 3 usage error · 4 internal error.`,
 		Example: `  skill-guard guard ./my-skill
   skill-guard guard ./my-skill --format json
-  skill-guard guard ./my-skill --policy .skillguard.yaml --cache-dir ~/.cache/skill-guard`,
+  skill-guard guard ./my-skill --policy .skillguard.yaml --cache-dir ~/.cache/skill-guard
+  skill-guard guard ./downloaded-skill --mode install   # before adding it to a machine`,
 		Args: bundlePathArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if format != "text" && format != "json" {
@@ -54,7 +62,13 @@ EXIT CODES: 0 allow or warn · 1 deny · 3 usage error · 4 internal error.`,
 				return fail(3, "cannot use policy %q: %v\n  expected a valid .skillguard.yaml file.", policyPath, err)
 			}
 
-			opt := guard.Options{Policy: pol, SkipScan: noScan}
+			switch gateMode {
+			case string(guard.ModeLoad), string(guard.ModeInstall):
+			default:
+				return fail(3, "unknown --mode %q\n  valid modes: load, install", gateMode)
+			}
+
+			opt := guard.Options{Policy: pol, SkipScan: noScan, Mode: guard.Mode(gateMode)}
 			if policyPath != "" {
 				opt.PolicyDir = filepath.Dir(policyPath)
 			}
@@ -100,6 +114,7 @@ EXIT CODES: 0 allow or warn · 1 deny · 3 usage error · 4 internal error.`,
 	f := cmd.Flags()
 	f.StringVar(&policyPath, "policy", "", "policy file (.skillguard.yaml) with thresholds and the trust roster")
 	f.StringVar(&format, "format", "text", "output format: text | json")
+	f.StringVar(&gateMode, "mode", string(guard.ModeLoad), "gate mode: load | install (install is stricter about provenance)")
 	f.StringVar(&cacheDir, "cache-dir", "", "cache decisions in this directory (\"-\" for the user cache dir)")
 	f.BoolVar(&noScan, "no-scan", false, "decide on provenance alone, without scanning")
 	f.BoolVar(&noColor, "no-color", false, "disable ANSI color in output")
@@ -167,6 +182,24 @@ func printDecision(d *guard.Decision, noColor bool) {
 			break
 		}
 		fmt.Printf("  %s  %s  %s\n", f.RuleID, f.Severity, report.Sanitize(f.Title))
+	}
+	// Install mode discloses the surface being admitted. Printed here and not
+	// at load because a load-time gate runs unattended — nobody is reading it —
+	// while an install is a human decision.
+	if d.Mode == guard.ModeInstall {
+		tools := "none declared"
+		if len(d.Capabilities.AllowedTools) > 0 {
+			tools = report.Sanitize(strings.Join(d.Capabilities.AllowedTools, ", "))
+		}
+		fmt.Printf("  admits: tools [%s]\n", tools)
+		if n := len(d.Capabilities.ExternalRefs); n > 0 {
+			shown := d.Capabilities.ExternalRefs
+			suffix := ""
+			if n > 3 {
+				shown, suffix = shown[:3], fmt.Sprintf(" (+%d more)", n-3)
+			}
+			fmt.Printf("          reaches %s%s\n", report.Sanitize(strings.Join(shown, ", ")), suffix)
+		}
 	}
 	if d.CacheHit {
 		fmt.Printf("  %s(from cache)%s\n", c(gray), c(reset))

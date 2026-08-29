@@ -29,6 +29,25 @@ import (
 	"github.com/SVGreg/skill-guard/pkg/verify"
 )
 
+// Mode selects when the gate is being asked, which changes how a provenance
+// warning is treated.
+//
+// The two modes differ by **escalation, never relaxation**: install mode turns
+// provenance warnings into denials, and load mode is exactly as strict as it
+// has always been. Making the load gate laxer than the install gate would be
+// backwards — load is the moment untrusted content reaches the model — so the
+// difference is that at install time a human is present, the fix is cheap
+// (fetch a signed copy, add the key), and nothing is mid-session.
+type Mode string
+
+const (
+	// ModeLoad is the default: a skill is about to enter a model's context.
+	ModeLoad Mode = "load"
+	// ModeInstall is a skill being added to a machine, where a provenance
+	// warning is worth stopping for.
+	ModeInstall Mode = "install"
+)
+
 // Outcome is the gate's answer.
 type Outcome string
 
@@ -69,6 +88,15 @@ type Decision struct {
 	// allow. Never the whole report: a decision is not a scan.
 	Findings []model.Finding `json:"findings,omitempty"`
 
+	// Mode records which gate answered, since the same bundle and policy can
+	// legitimately produce different outcomes at install and at load.
+	Mode Mode `json:"mode"`
+
+	// Capabilities is the skill's declared surface. A human approving an
+	// install should see what they are admitting; it is reported rather than
+	// judged, because a tool grant is not a finding.
+	Capabilities Capabilities `json:"capabilities"`
+
 	// Scanned is false when the caller opted out of scanning, so a consumer can
 	// tell "nothing found" from "nothing looked".
 	Scanned bool `json:"scanned"`
@@ -78,6 +106,12 @@ type Decision struct {
 	// same policy yield the same answer either way — but a caller measuring
 	// latency, or debugging a surprise, needs to know.
 	CacheHit bool `json:"cache_hit,omitempty"`
+}
+
+// Capabilities is what the bundle declares it may reach.
+type Capabilities struct {
+	AllowedTools []string `json:"allowed_tools,omitempty"`
+	ExternalRefs []string `json:"external_refs,omitempty"`
 }
 
 // SignatureState summarizes provenance for the decision.
@@ -106,6 +140,8 @@ type Options struct {
 	// caching entirely — the default, because a cache is a promise about
 	// invalidation and the caller should opt into it.
 	Cache Cache
+	// Mode selects the gate. Zero value is ModeLoad.
+	Mode Mode
 }
 
 // Guard loads, verifies and scans a skill, and returns one decision.
@@ -141,10 +177,12 @@ func Guard(path string, opt Options) (*Decision, error) {
 	}
 
 	d := &Decision{
-		Path:        path,
-		ContentHash: contentHash,
-		Outcome:     Allow,
-		Reason:      "no gating findings",
+		Path:         path,
+		ContentHash:  contentHash,
+		Outcome:      Allow,
+		Reason:       "no gating findings",
+		Mode:         mode(opt),
+		Capabilities: capabilities(b),
 	}
 
 	sig, provenance := verifyProvenance(b, path, pol, opt.PolicyDir)
@@ -240,6 +278,30 @@ func gatingProvenance(res *verify.Result) []model.Finding {
 	return out
 }
 
+func mode(opt Options) Mode {
+	if opt.Mode == ModeInstall {
+		return ModeInstall
+	}
+	return ModeLoad
+}
+
+// capabilities reads the declared surface straight off the bundle: the
+// manifest's allowed-tools and the external references the parser found. It is
+// disclosure, not judgement — the rules already flag over-broad grants, and
+// repeating that here would double-report it.
+func capabilities(b *skill.Bundle) Capabilities {
+	c := Capabilities{AllowedTools: b.Manifest.AllowedTools}
+	seen := map[string]bool{}
+	for _, r := range b.Refs {
+		if seen[r.URL] {
+			continue
+		}
+		seen[r.URL] = true
+		c.ExternalRefs = append(c.ExternalRefs, r.URL)
+	}
+	return c
+}
+
 func resolvePolicyDir(dir string) string {
 	if dir == "" {
 		return "."
@@ -300,15 +362,23 @@ func decide(d *Decision, pol policy.Policy) {
 		}
 	}
 
-	if !d.Signature.Trusted && pol.Attestation.WarnIfMissing {
+	if !d.Signature.Trusted && (pol.Attestation.WarnIfMissing || d.Mode == ModeInstall) {
+		reason := "no attestation present"
+		if d.Signature.Present {
+			reason = "no trusted attestation: the signing key is not in the trust roster"
+		}
+		if d.Mode == ModeInstall {
+			// Escalated, not relaxed: at install a human is present and the fix
+			// is cheap — fetch a signed copy, or add the key to the roster.
+			// Nothing is mid-session, so stopping costs little.
+			d.Outcome = Deny
+			d.Reason = reason + " (install mode requires provenance)"
+			return
+		}
 		if d.Outcome == Allow {
 			d.Outcome = Warn
 		}
-		if d.Signature.Present {
-			d.Reason = "no trusted attestation: the signing key is not in the trust roster"
-		} else {
-			d.Reason = "no attestation present"
-		}
+		d.Reason = reason
 	}
 }
 

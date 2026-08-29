@@ -373,8 +373,8 @@ milliseconds on the cached path.
 | M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | done | — | #228 |
 | M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | done | — | #229 |
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | done | M5-02 | #230 |
-| M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | in-progress | M5-02, M5-03 | #231 |
-| M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
+| M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | done | M5-02, M5-03 | #231 |
+| M5-05 | Install-time gate mode (`--mode install`) | in-progress | M5-04 | |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | todo | M5-01 | |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
 | M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
@@ -451,8 +451,13 @@ denied it; `guard testdata/benign` → allow, exit 0.
 requires an attestation when the policy asks for one and reports the skill's declared capability
 surface (`allowed-tools`, external refs) so a human approving an install sees what they are
 admitting. Documented recipe for wrapping a `git clone`/copy install step.
-**Acceptance.** A policy with `attestation.required: true` denies an unsigned skill at install
-while still allowing it at load, proving the modes differ where they should.
+**Acceptance (amended).** The card originally asked for `attestation.required: true` to deny at
+install *while still allowing at load* — which would require making the **load** gate laxer than
+the install gate. That is backwards: load is the moment untrusted content reaches the model, and a
+policy that says "required" must mean required everywhere. The modes therefore differ by
+**escalation**: a policy that merely *warns* about a missing attestation **denies at install** and
+still **warns at load**, and whatever load denies, install denies too. Tested both ways, including
+an ordering test over both fixtures × three policies that fails if the modes ever invert.
 
 ### M5-06 — Skill cards *(to be rewritten by M5-01)*
 **Goal.** Emit and verify a machine-readable trust artifact a downstream tool can consume.
@@ -532,6 +537,11 @@ and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on o
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-08-29 — M5-05 **amended its own acceptance check**. As written it required the load gate to
+  be laxer than the install gate; weakening the gate that runs when untrusted content reaches the
+  model, in order to make a test pass, is exactly backwards. Modes now differ by escalation only,
+  with an ordering test that fails on any inversion. `Mode` also joins the cache key, since the same
+  bundle and policy legitimately yield different outcomes per mode.
 - 2026-08-29 — M5-04 truncates the **human** finding list to five and leaves the **JSON** complete.
   The malicious fixture yields 65 gating findings; printing all of them buries the decision the
   reader came for, while a machine consumer wants every one. Also exported `report.Sanitize` so the
