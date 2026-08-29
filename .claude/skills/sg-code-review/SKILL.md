@@ -16,14 +16,29 @@ GitHub issue and move on. Small, correct, reviewable increments only.
 
 ## 1. Pick the area (rotate)
 
-Load state from `.claude/maintenance/state.json` → `review_area_cursor`. Rotate through the packages:
+Load state from `.claude/maintenance/state.json` → `review_area_cursor`. Rotate through the areas:
 
 ```
-0 pkg/skill    1 pkg/rules    2 pkg/scan     3 pkg/policy
-4 pkg/attest   5 pkg/verify   6 pkg/report   7 cmd/skill-guard
+ 0 pkg/skill        1 pkg/rules       2 pkg/scan        3 pkg/policy
+ 4 pkg/attest       5 pkg/verify      6 pkg/report      7 cmd/skill-guard
+ 8 pkg/attest/oms   9 pkg/guard      10 keyless/       11 hooks/
 ```
 
 Advance to the next area each cycle. A caller may name a specific path instead.
+
+**Slots 8–11 were added after those areas shipped, and had never been reviewed.** Keep this list
+current: a rotation that silently omits a package means the newest, least-exercised code — which
+here includes signature parsing, certificate handling and the load-time gate — is the code nobody
+looks at. When a new top-level package or module appears, add a slot in the same PR.
+
+Two of them need care:
+
+- **`keyless/` is a separate Go module.** Build and test it from its own directory
+  (`cd keyless && go vet ./... && go test ./...`); `go test ./...` at the repo root does not
+  reach it. Never let its dependency graph leak into the core module — CI asserts this, and
+  breaking it defeats the reason the module exists (`keyless/README.md`).
+- **`hooks/` is Python**, not Go: review it with `python3 -m unittest discover hooks/tests` and read
+  it as a security boundary — it decides whether a skill reaches the model.
 
 ## 2. Review across three lenses
 

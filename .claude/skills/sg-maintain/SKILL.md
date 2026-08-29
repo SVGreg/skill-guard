@@ -94,6 +94,28 @@ enforces them.
    (`git checkout main && git pull --ff-only && git checkout -b <branch>`). Every activity skill's
    branch step assumes this.
 
+8. **A sibling development loop runs separately — stay out of its way.** `/sg-plan` and
+   `/sg-develop` burn down `docs/v1-dev-plan.md` (roadmap milestones) on their own schedule. The
+   two loops are deliberately **not** merged: maintenance activities are independent per cycle,
+   while development tasks are a dependency chain whose next task waits on the previous PR
+   merging. Rotation suits the first and would deadlock on the second. Consequences for *this*
+   loop:
+   - **Never edit `docs/v1-dev-plan.md`.** It is the development loop's tracker. File anything you
+     want built to `docs/planned-rules.md` or a GitHub issue, as always.
+   - **Skip an activity that collides with open automated work.** Before starting, list the paths
+     open automated PRs already touch:
+     ```sh
+     gh pr list --state open --label automated --json number,files \
+       --jq '.[] | "#\(.number): \([.files[].path] | join(", "))"'
+     ```
+     If the activity you are about to run would edit the same files (most likely `pkg/rules/`,
+     `testdata/`, or a package a `dev/` branch is mid-way through), advance the cursor and run the
+     next one instead. Note the skip in the log. Two loops editing one file is a merge conflict
+     someone has to resolve by hand, and the cheap fix is to not do it.
+   - **`develop` and `planning` are the sibling loop's type labels**, not maintenance ones.
+     Guardrail 4a's list stays exactly as written for the PRs *this* loop opens; do not borrow
+     them, and do not treat a `develop`-labelled PR as this loop's to chase.
+
 ## 0. Sync `main` first
 
 ```sh
