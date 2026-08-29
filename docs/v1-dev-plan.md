@@ -372,7 +372,7 @@ milliseconds on the cached path.
 |---|---|---|---|---|
 | M5-01 | Spike: skill-card schemas against primary sources; rewrite M5-06 | done | — | #228 |
 | M5-02 | `Guard()` one-shot API — load + verify + scan + policy → one decision | done | — | #229 |
-| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | in-progress | M5-02 | |
+| M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | in-progress | M5-02 | #230 |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | todo | M5-02, M5-03 | |
 | M5-05 | Install-time gate mode (`--mode install`) | todo | M5-04 | |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | todo | M5-01 | |
