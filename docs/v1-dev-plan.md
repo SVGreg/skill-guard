@@ -375,7 +375,7 @@ milliseconds on the cached path.
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | done | M5-02 | #230 |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | done | M5-02, M5-03 | #231 |
 | M5-05 | Install-time gate mode (`--mode install`) | done | M5-04 | #233 |
-| M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | in-progress | M5-01 | |
+| M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | in-progress | M5-01 | #234 |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
 | M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
 
