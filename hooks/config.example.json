@@ -11,7 +11,8 @@
   ],
   "unresolved_action": "warn",
   "on_error": "allow",
-  "verify_timeout_seconds": 20,
+  "timeout_seconds": 20,
+  "cache_dir": "-",
   "log_file": "${CLAUDE_PROJECT_DIR}/.claude/skillguard-hook.log",
   "system_messages": true,
   "trigger_tools": ["Skill"]

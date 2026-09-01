@@ -375,8 +375,8 @@ milliseconds on the cached path.
 | M5-03 | Verdict cache keyed by content hash, pluggable `Cache` interface | done | M5-02 | #230 |
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | done | M5-02, M5-03 | #231 |
 | M5-05 | Install-time gate mode (`--mode install`) | done | M5-04 | #233 |
-| M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | in-progress | M5-01 | #234 |
-| M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | todo | M5-04 | |
+| M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
+| M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | in-progress | M5-04 | #235 |
 | M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
 
 ### M5-01 — Skill-card schema spike
@@ -537,6 +537,18 @@ and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on o
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-01 — M5-07 **widens what the hook blocks**, which is a behaviour change worth recording
+  rather than a refactor. Reading `guard`'s outcome instead of regexing `verify`'s text means the
+  hook now sees the *scan*: in the default `block-invalid` mode a malicious skill is denied at load
+  on its verdict, where before only a compromised signature was. It also fixes a blind spot nobody
+  had filed — the hook probed for `SKILL.md.skillsig`, so an OMS-signed skill (M4-07) classified as
+  **unsigned** and was blocked in `enforce` mode. The hook README leads with a "run `log` mode
+  first" note for anyone retrofitting this onto a machine full of unscanned skills.
+- 2026-09-01 — M5-06 ships the card's subject field as **`content_hash`**, not `merkle_root` as the
+  design §9 sketch has it: it matches the USF front-matter field and `guard.Decision`, and the value
+  is identical. `docs/skill-card-schema.md` is now the authority for the emitted schema, and §9
+  points at it. New id **SG-PRV-007** allocated in `rule-verification.md` for a card that does not
+  describe its bundle.
 - 2026-08-29 — M5-05 **amended its own acceptance check**. As written it required the load gate to
   be laxer than the install gate; weakening the gate that runs when untrusted content reaches the
   model, in order to make a test pass, is exactly backwards. Modes now differ by escalation only,
