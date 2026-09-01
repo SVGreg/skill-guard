@@ -70,8 +70,8 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
-| **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | expanded |
-| **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
+| **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | **complete** |
+| **M6** | Taint analysis engine | titles only | **next — needs `/sg-plan`** |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
 | **M8** | Hardening (parallel) | titles only | needs `/sg-plan` |
 | **D** | Distribution track (parallel from M3) | D-01 … D-06 | expanded |
@@ -379,7 +379,7 @@ milliseconds on the cached path.
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | done | M5-04 | #235 |
 | M5-08 | Latency benchmark proving the cached path, plus docs | done | M5-03, M5-04 | #236 |
-| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | in-progress | M5-08 | #237 |
+| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | done | M5-08 | #237 |
 
 ### M5-01 — Skill-card schema spike
 **Done.** Findings in [`docs/skill-card-notes.md`](skill-card-notes.md), read 2026-08-28 from the
@@ -574,6 +574,12 @@ first call cheap too still passes `Options.Rules`.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-01 — **M5 is complete** (M5-01…M5-09 all `done`, #228–#237). The milestone shipped the
+  gate (`Guard()`, its cache, `guard`, install mode), the load-time integration (`hooks/` reading
+  the gate's own decision), verifiable skill cards with a documented schema, and the measured
+  latency to back the roadmap's budget — cached 0.51 ms in-process / 1.6 ms cross-process against a
+  single-digit-ms target. M6 (taint engine) is titles-only and is the next `/sg-plan` job; no M5
+  row is left `blocked` or `owner`.
 - 2026-09-01 — M5-09 makes the memoized `Builtin()` return a **copy of the slice** while sharing
   the `*Pack` pointers, and says in the doc comment that the packs are read-only. The copy is not
   ceremony: `loadRuleset` appends `--rulepack` packs to what `Builtin()` returns, and appending into
