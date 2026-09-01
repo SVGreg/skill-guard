@@ -456,6 +456,28 @@ tooling never has to hard-code the taxonomy. The full SARIF mapping — severity
 levels, fingerprints, taxonomy, suppressions, and the CI gating contract — is
 documented in [`docs/sarif-mapping.md`](docs/sarif-mapping.md).
 
+### Skill cards can be checked against their subject
+
+A skill card (`--format skill-card`) carries a `content_hash`: the bundle's
+SGMT-1 Merkle root, the same value an attestation signs, recomputed whether or
+not the skill is signed. That makes the card checkable — it names *which* bundle
+it describes, so it cannot be detached from a clean skill and re-presented over a
+modified one:
+
+```sh
+skill-guard scan ./my-skill --format skill-card --out card.json
+skill-guard verify ./my-skill --card card.json    # exit 0 match, 2 mismatch
+```
+
+A one-byte change anywhere in the bundle fails the check with `SG-PRV-007`. Note
+what this is *not*: a card is unsigned JSON that anyone can write, so a match
+says "this card is about this bundle", never "this card is trustworthy" — for
+that, verify a signature. And the check is not a re-scan: a card's verdict came
+from the policy in force when it was emitted, so re-deriving it under yours would
+report a policy difference as tampering. Fields, versioning and the full
+semantics are in
+[`docs/skill-card-schema.md`](docs/skill-card-schema.md).
+
 ```json
 {
   "findings": [
