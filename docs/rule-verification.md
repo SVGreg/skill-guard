@@ -2541,7 +2541,7 @@ break — the newline-crossing-gap class tracked in the engine backlog.
   `TestMaliciousFixtureTriggersSelfIngestedInstructions`; the benign near-miss ("read the conversion
   log and summarize which pages could not be parsed") is in `testdata/benign/SKILL.md`.
 
-### SG-PRV-001…006 — Provenance  (AST01/02/07/09) — **deterministic, non-textual**
+### SG-PRV-001…007 — Provenance  (AST01/02/07/09) — **deterministic, non-textual**
 These are **not** pattern rules; they are outcomes of §7 verification in the design doc. Verification "instructions" here = the required checks and their FP posture:
 
 - **SG-PRV-001 (no attestation, medium):** absence is a fact, not a heuristic. FP-free. Promoted to exit-2 only when policy requires attestation.
@@ -2550,6 +2550,7 @@ These are **not** pattern rules; they are outcomes of §7 verification in the de
 - **SG-PRV-004 (expired/revoked, high):** clock-skew tolerance (± a few min) avoids false expiry; revocation list must be freshness-checked.
 - **SG-PRV-005 (unverified identity, medium):** no bound identity claim. FP-free.
 - **SG-PRV-006 (integrity-only, low):** `scan: null` — informational; never a gate.
+- **SG-PRV-007 (skill card does not describe this bundle, critical):** emitted only by `verify --card`. The card's `content_hash` is compared with the SGMT-1 root recomputed from the bundle on disk; a mismatch means the card was written for a different skill, or the skill changed after the card was written. Same FP posture and same normalization dependency as SG-PRV-003 — it is the same comparison, against a claim in an unsigned card rather than in a signed statement. Deliberately **not** a re-scan: a card's `verdict`/`risk_score` are products of the emitter's policy, so re-deriving them under the verifier's policy would report a policy difference as tampering. Malformed or foreign card documents are usage errors (exit 3), not findings — a file that is not a card makes no claim to be wrong about. Schema: `docs/skill-card-schema.md`.
 
 *No LLM, no widening — precision comes from correct crypto + normalization, tested by vectors (design §13), not from patterns.*
 

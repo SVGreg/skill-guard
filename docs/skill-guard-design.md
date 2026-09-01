@@ -292,6 +292,7 @@ Connect **sources** (env, credential reads, conversation, clipboard, network inp
 - **SG-PRV-004** Attestation expired or key revoked. `provenance`, high.
 - **SG-PRV-005** Publisher identity unverified (no bound identity claim). `provenance`, medium.
 - **SG-PRV-006** Attestation is integrity-only (`scan: null`, signed with `--no-scan`) — skill was never scanned at signing time. `provenance`, low.
+- **SG-PRV-007** Skill card does not describe this bundle — the card's `content_hash` is not the bundle's recomputed SGMT-1 root (`verify --card`; exit 2, §10.5). `provenance`, critical. Schema and semantics: `docs/skill-card-schema.md`.
 
 ### 5.10 Opt-in advanced engines
 - **SG-YARA-\*** (`static`, opt-in) Bundled YARA signatures for known malware — reverse shells, webshells, C2 frameworks, info-stealers, crypto-miners, exploit tools. High precision, critical on match; versioned ruleset in the pack.
@@ -611,6 +612,15 @@ Two layers, resolving the determinism/timestamp conflict:
 ```
 
 Semantics: `counts` **exclude waived** findings (`waived` is a separate total); `skipped_checks` lists rule domains not runnable for this input (e.g., stdin single-file mode); `ast_findings` lists AST categories with ≥1 non-waived finding (v1 renames ambiguous `ast_coverage`); `platforms[]` from `compatibility` normalization (AST10).
+
+**Implemented schema.** The JSON above is the v1 *target* shape; what ships today, field by
+field, is documented in [`skill-card-schema.md`](skill-card-schema.md) — including two
+divergences worth naming: the subject field is called **`content_hash`** (matching the USF
+front-matter field and `guard`'s `Decision`, rather than `merkle_root`; the value is the same
+SGMT-1 root), and the card carries **`publisher_cards`**, a note that the bundle ships a
+publisher-authored prose card, which is never parsed (M5-01). `verify --card` checks a card
+against its subject — `content_hash` vs the recomputed root — and reports SG-PRV-007 on a
+mismatch (§5, exit 2).
 
 **Risk score & tier.** `risk_score` (0–100, SkillSpector-convention-compatible for OWASP-style threshold gates) is a documented deterministic function: base points per finding by severity (critical 40, high 15, medium 5, low 1, info 0), scaled by confidence, summed and capped at 100; provenance bonuses subtract (verified+trusted attestation −10, floor 0). Tiers: L0 = 0–9, L1 = 10–29, L2 = 30–59, L3 = 60–100. Weights live in policy (overridable) with these defaults frozen for the v1 line.
 

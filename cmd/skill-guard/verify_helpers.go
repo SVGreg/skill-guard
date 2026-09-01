@@ -185,3 +185,67 @@ func omsFlagIf(oms bool) string {
 	}
 	return ""
 }
+
+// verifyCardFile implements `verify --card`: read a card document, check that
+// it describes this bundle, and report the claims it makes. Reading failures
+// are usage errors (exit 3) — a file that is not a card makes no claim to be
+// wrong about — while a card that *is* well-formed and names a different
+// bundle is a verification failure (exit 2), the same class as a Merkle
+// mismatch.
+func verifyCardFile(b *skill.Bundle, cardPath, skillPath string, noColor bool) error {
+	data, err := os.ReadFile(cardPath)
+	if err != nil {
+		return fail(3, "cannot read card %q: %v\n"+
+			"  write one with: skill-guard scan %q --format skill-card --out card.json", cardPath, err, skillPath)
+	}
+	card, err := sgverify.ParseCard(data)
+	if err != nil {
+		return fail(3, "cannot use card %q: %v\n"+
+			"  expected a skill card written by 'scan --format skill-card'.", cardPath, err)
+	}
+	res := sgverify.VerifyCard(b, card)
+	printCardVerify(res, cardPath, skillPath, noColor)
+	if sgverify.CardVerificationFailed(res) {
+		return exitErr{code: 2, msg: "card does not describe this bundle"}
+	}
+	return nil
+}
+
+// printCardVerify renders a card check. Every string that came out of the card
+// is printed through safeText: a card is an unsigned JSON document anyone can
+// write, so its name/description are attacker-controlled in exactly the way an
+// unverified attestation's identity is.
+func printCardVerify(res *sgverify.CardResult, cardPath, skillPath string, noColor bool) {
+	c := func(s string) string {
+		if noColor {
+			return ""
+		}
+		return s
+	}
+	const (
+		red   = "\033[31m"
+		green = "\033[32m"
+		reset = "\033[0m"
+	)
+	fmt.Printf("card: %q\n", cardPath)
+	fmt.Printf("subject: %q\n", skillPath)
+	fmt.Printf("schema: %s\n", res.Card.Type)
+	state, col := "MISMATCH", red
+	if res.Match {
+		state, col = "MATCH", green
+	}
+	fmt.Printf("content hash: %s%s%s\n", c(col), state, c(reset))
+	fmt.Printf("  card:   %s\n", res.CardHash)
+	fmt.Printf("  bundle: %s\n", res.BundleHash)
+	// The card's own claims, shown after the check so nobody reads them as
+	// verified facts: what a card check establishes is the subject, not the
+	// verdict, which was produced under the emitter's policy (pkg/verify.VerifyCard).
+	fmt.Printf("card claims: %s — verdict %s, risk %d/100 (%s)\n",
+		safeText(res.Card.Name), safeText(string(res.Card.Verdict)), res.Card.RiskScore, safeText(res.Card.RiskTier))
+	if n := len(res.Card.PublisherCards); n > 0 {
+		fmt.Printf("publisher card(s) in bundle: %d (not parsed)\n", n)
+	}
+	for _, f := range res.Findings {
+		fmt.Printf("  %s  %s  %s\n", f.RuleID, f.Severity.String(), f.Title)
+	}
+}

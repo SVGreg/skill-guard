@@ -272,7 +272,7 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 }
 
 func verifyCmd() *cobra.Command {
-	var policyPath, format string
+	var policyPath, format, cardPath string
 	var noColor bool
 
 	cmd := &cobra.Command{
@@ -300,14 +300,28 @@ and scope the identity under trust.identities:
         public_key: <base64 from keygen>
         identity: oidc:you@example.com
 
+CARD (--card <file>): instead of checking signatures, check a skill card
+(written by 'scan --format skill-card') against this bundle — that the card's
+content_hash is the bundle's own SGMT-1 root, so the card cannot be detached
+from its subject, edited, and re-presented. A mismatch exits 2. See
+docs/skill-card-schema.md.
+
 EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.`,
 		Example: `  skill-guard verify ./my-skill
-  skill-guard verify ./my-skill --policy .skillguard.yaml`,
+  skill-guard verify ./my-skill --policy .skillguard.yaml
+  skill-guard verify ./my-skill --card card.json`,
 		Args: bundlePathArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			b, err := loadBundleFriendly(args[0])
 			if err != nil {
 				return err
+			}
+			// A card check answers a different question from a signature check
+			// — "does this card describe this bundle?" rather than "who signed
+			// it?" — and needs no attestation to be present, so it returns here
+			// instead of falling through to the signature paths.
+			if cardPath != "" {
+				return verifyCardFile(b, cardPath, args[0], noColor || report.ColorDisabled(os.Stdout))
 			}
 			pol, err := policy.Load(policyPath)
 			if err != nil {
@@ -363,6 +377,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 	f := cmd.Flags()
 	f.StringVar(&policyPath, "policy", "", "policy file (.skillguard.yaml) providing the trust roster")
 	f.StringVar(&format, "format", "text", "output format: text (json planned)")
+	f.StringVar(&cardPath, "card", "", "check this skill card against the bundle instead of checking signatures")
 	f.BoolVar(&noColor, "no-color", false, "disable ANSI color in output")
 	return cmd
 }
