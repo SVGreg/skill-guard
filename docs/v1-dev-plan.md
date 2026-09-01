@@ -378,8 +378,8 @@ milliseconds on the cached path.
 | M5-05 | Install-time gate mode (`--mode install`) | done | M5-04 | #233 |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | done | M5-04 | #235 |
-| M5-08 | Latency benchmark proving the cached path, plus docs | in-progress | M5-03, M5-04 | #236 |
-| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | todo | M5-08 | |
+| M5-08 | Latency benchmark proving the cached path, plus docs | done | M5-03, M5-04 | #236 |
+| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | in-progress | M5-08 | #237 |
 
 ### M5-01 — Skill-card schema spike
 **Done.** Findings in [`docs/skill-card-notes.md`](skill-card-notes.md), read 2026-08-28 from the
@@ -518,6 +518,14 @@ must still compose with the memoized built-ins.
 a test proves two `Builtin()` callers cannot observe each other's mutations; the full suite and the
 evaluation corpus are unchanged (identical findings, since nothing about matching changes).
 
+**Result (measured, same machine and `-benchtime 20x`).** `GuardCold` **270 ms → 165 ms**, against
+`GuardColdPrebuiltRules` at 162 ms — within noise, as the acceptance asked. Allocations
+**17.5 MB → 366 KB**; `GuardColdBenign` **166 ms → 50 ms**; `Builtin()` itself is now 196 ns.
+The honest caveat, written into the README: a benchmark amortizes the one compilation over its
+iterations, so this buys a **long-lived host** (agent loop, server) everything after its first
+decision and buys a **one-shot CLI run** nothing, since that process exits. A host wanting the
+first call cheap too still passes `Options.Rules`.
+
 ## M6 — Taint analysis engine *(titles only)*
 
 - M6-01 Source / sink / sanitizer model expressed in the YAML rule-pack style
@@ -566,6 +574,12 @@ evaluation corpus are unchanged (identical findings, since nothing about matchin
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-01 — M5-09 makes the memoized `Builtin()` return a **copy of the slice** while sharing
+  the `*Pack` pointers, and says in the doc comment that the packs are read-only. The copy is not
+  ceremony: `loadRuleset` appends `--rulepack` packs to what `Builtin()` returns, and appending into
+  a shared backing array would put one caller's external rules into another caller's scan. Nothing
+  in the tree mutates a compiled rule today, so sharing is safe — but memoization is what makes that
+  a *contract* rather than a coincidence, so it is stated and tested.
 - 2026-09-01 — M5-08 files **M5-09** (memoize `rules.Builtin()`), which its own card invited "if
   the numbers hold up". They did, on a second machine-run: ~108 ms of every cold decision, and
   ~17 MB of its ~17.5 MB of allocations, is compiling embedded YAML that cannot change within a
