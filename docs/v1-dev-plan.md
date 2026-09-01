@@ -378,7 +378,7 @@ milliseconds on the cached path.
 | M5-05 | Install-time gate mode (`--mode install`) | done | M5-04 | #233 |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | done | M5-04 | #235 |
-| M5-08 | Latency benchmark proving the cached path, plus docs | in-progress | M5-03, M5-04 | |
+| M5-08 | Latency benchmark proving the cached path, plus docs | in-progress | M5-03, M5-04 | #236 |
 | M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | todo | M5-08 | |
 
 ### M5-01 — Skill-card schema spike
