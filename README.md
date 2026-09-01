@@ -388,33 +388,39 @@ several times quicker):
 ```
 go test ./pkg/guard/ -run XXX -bench BenchmarkGuard -benchtime 20x -benchmem
 
-BenchmarkGuardCold-4                  269791505 ns/op   17508342 B/op   116843 allocs/op
-BenchmarkGuardCached-4                   567424 ns/op      61716 B/op      321 allocs/op
-BenchmarkGuardCachedFile-4              1547557 ns/op     203880 B/op     1324 allocs/op
-BenchmarkGuardNoScan-4                  1031896 ns/op      48560 B/op      329 allocs/op
-BenchmarkGuardColdBenign-4            166051926 ns/op   17225555 B/op   116095 allocs/op
-BenchmarkGuardColdPrebuiltRules-4     162468332 ns/op     371616 B/op     1092 allocs/op
+BenchmarkGuardCold-4                  164666196 ns/op     366036 B/op     1091 allocs/op
+BenchmarkGuardCached-4                   513402 ns/op      61200 B/op      321 allocs/op
+BenchmarkGuardCachedFile-4              1567840 ns/op     200990 B/op     1323 allocs/op
+BenchmarkGuardNoScan-4                  1707937 ns/op      50830 B/op      330 allocs/op
+BenchmarkGuardColdBenign-4             49951906 ns/op      62131 B/op      338 allocs/op
+BenchmarkGuardColdPrebuiltRules-4     161987617 ns/op     358308 B/op     1082 allocs/op
 ```
 
 | Path | Cost | |
 |------|-----:|---|
-| **Cached, in-process** (`WithVerdictCache`) | **0.57 ms** | ✅ inside budget |
-| **Cached, on disk** (`--cache-dir`, what the hook uses) | **1.5 ms** | ✅ inside budget |
-| Provenance only (`--no-scan`) | 1.0 ms | the floor: load, hash, verify |
-| Cold, typical bundle (`testdata/benign`) | 166 ms | ✅ well under a second |
-| Cold, 60-finding attack corpus (`testdata/malicious`) | 270 ms | |
+| **Cached, in-process** (`WithVerdictCache`) | **0.51 ms** | ✅ inside budget |
+| **Cached, on disk** (`--cache-dir`, what the hook uses) | **1.6 ms** | ✅ inside budget |
+| Provenance only (`--no-scan`) | 1.7 ms | the floor: load, hash, verify |
+| Uncached, typical bundle (`testdata/benign`) | 50 ms | ✅ well under a second |
+| Uncached, 60-finding attack corpus (`testdata/malicious`) | 165 ms | |
 
 **The budget is met**, with room: the repeated path a gate actually lives on is
-under a millisecond in-process, and a millisecond and a half through the
+under a millisecond in-process, and about a millisecond and a half through the
 cross-process cache.
 
-**Where the cold time goes.** Comparing `Cold` (270 ms) with
-`ColdPrebuiltRules` (162 ms) on the same bundle: **~108 ms of every cold call is
-compiling the built-in rule packs**, which never change — and it accounts for
-essentially all of the 17 MB allocated (the prebuilt run allocates 372 KB). So
-for a long-lived host the guidance is *reuse the rules and keep the cache*: pass
-`Options.Rules`/`Options.Contexts` once, or use `--cache-dir` from the CLI and
-pay it on the first call only.
+**One-time cost, and who pays it.** The built-in rule packs are embedded in the
+binary and compile to the same thing every time, so they are compiled **once per
+process** (`rules.Builtin()` is memoized; a later call is a 196 ns slice copy).
+Before that, every uncached decision recompiled them: ~108 ms and ~17 MB of
+allocations each, which is why the numbers above are roughly half what they were
+and allocate 366 KB instead of 17.5 MB.
+
+The distinction that matters when reading them: a **long-lived host** — an agent
+loop, a server, anything calling `guard.Guard` more than once — pays the ~108 ms
+on its first decision and never again. A **one-shot CLI run** (`skill-guard scan
+./skill` from a shell) still pays it, because the process exits. For a host that
+wants even the first call cheap, pass `Options.Rules`/`Options.Contexts` from a
+set you compiled at startup.
 
 #### Install-time gating
 
