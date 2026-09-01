@@ -414,6 +414,24 @@ install_skill() {
 The same decision is available as a Go call for embedding — `guard.Guard(path,
 guard.Options{...})` returns the identical `Decision` the CLI prints.
 
+#### Load-time gating in Claude Code
+
+[`hooks/`](hooks/) ships a `PreToolUse` hook (pure Python stdlib, no install
+step) that runs this gate every time the model invokes a skill: it resolves the
+skill name to a local bundle, runs `guard --format json`, and reads the
+`outcome`. A denied skill never reaches the model's context, and the reason
+lands in the transcript:
+
+```
+skill-guard blocked skill 'evil-skill': scan verdict: fail (critical findings, risk 100/100)
+```
+
+Three enforcement modes — `log` (audit only), `block-invalid` (block denials),
+`enforce` (block warnings too) — plus a fail-open/closed switch for the hook's
+own failures. Decisions are cached by content hash, so the repeated path costs
+under a millisecond. Setup and the full mode table:
+[`hooks/README.md`](hooks/README.md).
+
 ---
 
 ## Input & output formats
