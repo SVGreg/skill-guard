@@ -379,7 +379,7 @@ milliseconds on the cached path.
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
 | M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | done | M5-04 | #235 |
 | M5-08 | Latency benchmark proving the cached path, plus docs | done | M5-03, M5-04 | #236 |
-| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | in-progress | M5-08 | |
+| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | in-progress | M5-08 | #237 |
 
 ### M5-01 — Skill-card schema spike
 **Done.** Findings in [`docs/skill-card-notes.md`](skill-card-notes.md), read 2026-08-28 from the
