@@ -251,7 +251,19 @@ func TestNilCacheIsNotAnError(t *testing.T) {
 	}
 }
 
-// BenchmarkGuardCold and BenchmarkGuardCached are the card's latency evidence:
+// The benchmark set below is M5-08's latency evidence. It answers three
+// questions a caller sitting in an agent loop actually has: what does a decision
+// cost the first time (Cold), what does it cost every time after (Cached /
+// CachedFile), and where does the first-time cost go (ColdPrebuiltRules,
+// NoScan). Run them with:
+//
+//	go test ./pkg/guard/ -run XXX -bench BenchmarkGuard -benchtime 20x -benchmem
+//
+// -benchtime 20x rather than a duration: a cold call is ~0.27 s here, so the
+// default 1 s wall clock would time a handful of iterations anyway, and pinning
+// the count makes runs comparable across machines.
+//
+// BenchmarkGuardCold and BenchmarkGuardCached are the card's headline pair:
 // the cached path must be the cheap one.
 func BenchmarkGuardCold(b *testing.B) {
 	path := filepath.Join("..", "..", "testdata", "malicious")
@@ -276,6 +288,59 @@ func BenchmarkGuardCached(b *testing.B) {
 		}
 		if !d.CacheHit {
 			b.Fatal("benchmark is not measuring the cached path")
+		}
+	}
+}
+
+// BenchmarkGuardCachedFile measures the cache a *separate process* can use —
+// the one `guard --cache-dir` and the PreToolUse hook (M5-07) rely on, where
+// every hit pays a file read and a JSON decode that the in-process cache does
+// not. That is the number a hook deployment actually experiences, so quoting
+// only the in-memory figure would be quoting the wrong one.
+func BenchmarkGuardCachedFile(b *testing.B) {
+	path := filepath.Join("..", "..", "testdata", "malicious")
+	c, err := NewFileCache(b.TempDir())
+	if err != nil {
+		b.Fatal(err)
+	}
+	opt := Options{Cache: c}
+	if _, err := Guard(path, opt); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := Guard(path, opt)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !d.CacheHit {
+			b.Fatal("benchmark is not measuring the cached path")
+		}
+	}
+}
+
+// BenchmarkGuardNoScan is the floor: load the bundle, hash it, verify whatever
+// signatures it carries, decide. Whatever Cold costs above this is scanning
+// (rule compilation included), which is what the cache is buying back.
+func BenchmarkGuardNoScan(b *testing.B) {
+	path := filepath.Join("..", "..", "testdata", "malicious")
+	opt := Options{SkipScan: true}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := Guard(path, opt); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkGuardColdBenign runs the same cold path over an ordinary small
+// bundle rather than the 60-finding attack corpus, since "a typical skill" is
+// what a load-time budget is really about.
+func BenchmarkGuardColdBenign(b *testing.B) {
+	path := filepath.Join("..", "..", "testdata", "benign")
+	for i := 0; i < b.N; i++ {
+		if _, err := Guard(path, Options{}); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

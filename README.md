@@ -373,11 +373,48 @@ misleading.
 | `--cache-dir` | cache decisions in this directory (`-` for the user cache dir) |
 | `--no-scan` | decide on provenance alone |
 
-**Caching** keys on the bundle's content hash, a digest of the policy, and
-whether scanning was skipped — so one changed byte or one changed setting is a
-miss, and a decision made without scanning is never served to a caller who
-asked for one. Measured on this repo's fixtures: **0.58 ms cached** against
-268 ms cold.
+**Caching** keys on the bundle's content hash, a digest of the policy, the gate
+mode, and whether scanning was skipped — so one changed byte or one changed
+setting is a miss, and a decision made without scanning is never served to a
+caller who asked for one.
+
+#### Measured latency
+
+The roadmap's budget for a gate sitting in an agent loop is **single-digit
+milliseconds on the cached path**. Measured, not asserted — `pkg/guard`, an
+Intel i5-2415M @ 2.30 GHz (a deliberately slow machine; a modern laptop is
+several times quicker):
+
+```
+go test ./pkg/guard/ -run XXX -bench BenchmarkGuard -benchtime 20x -benchmem
+
+BenchmarkGuardCold-4                  269791505 ns/op   17508342 B/op   116843 allocs/op
+BenchmarkGuardCached-4                   567424 ns/op      61716 B/op      321 allocs/op
+BenchmarkGuardCachedFile-4              1547557 ns/op     203880 B/op     1324 allocs/op
+BenchmarkGuardNoScan-4                  1031896 ns/op      48560 B/op      329 allocs/op
+BenchmarkGuardColdBenign-4            166051926 ns/op   17225555 B/op   116095 allocs/op
+BenchmarkGuardColdPrebuiltRules-4     162468332 ns/op     371616 B/op     1092 allocs/op
+```
+
+| Path | Cost | |
+|------|-----:|---|
+| **Cached, in-process** (`WithVerdictCache`) | **0.57 ms** | ✅ inside budget |
+| **Cached, on disk** (`--cache-dir`, what the hook uses) | **1.5 ms** | ✅ inside budget |
+| Provenance only (`--no-scan`) | 1.0 ms | the floor: load, hash, verify |
+| Cold, typical bundle (`testdata/benign`) | 166 ms | ✅ well under a second |
+| Cold, 60-finding attack corpus (`testdata/malicious`) | 270 ms | |
+
+**The budget is met**, with room: the repeated path a gate actually lives on is
+under a millisecond in-process, and a millisecond and a half through the
+cross-process cache.
+
+**Where the cold time goes.** Comparing `Cold` (270 ms) with
+`ColdPrebuiltRules` (162 ms) on the same bundle: **~108 ms of every cold call is
+compiling the built-in rule packs**, which never change — and it accounts for
+essentially all of the 17 MB allocated (the prebuilt run allocates 372 KB). So
+for a long-lived host the guidance is *reuse the rules and keep the cache*: pass
+`Options.Rules`/`Options.Contexts` once, or use `--cache-dir` from the CLI and
+pay it on the first call only.
 
 #### Install-time gating
 
