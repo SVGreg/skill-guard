@@ -50,10 +50,11 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 4. **README lag.** README's install snippet still pins `VERSION=v0.1.0` and its status section says
    "beyond M1/M2 … not yet implemented". Reconciling it is task **M3-07**, per roadmap §6.5.
 6. **A load-time gate already exists.** `hooks/` ships a Claude Code `PreToolUse` hook (pure
-   stdlib Python) that resolves a skill name to a bundle, runs `skill-guard verify`, and
-   allows/blocks the call. The roadmap describes M5's reference integration as unbuilt; it is
-   substantially built, so M5-07 *finishes* it — the hook currently parses `verify`'s **text**
-   output to re-derive a decision, which is the part worth replacing.
+   stdlib Python) that resolves a skill name to a bundle and allows/blocks the call. The roadmap
+   described M5's reference integration as unbuilt; it was substantially built, so M5-07
+   *finished* it rather than starting it — replacing the part worth replacing, which was the hook
+   re-deriving a decision from `verify`'s **text** output. Since #235 it reads `guard`'s JSON
+   `outcome`.
 7. **The design already specifies this milestone's API.** `docs/skill-guard-design.md §11.1`
    defines `Guard()` as the agent-loop entrypoint and `WithVerdictCache` as merkle-root-keyed.
    M5-02/M5-03 implement that spec rather than inventing one, and §15's open question 1 (what
@@ -69,7 +70,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
-| **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-08 | expanded |
+| **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | expanded |
 | **M6** | Taint analysis engine | titles only | needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
 | **M8** | Hardening (parallel) | titles only | needs `/sg-plan` |
@@ -376,8 +377,9 @@ milliseconds on the cached path.
 | M5-04 | `skill-guard guard` command: allow / deny / warn, JSON decision output | done | M5-02, M5-03 | #231 |
 | M5-05 | Install-time gate mode (`--mode install`) | done | M5-04 | #233 |
 | M5-06 | Skill cards: add `content_hash`, document our schema, make cards verifiable | done | M5-01 | #234 |
-| M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | in-progress | M5-04 | #235 |
-| M5-08 | Latency benchmark proving the cached path, plus docs | todo | M5-03, M5-04 | |
+| M5-07 | `hooks/` uses `guard` instead of `verify`; malicious skill blocked at load | done | M5-04 | #235 |
+| M5-08 | Latency benchmark proving the cached path, plus docs | in-progress | M5-03, M5-04 | #236 |
+| M5-09 | Memoize `rules.Builtin()` — ~108 ms and 17 MB of every cold decision | todo | M5-08 | |
 
 ### M5-01 — Skill-card schema spike
 **Done.** Findings in [`docs/skill-card-notes.md`](skill-card-notes.md), read 2026-08-28 from the
@@ -489,6 +491,33 @@ budget; cold **268 ms**, of which **~110 ms is compiling the built-in rule packs
 and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on other hardware.
 **Acceptance.** Benchmark output in the PR; the README quotes the measured figure, not the target.
 
+**Measured (M5-08, i5-2415M @ 2.30 GHz, `-benchtime 20x`).** The M5-03 figures reproduce, and the
+set grew to cover what a deployment actually pays:
+
+| Path | Cost |
+|---|---:|
+| cached, in-process | **0.57 ms** ✅ |
+| cached, on disk (`--cache-dir` — what the hook uses) | **1.5 ms** ✅ |
+| provenance only (`--no-scan`) | 1.0 ms |
+| cold, typical bundle (`testdata/benign`) | 166 ms ✅ under a second |
+| cold, 60-finding corpus (`testdata/malicious`) | 270 ms |
+
+Budget met on both counts. The on-disk cache was added to the set because quoting only the
+in-process number would quote a figure no hook deployment experiences. `~108 ms` of every cold
+call is rule-pack compilation, and it is ~17 MB of the ~17.5 MB allocated — hence **M5-09**.
+
+### M5-09 — Memoize the built-in rule packs
+**Goal.** Stop paying ~108 ms and ~17 MB to compile the same embedded YAML on every cold
+decision. `rules.Builtin()` reads and compiles `//go:embed`ed packs that cannot change within a
+process, yet every `Guard()` without explicit `Options.Rules` does it again.
+**Deliverables.** Memoize inside `pkg/rules` (`sync.Once` over the compiled packs), returning a
+set callers cannot mutate into each other's state — that is the whole risk, so the API shape
+decides the task: either return deep copies or document and enforce read-only sharing. `--rulepack`
+must still compose with the memoized built-ins.
+**Acceptance.** `BenchmarkGuardCold` drops to within noise of `BenchmarkGuardColdPrebuiltRules`;
+a test proves two `Builtin()` callers cannot observe each other's mutations; the full suite and the
+evaluation corpus are unchanged (identical findings, since nothing about matching changes).
+
 ## M6 — Taint analysis engine *(titles only)*
 
 - M6-01 Source / sink / sanitizer model expressed in the YAML rule-pack style
@@ -537,6 +566,12 @@ and memoizing `rules.Builtin()` is worth its own row if the numbers hold up on o
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-01 — M5-08 files **M5-09** (memoize `rules.Builtin()`), which its own card invited "if
+  the numbers hold up". They did, on a second machine-run: ~108 ms of every cold decision, and
+  ~17 MB of its ~17.5 MB of allocations, is compiling embedded YAML that cannot change within a
+  process. M5-08 also added an **on-disk** cache benchmark — the in-process figure is not the one a
+  hook deployment pays, and quoting only the faster number would have been quoting the wrong one
+  (1.5 ms vs 0.57 ms; both inside the single-digit-ms budget).
 - 2026-09-01 — M5-07 **widens what the hook blocks**, which is a behaviour change worth recording
   rather than a refactor. Reading `guard`'s outcome instead of regexing `verify`'s text means the
   hook now sees the *scan*: in the default `block-invalid` mode a malicious skill is denied at load
