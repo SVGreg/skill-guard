@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.0](https://github.com/SVGreg/skill-guard/compare/v0.2.2...v0.3.0) (2026-09-04)
+
+
+### Features
+
+* **attest:** add an ECDSA P-256 signing path (M4-05) ([#217](https://github.com/SVGreg/skill-guard/issues/217)) ([f56bbee](https://github.com/SVGreg/skill-guard/commit/f56bbee2e0a6f4480d0c60206a4d688382a01454))
+* **attest:** build the OMS manifest, root digest, and statement (M4-04) ([#216](https://github.com/SVGreg/skill-guard/issues/216)) ([7cd70ed](https://github.com/SVGreg/skill-guard/commit/7cd70ed87fe269db6c5232a8300b21b6645a3b73))
+* **attest:** implement OMS path canonicalization and enumeration (M4-03) ([#215](https://github.com/SVGreg/skill-guard/issues/215)) ([d509e13](https://github.com/SVGreg/skill-guard/commit/d509e1369c4cd88240dde3168f32a3ad3c870d8d))
+* **attest:** vendor the OMS v1.0 vectors and model the bundle format (M4-02) ([#214](https://github.com/SVGreg/skill-guard/issues/214)) ([5b9a6eb](https://github.com/SVGreg/skill-guard/commit/5b9a6eb1b1d44869ac7ae2933ab2dbb912777fe9))
+* **attest:** write OMS bundles with sign --oms (M4-06) ([#218](https://github.com/SVGreg/skill-guard/issues/218)) ([c92b6ae](https://github.com/SVGreg/skill-guard/commit/c92b6ae5e5aec2fcabafe2cfcc87229cdcb87adf))
+* **card:** make skill cards verifiable against their subject (M5-06) ([#234](https://github.com/SVGreg/skill-guard/issues/234)) ([bd6ad8c](https://github.com/SVGreg/skill-guard/commit/bd6ad8cb1d27c193ad82a4a325fc3551cf52b6cd))
+* **ci:** add a composite GitHub Action that scans and uploads SARIF (M3-06) ([#211](https://github.com/SVGreg/skill-guard/issues/211)) ([772979d](https://github.com/SVGreg/skill-guard/commit/772979d33639f5282ec6aaf82a8f4e8c3ff5d63f))
+* **cli:** add --format sarif to scan, with docs (M3-02) ([#207](https://github.com/SVGreg/skill-guard/issues/207)) ([4134c02](https://github.com/SVGreg/skill-guard/commit/4134c020a3215eeff7b69c6439e81171db86ed90))
+* **cli:** add `skill-guard guard` (M5-04) ([#231](https://github.com/SVGreg/skill-guard/issues/231)) ([d23f64b](https://github.com/SVGreg/skill-guard/commit/d23f64b3ab7b11317e05e5e4ee14675ec1d5a8ca))
+* **guard:** add Guard(), the one-shot load-time decision (M5-02) ([#229](https://github.com/SVGreg/skill-guard/issues/229)) ([778b190](https://github.com/SVGreg/skill-guard/commit/778b1909c5e1c473ea5d27c1c34cdcf6d189f080))
+* **guard:** add install-time mode (M5-05) ([#233](https://github.com/SVGreg/skill-guard/issues/233)) ([6999f19](https://github.com/SVGreg/skill-guard/commit/6999f197b24a4d18ae27c1c225d243f2ba620d5b))
+* **guard:** cache verdicts by content hash and policy (M5-03) ([#230](https://github.com/SVGreg/skill-guard/issues/230)) ([1d19de7](https://github.com/SVGreg/skill-guard/commit/1d19de7c9dfceba48b174adb03ebf38c36428522))
+* **hooks:** gate skills on `guard`'s decision, not `verify`'s text (M5-07) ([#235](https://github.com/SVGreg/skill-guard/issues/235)) ([bd40e83](https://github.com/SVGreg/skill-guard/commit/bd40e83f6c8f49476f6a32c1b00cdd4a98fb7da5))
+* **keyless:** add Sigstore keyless signing as a separate module (M4-12) ([#222](https://github.com/SVGreg/skill-guard/issues/222)) ([250561a](https://github.com/SVGreg/skill-guard/commit/250561ac8bb81fc88215acf1e571c74a9fd114a5))
+* **policy:** add identity-based trust rules (M4-08) ([#220](https://github.com/SVGreg/skill-guard/issues/220)) ([5b0a66a](https://github.com/SVGreg/skill-guard/commit/5b0a66a14fb6d04cc4f57e7ddd7587e0cad18adc))
+* **report:** emit SARIF 2.1.0 from a scan report (M3-01) ([#205](https://github.com/SVGreg/skill-guard/issues/205)) ([a1b0e58](https://github.com/SVGreg/skill-guard/commit/a1b0e58550d89cfd927307f8cb52939ec13070fa))
+* **report:** emit waived findings as SARIF suppressions (M3-04) ([#209](https://github.com/SVGreg/skill-guard/issues/209)) ([b2c8f0a](https://github.com/SVGreg/skill-guard/commit/b2c8f0aa80a50410b3168c785aff0c47845c3d2c))
+* **report:** export the AST taxonomy into SARIF (M3-03) ([#208](https://github.com/SVGreg/skill-guard/issues/208)) ([5d24b54](https://github.com/SVGreg/skill-guard/commit/5d24b5472916a1ca68583ddaa21b450358431ead))
+* **verify:** verify keyless (certificate-bound) OMS signatures (M4-09) ([#221](https://github.com/SVGreg/skill-guard/issues/221)) ([db737ee](https://github.com/SVGreg/skill-guard/commit/db737ee966401677b6ccba05ff8b9dc05b302a33))
+* **verify:** verify OMS bundles and auto-detect the signature format (M4-07) ([#219](https://github.com/SVGreg/skill-guard/issues/219)) ([313f1af](https://github.com/SVGreg/skill-guard/commit/313f1afe242f30f88a68633403c062ec901afe45))
+* **verify:** verify Rekor inclusion proofs and signed checkpoints (M4-10) ([#224](https://github.com/SVGreg/skill-guard/issues/224)) ([79db070](https://github.com/SVGreg/skill-guard/commit/79db0709090cf04d38b59b5e369c8e1b3fb82d39))
+
+
+### Bug Fixes
+
+* **verify:** report the log timestamp even when no roots are pinned ([#223](https://github.com/SVGreg/skill-guard/issues/223)) ([b15bfeb](https://github.com/SVGreg/skill-guard/commit/b15bfeb1062862696181833418b391f1e99e939e))
+
+
+### Performance Improvements
+
+* **rules:** compile the built-in packs once per process (M5-09) ([#237](https://github.com/SVGreg/skill-guard/issues/237)) ([03fa98c](https://github.com/SVGreg/skill-guard/commit/03fa98c1e70456905f10b06b652e23db747bd5ba))
+
+
+### Miscellaneous Chores
+
+* release 0.3.0 ([25e0c10](https://github.com/SVGreg/skill-guard/commit/25e0c10aa4cdf542b9d99a500895234983270418))
+
 ## [0.2.2](https://github.com/SVGreg/skill-guard/compare/v0.2.1...v0.2.2) (2026-08-21)
 
 
