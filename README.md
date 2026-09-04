@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/SVGreg/skill-guard/main/install.sh 
 
 The script detects your OS/architecture (macOS/Linux, amd64/arm64), verifies the release
 checksum, and installs to `/usr/local/bin` (override with `INSTALL_DIR`; pin a release with
-`VERSION=v0.2.2`). On Windows, download the `.zip` from the
+`VERSION=v0.3.0`). On Windows, download the `.zip` from the
 [releases page](https://github.com/SVGreg/skill-guard/releases) and put `skill-guard.exe`
 on your `PATH`.
 
