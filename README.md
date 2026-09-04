@@ -11,9 +11,12 @@ skill so consumers can verify its integrity and provenance.
 Use it as a **CLI** in CI or a pre-load gate, or as a **Go library** embedded
 into an agent loop (e.g. before a skill is handed to the model).
 
-> Status: `0.1.0-dev` — milestones **M1 (scan)** and **M2 (sign/verify)** are
-> implemented and runnable. See [`docs/skill-guard-design.md`](docs/skill-guard-design.md)
-> for the full design and the roadmap.
+> Status: five milestones are implemented and runnable — **scan** (rule packs,
+> policy, risk score), **sign/verify** (SGMT-1 + DSSE), **SARIF/CI**,
+> **OMS + Sigstore keyless interop**, and the **load-time / install-time gate**
+> with verifiable skill cards. Next up is the taint-analysis engine. See
+> [`docs/skill-guard-design.md`](docs/skill-guard-design.md) for the full design
+> and [`docs/v1-dev-plan.md`](docs/v1-dev-plan.md) for what is tracked to v1.
 
 ---
 
@@ -96,6 +99,9 @@ skill-guard sign ./my-skill --key publisher.key --identity oidc:you@example.com
 
 # 4. Verify signature + integrity + trust
 skill-guard verify ./my-skill --policy .skillguard.yaml
+
+# 5. Or ask for one decision — scan + verify + policy — before loading it
+skill-guard guard ./my-skill            # allow / warn / deny
 ```
 
 A **skill path** is either a **bundle directory** containing a `SKILL.md`
@@ -873,9 +879,9 @@ log, so the anchors are still ones you chose. What changes is that you pin an
 
 | Code | Meaning |
 |------|---------|
-| `0` | ok — scan passed/warned, or verify succeeded |
-| `1` | scan **verdict: fail** (a finding met the fail threshold) |
-| `2` | **verification failed** — invalid signature, tampered/drifted content, a **revoked** signing key, or an attestation that is **expired** (or carries an expiry that cannot be read) |
+| `0` | ok — scan passed/warned, verify succeeded, or `guard` said **allow**/**warn** |
+| `1` | scan **verdict: fail** (a finding met the fail threshold), or `guard` said **deny** |
+| `2` | **verification failed** — invalid signature, tampered/drifted content, a **revoked** signing key, an attestation that is **expired** (or carries an expiry that cannot be read), or a skill card that does not describe the bundle (`verify --card`) |
 | `3` | usage error (bad arguments, missing file, invalid flag value) |
 | `4` | internal error |
 
@@ -899,6 +905,8 @@ mapped to OWASP Agentic Skills Top 10 IDs (`AST01`–`AST10`):
 | `core-exec` | unsafe execution | `SG-EXE-003` privilege escalation, `SG-EXE-004` persistence, `SG-ROGUE-001` rogue tool use |
 | `core-secret` | secret theft & sensitive-path access | `SG-SEC-001` sensitive-path read, `SG-AS-001` agent-state tampering |
 | `core-metadata` | manifest hygiene | `SG-MTA-003` over-broad `allowed-tools`, unsafe deserialization |
+| `core-supply` | supply chain (AST02) | `SG-DEP-001` unpinned dependency, `SG-DEP-007` remote-package auto-execution, `SG-EVA-001` payload staged where scanners don't look |
+| `context` | demotion, not detection | rules that **cap** a finding's severity instead of erasing it, so "matched, but lower risk than it looks" stays auditable ([design note](docs/design-note-demotion.md)) |
 
 Findings carry a **severity**, **confidence** (with context modifiers that
 down-weight code examples and documentation to reduce false positives), a
@@ -912,59 +920,92 @@ to the OWASP Agentic Skills Top 10 (and why). Add your own with `--rulepack`.
 
 ## Use as a Go library
 
-The CLI is a thin wrapper over reusable packages, so you can gate skills inside
-an agent loop:
+The CLI is a thin wrapper over reusable packages. For gating a skill inside an
+agent loop, the one call you want is `guard.Guard` — it loads the bundle,
+verifies whichever signatures it carries, scans it, applies the policy, and
+returns a single decision:
 
 ```go
 package main
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/SVGreg/skill-guard/pkg/model"
+	"github.com/SVGreg/skill-guard/pkg/guard"
 	"github.com/SVGreg/skill-guard/pkg/policy"
-	"github.com/SVGreg/skill-guard/pkg/rules"
-	"github.com/SVGreg/skill-guard/pkg/scan"
-	"github.com/SVGreg/skill-guard/pkg/skill"
 )
 
 func main() {
-	// Load a skill bundle (directory or single SKILL.md).
-	bundle, err := skill.LoadBundle("./my-skill")
+	pol, err := policy.Load(".skillguard.yaml") // "" for the built-in defaults
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	// Load built-in rule packs.
-	packs, err := rules.Builtin()
+	// Cache by content hash: one changed byte is a miss, so a stale allow is
+	// impossible. Reuse the cache across calls — that is what makes the
+	// repeated path sub-millisecond.
+	cache := guard.NewMemoryCache()
+
+	d, err := guard.Guard("./my-skill", guard.Options{Policy: pol, Cache: cache})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	// Scan under a policy.
-	report := scan.New(rules.AllRules(packs), policy.Default()).Scan(bundle)
-
-	if report.Verdict == model.Fail {
-		fmt.Printf("blocked: %s (risk %d/100)\n", report.Verdict, report.RiskScore)
-		for _, f := range report.Findings {
+	switch d.Outcome {
+	case guard.Deny:
+		fmt.Printf("blocked: %s (risk %d/100, %s)\n", d.Reason, d.RiskScore, d.ContentHash)
+		for _, f := range d.Findings {
 			fmt.Printf("  %s %s %s:%d %s\n", f.Severity, f.RuleID, f.File, f.StartLine, f.Title)
 		}
 		return // don't hand this skill to the model
+	case guard.Warn:
+		fmt.Printf("proceeding with a warning: %s\n", d.Reason)
+	case guard.Allow:
+		fmt.Println("skill is safe to load")
 	}
-	fmt.Println("skill is safe to load")
 }
 ```
+
+`guard.ModeInstall` makes the same call stricter for an install step, and
+`Options.Rules`/`Options.Contexts` let a long-lived host compile the rule packs
+once at startup rather than on its first decision (see
+[Measured latency](#measured-latency)).
+
+<details>
+<summary>Scanning directly, when you want the whole report rather than a decision</summary>
+
+```go
+bundle, err := skill.LoadBundle("./my-skill")
+if err != nil {
+	panic(err)
+}
+packs, err := rules.Builtin()
+if err != nil {
+	panic(err)
+}
+// WithContexts carries the severity-capping context rules; without it a
+// demotion rule silently does nothing.
+report := scan.New(rules.AllRules(packs), policy.Default()).
+	WithContexts(rules.AllContexts(packs)).
+	Scan(bundle)
+
+fmt.Println(report.Verdict, report.RiskScore, report.Card.ContentHash)
+```
+
+</details>
 
 Key packages:
 
 | Package | Responsibility |
 |---------|----------------|
+| `pkg/guard` | **the one-shot gate**: load + verify + scan + policy → one `Decision`, with a content-hash cache |
 | `pkg/skill` | parse a `SKILL.md` bundle into an inert model (nothing is executed) |
 | `pkg/rules` | rule-pack schema, matcher primitives, confidence math |
 | `pkg/scan` | orchestrate rules → findings, verdict, risk score, skill-card |
 | `pkg/policy` | `.skillguard.yaml` model, thresholds, waivers, trust roster |
-| `pkg/attest` | SGMT-1 Merkle root, DSSE signing, Ed25519 keys |
-| `pkg/verify` | verify attestation, Merkle integrity, trust |
+| `pkg/attest` | SGMT-1 Merkle root, DSSE signing, Ed25519/ECDSA keys, OMS bundles |
+| `pkg/verify` | verify attestation, Merkle integrity, trust, and skill cards |
 | `pkg/report` | text / JSON / SARIF / skill-card formatters |
 
 ---
