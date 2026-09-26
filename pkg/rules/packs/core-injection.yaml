@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-injection
-version: 1.5.0
+version: 1.5.1
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -1179,10 +1179,20 @@ rules:
         # (`verification`, `required`, `mandatory`, `one-time`) carry that sense
         # without the safety-checklist register. Dropping the bare verb took the
         # corpus back to 0 with no loss on any attack phrasing.
-        - regex: '(?i)\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b[^\n]{0,80}\b(?:required|verification|routine|mandatory|one-time|obligatory)\b'
+        # Leaves 4 and 5: the relay verb must START A CLAUSE — line start,
+        # punctuation, or a conjunction — optionally after a modal ("you must")
+        # or an adverb ("please", "always"). Before 1.5.1 any text could sit in
+        # front of the verb, so a NEGATED relay fired: Cloudflare's wrangler
+        # skill ("… when granular access is required, and never ask the user to
+        # paste its value into chat") went pass -> fail on its own secret-handling
+        # guidance (#336). A per-line `suppress` for "never ask the user" was
+        # rejected: suppress drops the whole line, so appending a negated clause
+        # to a real relay would mute it. Requiring the clause start instead means
+        # `never`/`do not`/`must not` between it and the verb simply fails.
+        - regex: '(?im)(?:(?:^|[.;:!?,(\x{2014}\x{2013}-])\s*|\b(?:and|then|so|now|first|next|also)\s+)(?:(?:and|then|so|now|first|next|also)\s+)*(?:(?:you\s+)?(?:must|should|need\s+to|have\s+to|will|can|may)\s+)?(?:(?:please|always|simply|just|politely|immediately)\s+)?\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b[^\n]{0,80}\b(?:required|verification|routine|mandatory|one-time|obligatory)\b'
           confidence: 0.7
         # (b2) The same pair in the other order.
-        - regex: '(?i)\b(?:required|verification|routine|mandatory|one-time|obligatory)\b[^\n]{0,80}\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b'
+        - regex: '(?im)\b(?:required|verification|routine|mandatory|one-time|obligatory)\b[^\n]{0,80}(?:(?:^|[.;:!?,(\x{2014}\x{2013}-])\s*|\b(?:and|then|so|now|first|next|also)\s+)(?:(?:and|then|so|now|first|next|also)\s+)*(?:(?:you\s+)?(?:must|should|need\s+to|have\s+to|will|can|may)\s+)?(?:(?:please|always|simply|just|politely|immediately)\s+)?\b(?:tell|ask|instruct|prompt|direct|have|get)\b[^\n]{0,25}\buser\b[^\n]{0,60}\b(?:run|execute|paste|enter|type)\b'
           confidence: 0.7
         # (c) The ClickFix tell — suppressing the user's inspection of the very
         # command they are about to run. SG-INJ-010 conceals the AGENT's action
