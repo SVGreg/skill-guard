@@ -601,7 +601,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | done | — | #350 |
 | M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | done | — | #352 |
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | done | M9-03 | #353 |
-| M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | in-progress | M9-02, M9-03 | |
+| M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | done | M9-02, M9-03 | #354 |
 | M9-06 | Embedded agent-location registry (`pkg/locations`) | todo | M9-01 | |
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | todo | M9-05, M9-06 | |
 | M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | todo | M9-05 | |
