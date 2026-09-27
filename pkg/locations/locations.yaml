@@ -1,0 +1,94 @@
+apiVersion: surfaceguard.svgreg.net/locations.v1
+version: 1.0.0
+description: >
+  Where well-known agents load Agent Skills from. Every agent cites its section
+  of docs/skill-locations.md (checked 2026-09-27 against vendor docs); change a
+  path there first, then here. A location is a discovery root: plugin caches are
+  listed as their top directory and pkg/skill.Discover finds the bundles below.
+  A path several agents read (~/.agents/skills, ~/.claude/skills) is listed under
+  each of them and resolved once, keeping every agent that reads it.
+  Path syntax: `~` is the home directory; `${VAR}` / `${VAR:-default}` expand
+  from the environment (an unset VAR with no default drops the location).
+  project-scope paths are relative to the project directory; `walk_up` also
+  checks every ancestor up to the repository root.
+agents:
+  - id: claude-code
+    name: Claude Code
+    source: claude-code
+    locations:
+      - {scope: user, path: "${CLAUDE_CONFIG_DIR:-~/.claude}/skills"}
+      - {scope: project, path: .claude/skills, walk_up: true}
+      - {scope: plugin, path: "${CLAUDE_CODE_PLUGIN_CACHE_DIR:-~/.claude/plugins}/cache"}
+      - {scope: plugin, path: "${CLAUDE_CODE_PLUGIN_CACHE_DIR:-~/.claude/plugins}/marketplaces"}
+      - {scope: plugin, path: "${CLAUDE_CODE_PLUGIN_CACHE_DIR:-~/.claude/plugins}/synced"}
+      - {scope: admin, path: /etc/claude-code/.claude/skills, os: [linux]}
+      - {scope: admin, path: /Library/Application Support/ClaudeCode/.claude/skills, os: [darwin]}
+      - {scope: admin, path: "C:/Program Files/ClaudeCode/.claude/skills", os: [windows]}
+      # The skills page names this; the managed-settings page says ProgramData
+      # is no longer read. Scanned anyway: a stat is cheaper than a blind spot.
+      - {scope: admin, path: "C:/ProgramData/Anthropic/Claude Code/.claude/skills", os: [windows], status: legacy}
+
+  - id: codex
+    name: Codex CLI
+    source: codex-cli
+    locations:
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: project, path: .agents/skills, walk_up: true}
+      - {scope: admin, path: /etc/codex/skills, os: [linux, darwin]}
+      - {scope: user, path: ~/.codex/skills, status: legacy}
+      - {scope: project, path: .codex/skills, status: legacy}
+
+  - id: gemini
+    name: Gemini CLI
+    source: gemini-cli
+    locations:
+      - {scope: user, path: ~/.gemini/skills}
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: project, path: .gemini/skills}
+      - {scope: project, path: .agents/skills}
+
+  - id: copilot
+    name: GitHub Copilot
+    source: github-copilot
+    locations:
+      - {scope: user, path: ~/.copilot/skills}
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: project, path: .github/skills}
+      - {scope: project, path: .claude/skills}
+      - {scope: project, path: .agents/skills}
+
+  - id: cursor
+    name: Cursor
+    source: cursor
+    locations:
+      - {scope: user, path: ~/.cursor/skills}
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: user, path: ~/.claude/skills}
+      - {scope: user, path: ~/.codex/skills}
+      - {scope: project, path: .cursor/skills}
+      - {scope: project, path: .agents/skills}
+      - {scope: project, path: .claude/skills}
+      - {scope: project, path: .codex/skills}
+
+  - id: opencode
+    name: OpenCode
+    source: opencode
+    locations:
+      - {scope: user, path: ~/.config/opencode/skills}
+      - {scope: user, path: ~/.claude/skills}
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: project, path: .opencode/skills, walk_up: true}
+      - {scope: project, path: .claude/skills, walk_up: true}
+      - {scope: project, path: .agents/skills, walk_up: true}
+
+  - id: goose
+    name: Goose
+    source: goose
+    locations:
+      - {scope: user, path: ~/.agents/skills}
+      - {scope: project, path: .agents/skills}
+      - {scope: plugin, path: ~/.agents/plugins}
+      - {scope: project, path: .goose/skills, status: legacy}
+      - {scope: project, path: .claude/skills, status: legacy}
+      - {scope: user, path: ~/.claude/skills, status: legacy}
+      - {scope: user, path: ~/.config/goose/skills, status: legacy}

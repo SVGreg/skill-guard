@@ -602,7 +602,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | done | — | #352 |
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | done | M9-03 | #353 |
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | done | M9-02, M9-03 | #354 |
-| M9-06 | Embedded agent-location registry (`pkg/locations`) | todo | M9-01 | |
+| M9-06 | Embedded agent-location registry (`pkg/locations`) | done | M9-01 | #355 |
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | todo | M9-05, M9-06 | |
 | M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | todo | M9-05 | |
 | M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | todo | M9-04, M9-05 | |
@@ -810,6 +810,11 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-06 was built **without globs and without the `agents` pseudo-agent** that the
+  card asked for. Plugin caches are discovery roots, so `skill.Discover` finds the bundles and a
+  glob would only duplicate it with weaker bounds. Shared dirs are listed under each reading agent
+  and merged by path, which keeps each agent's entry a faithful copy of its own docs. The prefix
+  override is expressed as `${VAR:-default}`. `docs/skill-locations.md` was updated to match.
 - 2026-09-27 — M9-04 reports an unloadable bundle as a SARIF `invocations[].toolExecutionNotifications`
   entry, with `executionSuccessful: false`. The card didn't say how, and without it the bundle
   would just be missing from the results, which looks like "clean". It also added a `bundle`
