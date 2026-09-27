@@ -499,10 +499,20 @@ misleading.
 | `--cache-dir` | cache decisions in this directory (`-` for the user cache dir) |
 | `--no-scan` | decide on provenance alone |
 
-**Caching** keys on the bundle's content hash, a digest of the policy, the gate
-mode, and whether scanning was skipped — so one changed byte or one changed
-setting is a miss, and a decision made without scanning is never served to a
-caller who asked for one.
+**Caching** keys on the following:
+- the bundle's content hash
+- the bytes of its detached signatures (`SKILL.md.skillsig`, `skill.oms.sig`),
+  which the content hash excludes by design
+- a digest of the policy, and the policy directory its `trust.roots` paths
+  resolve against
+- the gate mode, and whether scanning was skipped
+
+So one changed byte, one swapped signature or one changed setting is a miss, and
+a decision made without scanning is never served to a caller who asked for one.
+
+A decision whose inputs change with the clock carries `valid_until`, and is
+recomputed rather than served after it. It is set by an attestation's
+`expires_at` or a policy waiver's `expires`, whichever comes first.
 
 #### Measured latency
 
