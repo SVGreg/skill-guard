@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/SVGreg/surfaceguard/pkg/attest"
 	"github.com/SVGreg/surfaceguard/pkg/attest/oms"
@@ -106,6 +107,13 @@ type Decision struct {
 	// same policy yield the same answer either way — but a caller measuring
 	// latency, or debugging a surprise, needs to know.
 	CacheHit bool `json:"cache_hit,omitempty"`
+
+	// ValidUntil (RFC3339) is when the inputs this decision rests on start to
+	// read differently with no byte changing: the earliest of the attestation's
+	// expires_at and any policy waiver's expiry. A cache serves a decision only
+	// before it; after it, the decision is recomputed. Empty means no clock
+	// dependence.
+	ValidUntil string `json:"valid_until,omitempty"`
 }
 
 // Capabilities is what the bundle declares it may reach.
@@ -168,8 +176,8 @@ func Guard(path string, opt Options) (*Decision, error) {
 	contentHash := attest.MerkleRoot(attest.BundleLeaves(b))
 	var key string
 	if opt.Cache != nil {
-		key = CacheKey(contentHash, pol, opt)
-		if cached, ok := opt.Cache.Get(key); ok {
+		key = decisionKey(CacheKey(contentHash, pol, opt), path, b.Root)
+		if cached, ok := opt.Cache.Get(key); ok && fresh(cached, time.Now()) {
 			cached.CacheHit = true
 			cached.Path = path
 			return cached, nil
@@ -185,8 +193,9 @@ func Guard(path string, opt Options) (*Decision, error) {
 		Capabilities: capabilities(b),
 	}
 
-	sig, provenance := verifyProvenance(b, path, pol, opt.PolicyDir)
+	sig, provenance, sigExpiry := verifyProvenance(b, path, pol, opt.PolicyDir)
 	d.Signature = sig
+	d.ValidUntil = validUntil(sigExpiry, pol, time.Now())
 
 	if !opt.SkipScan {
 		rs, cs := opt.Rules, opt.Contexts
@@ -222,9 +231,13 @@ func Guard(path string, opt Options) (*Decision, error) {
 // not withheld when a signature is absent — that is what policy decides — but a
 // signature that is present and *invalid* is a denial regardless of policy,
 // since it means the bytes are not the bytes that were signed.
-func verifyProvenance(b *skill.Bundle, path string, pol policy.Policy, policyDir string) (SignatureState, []model.Finding) {
+//
+// It also returns the attestation's expiry, when one parsed: past it, the
+// same bytes verify differently, so a cached decision must not outlive it.
+func verifyProvenance(b *skill.Bundle, path string, pol policy.Policy, policyDir string) (SignatureState, []model.Finding, time.Time) {
 	var st SignatureState
 	var findings []model.Finding
+	var expiry time.Time
 	policyDir = resolvePolicyDir(policyDir)
 
 	env, envErr := attest.ReadEnvelope(attest.SigPath(path))
@@ -232,6 +245,11 @@ func verifyProvenance(b *skill.Bundle, path string, pol policy.Policy, policyDir
 		res := verify.Verify(b, env, pol.Trust)
 		applySignature(&st, res, verify.FormatSGMT1)
 		findings = append(findings, gatingProvenance(res)...)
+		if res.Statement != nil {
+			if exp, err := time.Parse(time.RFC3339, res.Statement.Predicate.ExpiresAt); err == nil {
+				expiry = exp
+			}
+		}
 	}
 
 	if data, err := os.ReadFile(oms.SigPath(b.Root)); err == nil {
@@ -239,7 +257,44 @@ func verifyProvenance(b *skill.Bundle, path string, pol policy.Policy, policyDir
 		applySignature(&st, res, verify.FormatOMS)
 		findings = append(findings, gatingProvenance(res)...)
 	}
-	return st, findings
+	return st, findings, expiry
+}
+
+// validUntil is the earliest future instant at which a decision made now
+// could change without any input byte changing: the attestation's expiry, or
+// a waiver's (a waiver stops applying the day it expires, surfacing the
+// finding it hid). Instants already past are not bounds — whatever they
+// changed has changed, and is in this decision.
+func validUntil(sigExpiry time.Time, pol policy.Policy, now time.Time) string {
+	var earliest time.Time
+	consider := func(t time.Time) {
+		if t.After(now) && (earliest.IsZero() || t.Before(earliest)) {
+			earliest = t
+		}
+	}
+	if !sigExpiry.IsZero() {
+		consider(sigExpiry)
+	}
+	for _, w := range pol.Waivers {
+		if exp, err := time.Parse("2006-01-02", w.Expires); err == nil {
+			consider(exp)
+		}
+	}
+	if earliest.IsZero() {
+		return ""
+	}
+	return earliest.UTC().Format(time.RFC3339)
+}
+
+// fresh reports whether a cached decision may still be served at now. An
+// unreadable ValidUntil is treated as expired: a bound we cannot read is not
+// one we can honour.
+func fresh(d *Decision, now time.Time) bool {
+	if d.ValidUntil == "" {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339, d.ValidUntil)
+	return err == nil && now.Before(t)
 }
 
 func applySignature(st *SignatureState, res *verify.Result, format string) {

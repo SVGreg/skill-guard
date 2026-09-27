@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/SVGreg/surfaceguard/pkg/attest"
+	"github.com/SVGreg/surfaceguard/pkg/attest/oms"
 	"github.com/SVGreg/surfaceguard/pkg/model"
 	"github.com/SVGreg/surfaceguard/pkg/policy"
 )
@@ -41,9 +43,12 @@ type Cache interface {
 // SkipScan is in the key because a decision made without scanning is not the
 // same answer as one made with it — reusing the cheap answer for a full request
 // would silently downgrade the gate.
+//
+// PolicyDir is in the key because trust.roots paths are resolved against it:
+// one policy file in two directories can name two different root sets.
 func CacheKey(contentHash string, pol policy.Policy, opt Options) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v1\x00%s\x00%t\x00%s\x00", contentHash, opt.SkipScan, mode(opt))
+	fmt.Fprintf(h, "v2\x00%s\x00%t\x00%s\x00%s\x00", contentHash, opt.SkipScan, mode(opt), absDir(opt.PolicyDir))
 	h.Write(policyDigest(pol))
 	// A caller supplying its own rules is not running the built-in set, so its
 	// decisions must not be served to a caller who is. The count is a weak
@@ -51,6 +56,37 @@ func CacheKey(contentHash string, pol policy.Policy, opt Options) string {
 	// more than the lookup saves; callers overriding rules are rare and can
 	// pass their own cache.
 	fmt.Fprintf(h, "rules:%d,ctx:%d", len(opt.Rules), len(opt.Contexts))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func absDir(dir string) string {
+	if abs, err := filepath.Abs(resolvePolicyDir(dir)); err == nil {
+		return abs
+	}
+	return dir
+}
+
+// decisionKey binds a CacheKey to the bundle's detached signatures. The
+// content hash is the Merkle root over the bundle's files, which by design
+// excludes SKILL.md.skillsig and skill.oms.sig (a signature cannot cover
+// itself) — so without this, adding, replacing or deleting a signature left
+// the key unchanged, and a decision made about the old signature was served
+// for the new one: an allow cached under a trusted signature survived that
+// signature being swapped for a forged one. The signature files are read
+// raw; a missing one hashes as absent, distinct from an empty file.
+func decisionKey(key, path, root string) string {
+	h := sha256.New()
+	h.Write([]byte(key))
+	for _, p := range []string{attest.SigPath(path), oms.SigPath(root)} {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			h.Write([]byte("\x00absent"))
+			continue
+		}
+		sum := sha256.Sum256(data)
+		h.Write([]byte("\x00present"))
+		h.Write(sum[:])
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
