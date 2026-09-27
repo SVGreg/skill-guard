@@ -275,3 +275,25 @@ func TestSchemaValidatorCatchesViolations(t *testing.T) {
 		})
 	}
 }
+
+// TestExternalSARIFValidates checks a SARIF file produced outside the test —
+// the GitHub Action's output in CI (M9-09) — against the vendored schema. It
+// is skipped unless SG_SARIF_FILE names the file, so a local `go test ./...`
+// is unaffected.
+func TestExternalSARIFValidates(t *testing.T) {
+	path := os.Getenv("SG_SARIF_FILE")
+	if path == "" {
+		t.Skip("SG_SARIF_FILE not set")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("%s is not JSON: %v", path, err)
+	}
+	if errs := loadSchema(t).validate(doc); len(errs) > 0 {
+		t.Fatalf("%d schema violations in %s:\n  %s", len(errs), path, strings.Join(errs, "\n  "))
+	}
+}

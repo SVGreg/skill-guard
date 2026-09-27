@@ -1236,7 +1236,7 @@ failing obscurely.
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `path` | `.` | bundle directory or a single `SKILL.md` |
+| `path` | `.` | bundle directory, a single `SKILL.md`, or any folder: every skill below it is scanned into one report and one SARIF run |
 | `format` | `sarif` | `sarif`, `json`, `text`, `skill-card` |
 | `output` | `surfaceguard.sarif` | file the scan output is written to |
 | `policy` | – | path to a `.surfaceguard.yaml` |
