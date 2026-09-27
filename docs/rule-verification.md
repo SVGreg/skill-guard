@@ -2158,6 +2158,19 @@ case, and an ordinary ```` ```bash ```` block containing `curl … | bash` that 
 ## 4. Per-rule verification — metadata, supply chain, triggers, provenance
 
 ### SG-MTA-001 — Unsafe YAML/deserialization  (AST04, critical) — **T0** — **implemented** (`core-metadata`)
+> **Other spellings of the same tags (core-metadata 1.2.0, #344).** The tag leaves matched only the shorthand
+> (`!!python/…`, `!ruby/object`, `!!java`). YAML defines `!<tag:yaml.org,2002:X>` as the node `!!X`, and PyYAML's
+> unsafe loaders resolve both, so **in frontmatter the verbatim form, `!ruby/hash:Gem::Requirement` (the published
+> Psych universal gadget chain) and `!ruby/class` all scanned clean** (verified on `c40104d`). Added: a verbatim-tag
+> leaf (0.95), the Ruby leaf widened to `object|struct|exception|class|module` plus `hash(-with-ivars)?:` *with a
+> class name* (a bare `!ruby/hash` or `!ruby/sym` is plain data and stays clean), and a `%TAG`-handle leaf.
+> Directives precede `---`, so that form cannot sit in frontmatter; it lives in standalone `.yaml` files, which
+> are `asset`-role and unread until #187, and it is shipped now so it is live when that lands. **Corpus: 0 new
+> findings.** Across the six pinned corpora the only matching lines are the pre-existing `!ruby/object` examples
+> in a Trail of Bits reference doc, which this rule deliberately does not target. `TestUnsafeDeserializationCovered`
+> gains 8 TP rows (all clean on the old pack) and 4 benign rows (`!<tag:yaml.org,2002:str>`, a non-core `%TAG`,
+> bare `!ruby/hash`, `!ruby/sym`).
+>
 - **Signals:** unsafe YAML tags (`!!python/object|apply|name|module`, `!ruby/object`, `!!java`) and the
   deserialization sinks — `yaml.load(` without a safe loader, `yaml.unsafe_load(`/`yaml.full_load(`,
   `pickle`/`marshal`.`load(s)`, `dill`/`jsonpickle`, `joblib.load(`, `np.load(…, allow_pickle=True)`,
