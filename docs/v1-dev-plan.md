@@ -603,7 +603,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | done | M9-03 | #353 |
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | done | M9-02, M9-03 | #354 |
 | M9-06 | Embedded agent-location registry (`pkg/locations`) | done | M9-01 | #355 |
-| M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | in-progress | M9-05, M9-06 | |
+| M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | done | M9-05, M9-06 | #356 |
 | M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | todo | M9-05 | |
 | M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | todo | M9-04, M9-05 | |
 | M9-10 | `verify --installed`: attestation status across installed skills | todo | M9-07 | |
