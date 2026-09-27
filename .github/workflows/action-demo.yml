@@ -81,6 +81,45 @@ jobs:
           test "${{ steps.benign.outputs.output-file }}" = "benign.sarif" \
             || { echo "output-file was '${{ steps.benign.outputs.output-file }}'"; exit 1; }
 
+      # A repository of skills: the action pointed at a folder that is not
+      # itself a skill must discover every bundle below it and fail on the
+      # worst one, in one SARIF run whose URIs stay relative to that folder.
+      - name: Scan a folder holding several skills
+        id: multi
+        continue-on-error: true
+        uses: ./
+        with:
+          path: testdata
+          output: multi.sarif
+          version: preinstalled
+          upload-sarif: "false"
+
+      - name: The folder scan must fail on its worst skill, in one run
+        run: |
+          test "${{ steps.multi.outputs.exit-code }}" = "1" \
+            || { echo "expected exit 1, got ${{ steps.multi.outputs.exit-code }}"; exit 1; }
+          test "${{ steps.multi.outputs.verdict }}" = "fail" \
+            || { echo "expected verdict fail, got '${{ steps.multi.outputs.verdict }}'"; exit 1; }
+          python3 - <<'PY'
+          import json, os
+          log = json.load(open("multi.sarif"))
+          assert len(log["runs"]) == 1, "a folder scan must be one run"
+          run = log["runs"][0]
+          props = run["properties"]
+          assert props["mode"] == "multi" and props["bundles"] == 2, props
+          for r in run["results"]:
+              for loc in r.get("locations", []):
+                  uri = loc["physicalLocation"]["artifactLocation"]["uri"]
+                  assert uri.startswith(("benign/", "malicious/")), uri
+                  assert os.path.exists(os.path.join("testdata", uri)), uri
+          print(f"{props['bundles']} bundles, {len(run['results'])} results, verdict {props['verdict']}")
+          PY
+
+      - name: The folder-scan SARIF validates against the vendored schema
+        env:
+          SG_SARIF_FILE: ${{ github.workspace }}/multi.sarif
+        run: go test ./pkg/report -run TestExternalSARIFValidates -count=1 -v
+
       # The action's own guardrails. Each of these used to reach surfaceguard and
       # come back as a usage error, which reads like the scanner's fault rather
       # than the workflow's.

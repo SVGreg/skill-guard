@@ -14,7 +14,10 @@ branding:
 
 inputs:
   path:
-    description: Bundle directory (containing SKILL.md) or a single SKILL.md file to scan.
+    description: >-
+      What to scan: a bundle directory (containing SKILL.md), a single SKILL.md file, or any
+      other folder — every skill below it is discovered and scanned into one report (one SARIF
+      run), so the default "." covers a repository that keeps its skills in a skills/ tree.
     required: false
     default: "."
   format:
