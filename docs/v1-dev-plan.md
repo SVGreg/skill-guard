@@ -59,6 +59,15 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
    defines `Guard()` as the agent-loop entrypoint and `WithVerdictCache` as merkle-root-keyed.
    M5-02/M5-03 implement that spec rather than inventing one, and §15's open question 1 (what
    `fail_on` `Guard()` defaults to) is surfaced on the M5-02 card as an owner decision.
+8. **M9 is not from the roadmap (2026-09-27).** It comes from an owner request: today a user has
+   to know exactly where every skill lives and scan them one at a time. Repo state it plans
+   against: `scan`/`guard`/`sign`/`verify` each take **exactly one** bundle (`bundlePathArg`); a
+   directory without a root `SKILL.md` is exit 3 (`ux.go`); `skill.LoadBundle` **rejects a symlinked
+   root**, which is how many installers lay skills out (`~/.claude/skills/x → ~/.agents/skills/x`);
+   the only encoded knowledge of app locations is the hook's two Claude Code paths
+   (`hooks/surfaceguard_hook.py`) and the agent-home regexes in `core-secret`'s SG-AS-001.
+   Owner decisions recorded on the M9 cards: **extend `scan`** rather than add an `audit` command,
+   and ship a **broad agent set** in the first registry.
 5. **Waivers already survive scanning** — `scan.Report.Waived` keeps waived findings rather than
    dropping them, so the SARIF `suppressions` requirement (M3-04) needs no scan-engine change.
 
@@ -71,9 +80,10 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
 | **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | **complete** |
-| **M6** | Taint analysis engine | titles only | **next — needs `/sg-plan`** |
+| **M6** | Taint analysis engine | titles only | after M9 — needs `/sg-plan` |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
 | **M8** | Hardening (parallel) | titles only | needs `/sg-plan` |
+| **M9** | Multi-skill discovery + installed-skill scan | M9-01 … M9-10 | **expanded — next, ahead of M6** (owner request) |
 | **D** | Distribution track (parallel from M3) | D-01 … D-06 | expanded |
 
 ---
@@ -552,6 +562,195 @@ first call cheap too still passes `Options.Rules`.
 - M8-03 Evasion corpus fixture + detections (padding, multi-layer encoding, zero-width, homoglyphs)
 - M8-04 Over-privilege analysis: declared `allowed-tools` vs capabilities actually exercised (AST03)
 
+## M9 — Multi-skill discovery + installed-skill scan
+
+**Why.** `scan` takes one bundle. Scanning a repo that ships a `skills/` tree, a vendor monorepo, or
+"everything my agents can load on this machine" means knowing every path and looping in the shell.
+M9 makes `scan` accept folders and many paths, and adds a data-driven registry of where
+well-known agents keep skills. Source: owner request 2026-09-27 (§0 item 8).
+
+**Contract decided up front (owner, 2026-09-27).**
+
+```sh
+surfaceguard scan ./my-skill                     # unchanged, byte-for-byte
+surfaceguard scan ./repo ./other-repo            # discovers every bundle below each path
+surfaceguard scan --installed                    # all known agents, user + project scope
+surfaceguard scan --installed --agent claude-code,codex --scope user
+surfaceguard locations                           # agent · scope · path · exists · #skills
+```
+
+- **Mode is chosen per path, by content.** A path that *is* a bundle (a `SKILL.md` file, or a
+  directory with `SKILL.md` at its root) is scanned exactly as today. A directory without one is a
+  **discovery root**. One path that is a bundle, with no other paths and no `--installed`, is
+  **single mode** and every output stays byte-identical to today. Anything else is **multi mode**.
+- **Discovery stops at a bundle.** A `SKILL.md` directory is one skill; its subtree belongs to it
+  (that is what `LoadBundle` already reads), so nested `SKILL.md` files are not separate targets.
+- **Symlinks: followed only as a bundle entry, never for descent.** A symlinked directory entry is
+  a candidate only if its target directly contains `SKILL.md`; it is scanned once by real path and
+  listed under every path that reaches it. Symlinks *inside* a bundle stay rejected (design §7.1).
+- **Exit codes keep their meaning, over the set.** `1` if any bundle's verdict is `fail` **or any
+  discovered bundle failed to load**. Fail-closed: an unreadable skill in an audit is a finding,
+  not noise. `3` if discovery finds no bundles at all, or on a bad flag. `0` otherwise. `2` is not
+  produced by `scan`.
+- **Nothing is fetched or executed**, and discovery reads no file content except to test whether
+  `SKILL.md` exists.
+
+| ID | Task | Status | Deps | PR |
+|---|---|---|---|---|
+| M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | todo | — | |
+| M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | todo | — | |
+| M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | todo | — | |
+| M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | todo | M9-03 | |
+| M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | todo | M9-02, M9-03 | |
+| M9-06 | Embedded agent-location registry (`pkg/locations`) | todo | M9-01 | |
+| M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | todo | M9-05, M9-06 | |
+| M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | todo | M9-05 | |
+| M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | todo | M9-04, M9-05 | |
+| M9-10 | `verify --installed`: attestation status across installed skills | todo | M9-07 | |
+
+### M9-01 — Skill-location spike (docs only, do first for the registry)
+**Goal.** Know, from each vendor's own documentation or source, where each agent loads skills
+from. Model memory and blog posts are not good enough here, and the paths change between releases.
+**Deliverables.** `docs/skill-locations.md`: one table per agent with scope (user / project /
+plugin or extension), path per OS (Linux, macOS, Windows), env-var overrides (`CLAUDE_CONFIG_DIR`,
+`CODEX_HOME`, `XDG_CONFIG_HOME` …), whether the agent follows symlinks, and a primary-source link
+with the date checked. Agents: **Claude Code** (user, project, plugin-marketplace skills), **Codex
+CLI**, **Gemini CLI**, **GitHub Copilot** (`.github/skills` and user scope), **Cursor**,
+**OpenCode**, **Goose**, and the shared **`~/.agents/skills`** convention. An agent with no
+documented skills location is recorded as such, not guessed. The spike **ends by rewriting
+M9-06's card** with the confirmed schema fields (e.g. whether globs are needed for plugin dirs).
+**Acceptance.** Every row in the doc carries a source URL and a check date. `grep -c 'http'
+docs/skill-locations.md` ≥ the number of agent rows. M9-06's card was updated in the same PR.
+
+### M9-02 — `skill.Discover()`
+**Goal.** A library call that turns one or more roots into an ordered, de-duplicated list of
+bundle directories, safe to point at `$HOME`.
+**Deliverables.** `pkg/skill/discover.go`:
+`Discover(roots []string, opt DiscoverOptions) ([]Candidate, []DiscoverError, error)`. Each
+`Candidate` has `Path` (as reached), `RealPath` (resolved), `Root` (which root found it) and `Via`
+(the symlink path, if any). Rules:
+- Stop descending at a directory containing `SKILL.md`. A root that is itself a bundle yields
+  exactly one candidate.
+- Skip `skipNames` plus `node_modules`, `.venv`, `venv`, `__pycache__`, `vendor`, `.cache`. This is
+  the same class of vendored tree as issue #293, so share the list with the loader rather than fork
+  it.
+- `MaxDepth` (default 8) and `MaxBundles` (default 5000) bounds. Hitting either one is reported,
+  never silently truncated.
+- Symlinks per the M9 contract: followed only when the target directly contains `SKILL.md`, never
+  for descent. De-duplicate by `RealPath`, and don't loop on a cycle.
+- Unreadable directories become `DiscoverError`s, not a hard error. Output is sorted by `Path`.
+- No file content is read.
+
+`LoadBundle`'s refusal of a symlinked *root* stays unchanged: callers load `RealPath`.
+**Acceptance.** `go test ./pkg/skill -run TestDiscover` with a `t.TempDir()` tree covering: nested
+bundles, a bundle inside a bundle (one candidate), a symlinked bundle plus its target (one
+candidate, `Via` set), a symlink loop, a symlink to a non-bundle dir (not followed), `node_modules`
+skipped, depth/count caps reported, and deterministic order across runs.
+
+### M9-03 — Multi-bundle scan engine + aggregate report
+**Goal.** Scan N bundles in one process and produce one report whose verdict is the worst of the
+set.
+**Deliverables.** In `pkg/scan`: `ScanAll(cands, loader) *MultiReport`. `MultiReport{Bundles
+[]BundleResult, Verdict, Counts, RiskScoreMax}`, where `BundleResult{Path, Name, Via, Report
+*Report, Error string}`. The single-bundle `Report` type stays untouched. Parallelism is
+`min(GOMAXPROCS, n)` and never above it (CLAUDE.md warns this host hangs when oversubscribed). It
+uses the memoized rule set (M5-09) and gives each bundle its own loaded content, so a large set
+doesn't hold every bundle's bytes at once. In `pkg/report`:
+- **text** — a summary table (verdict · risk · findings · path, worst first), then findings for
+  every non-`pass` bundle (`-v` shows all).
+- **json** — a new top-level envelope with `"mode": "multi"` and `bundles: [...]`, where each
+  element is today's single report object. Document it in the README's JSON section.
+  `skill-card` in multi mode is a usage error (exit 3): a card describes one bundle.
+
+**Acceptance.** A unit test over `testdata/benign` + `testdata/malicious` gives verdict `fail`,
+two results, and per-bundle findings identical to two single `Scan` calls. A load-error candidate
+yields `Error` set and verdict `fail`. `go test -race ./pkg/scan` is green.
+
+### M9-04 — SARIF in multi mode
+**Goal.** `--format sarif` over many bundles uploads as one code-scanning analysis whose alerts
+link to the right files.
+**Deliverables.** One `run` with every bundle's findings. Artifact URIs are relative to the
+**discovery root**, not the bundle, so `skills/foo/SKILL.md` links in GitHub; this reuses M3-09's
+`uriBaseId` work where it landed. Rule metadata is emitted once. Waivers and suppressions still
+come out per finding.
+**Acceptance.** A golden test for a two-bundle discovery root. It validates against the vendored
+SARIF schema (M3-05's validator), and every `artifactLocation.uri` resolves to an existing file
+under the root.
+
+### M9-05 — `scan <path>...`
+**Goal.** The CLI half of the contract: folders and many paths just work.
+**Deliverables.** `scan` becomes `cobra.MinimumNArgs(1)`, and mode selection follows the M9
+contract. New flags: `--max-depth`, `--max-bundles`. The "no SKILL.md at its root" usage error
+becomes discovery, and "discovery found nothing" gets its own exit-3 message naming the roots
+searched. A progress line goes to **stderr** only when stderr is a TTY. `--out` and the text mirror
+behave as in single mode. Update `scan --help`, the README usage section, and the smoke-test
+contract in CLAUDE.md.
+**Acceptance.**
+- `scan testdata/benign` and `scan testdata/malicious` produce byte-identical stdout to `main`
+  (golden diff) with unchanged exit codes 0/1.
+- `scan testdata` discovers both fixtures and exits 1.
+- `scan testdata/benign testdata/benign` scans once.
+- An empty temp dir exits 3.
+- A CLI test covers a bundle whose load fails, which exits 1 and shows up in the summary as
+  `error`.
+
+### M9-06 — Agent-location registry
+**Goal.** "Where does agent X keep skills" is **data**, like rule packs: adding an agent or fixing
+a path is a YAML edit.
+**Deliverables.** `pkg/locations/locations.yaml` (`//go:embed`) with `apiVersion:
+surfaceguard.svgreg.net/locations.v1` and its own `version:`. Each entry has agent id, display name,
+scope (`user`/`project`/`plugin`), per-OS path templates with `~`, `${ENV}` and env-override
+precedence, and optional globs, all per M9-01's findings. `locations.Resolve(filter, projectDir)
+[]Location{Agent, Scope, Path, Exists, Source}` expands templates using only env and `os.UserHomeDir`
+— no exec, no network. Project scope resolves against `--project-dir` (default: cwd). Glob expansion
+is bounded and does not follow symlinked directories.
+**Acceptance.** Table tests with a fake `HOME` / `XDG_CONFIG_HOME` / override vars per OS template.
+A test asserts that every registry entry cites a `docs/skill-locations.md` row, and that
+`locations.yaml` loads through a strict decoder (unknown fields are rejected).
+
+### M9-07 — `scan --installed` and `surfaceguard locations`
+**Goal.** One command audits everything the user's agents can load.
+**Deliverables.**
+- `scan --installed [--agent id,...] [--scope user|project|plugin|all] [--project-dir DIR]` feeds
+  every existing resolved location into `Discover()` as roots. `--installed` combines with explicit
+  paths.
+- Results are grouped by agent in text output. A bundle shared by two agents (common with
+  `~/.agents/skills` symlinks) is scanned once and listed under both.
+- An unknown `--agent` exits 3 and lists the valid ids.
+- A new `locations [--agent] [--scope] [--json]` command prints agent · scope · path · exists ·
+  skill count. It never scans, so it's the "where would you look" dry run.
+- README gets a "Scan everything installed" section.
+
+**Acceptance.** A CLI test with a fake `HOME` holding Claude Code and Codex user skills (one
+symlinked to a shared `~/.agents/skills` bundle) checks three things: `scan --installed` scans
+each real bundle once and exits per the worst verdict; `--agent codex` restricts the set; and
+`locations --json` parses and reports `exists:false` for absent dirs.
+
+### M9-08 — Corpus parity and latency
+**Goal.** Prove multi mode changes nothing about findings and measure what one process buys.
+**Deliverables.** A script (`evaluation/scripts/multi_parity.py`) runs `scan --format json
+evaluation/clawhub` once and diffs per-bundle findings against the existing `run_scans.sh` raw
+JSON. Record wall-clock and peak RSS for both runs in `evaluation/README.md`, using default
+parallelism only (≤ `nproc`).
+**Acceptance.** The parity script reports 0 differing bundles. Numbers are recorded with machine
+core count.
+
+### M9-09 — Action on multi-skill repos
+**Goal.** The GitHub Action's default `path: .` works on a repo whose root holds a `skills/` tree.
+**Deliverables.** Update `action.yml` input docs, add a demo workflow job over a two-bundle
+fixture, and check that the SARIF upload path still works (M3-06 manual-dispatch pattern).
+**Acceptance.** The workflow job exits per the fixture's worst verdict. The uploaded SARIF passes
+the M3-05 validator in CI.
+
+### M9-10 — `verify --installed`
+**Goal.** The signing half of the audit: for every installed skill, is it signed, by whom, and is
+that signer in my trust roster?
+**Deliverables.** `verify` accepts the same path/`--installed` modes. Its multi-mode output is a
+table of bundle · signature type · signer · `SG-PRV-*` state. Exit `2` if any bundle fails
+verification, per the existing contract.
+**Acceptance.** A CLI test over a fake `HOME` with one signed-and-trusted, one unsigned and one
+tampered bundle gives states verified / unverified / merkle-mismatch and exit 2.
+
 ---
 
 ## D — Distribution track (parallel from M3)
@@ -593,6 +792,11 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — **M9 added and expanded** (10 tasks) from an owner request, not the roadmap (§0
+  item 8): folder discovery and well-known-location scanning. Ordered **ahead of M6** deliberately
+  — it is a user-facing gap in the existing command, needs no new analysis engine, and M6 is still
+  titles-only. Owner chose to extend `scan` (not a new `audit` command) and a broad first agent
+  set. M9-01 is a primary-source spike because vendor skill paths drift; it rewrites M9-06's data.
 - 2026-09-04 — Marketplace-readiness pass on the action (D-01's repo half). Notable: the repo had
   **no `LICENSE` file** while the README claimed Apache-2.0 — the marketplace listing shows the
   licence, so that was a publish blocker rather than a tidiness issue. The action now installs the
