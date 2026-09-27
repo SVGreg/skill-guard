@@ -86,3 +86,24 @@ func TestMultiJSONShape(t *testing.T) {
 		t.Errorf("ast_references not hoisted to the envelope")
 	}
 }
+
+// TestMultiTextGroupsByAgent: an installed-skills scan lists each agent's
+// skills under it, and a shared skill under every agent that loads it.
+func TestMultiTextGroupsByAgent(t *testing.T) {
+	ok := &scan.Report{Verdict: model.Pass, RiskTier: "L0"}
+	m := scan.Aggregate([]scan.BundleResult{
+		{Path: "/h/.agents/skills/shared", Agents: []string{"codex", "cursor"}, Report: ok},
+		{Path: "/h/.claude/skills/mine", Agents: []string{"claude-code"}, Report: ok},
+		{Path: "./extra", Report: ok},
+	})
+	var buf bytes.Buffer
+	MultiText(&buf, m, Options{NoColor: true})
+	out := buf.String()
+	if strings.Count(out, "/h/.agents/skills/shared") != 2 {
+		t.Errorf("shared skill must be listed under both agents:\n%s", out)
+	}
+	ic, ix, iu, io := strings.Index(out, "  claude-code\n"), strings.Index(out, "  codex\n"), strings.Index(out, "  cursor\n"), strings.Index(out, "  other paths\n")
+	if ic < 0 || ix < 0 || iu < 0 || io < 0 || !(ic < ix && ix < iu && iu < io) {
+		t.Errorf("groups missing or out of order:\n%s", out)
+	}
+}

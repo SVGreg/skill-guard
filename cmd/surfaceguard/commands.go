@@ -47,6 +47,8 @@ func scanCmd() *cobra.Command {
 	var rulepacks []string
 	var verbose, quiet, noColor bool
 	var snippet, maxDepth, maxBundles int
+	var installed bool
+	var inst installedOpts
 
 	cmd := &cobra.Command{
 		Use:   "scan <path>...",
@@ -65,6 +67,13 @@ INPUT <path>...:
   gives one aggregate report: a row per skill, worst first, then the
   findings of every skill that did not pass (all of them with -v).
 
+INSTALLED SKILLS (--installed): scan every skill directory well-known agents
+  load from on this machine — Claude Code, Codex, Gemini CLI, GitHub Copilot,
+  Cursor, OpenCode, Goose — at user, project, plugin and admin scope. Narrow
+  it with --agent and --scope; see where it looks with 'surfaceguard
+  locations'. A skill several agents share is scanned once and listed under
+  each. Project scope is relative to --project-dir (default: cwd).
+
 OUTPUT (--format):
   • text        human-readable findings (default)
   • json        machine-readable report for CI/tooling
@@ -80,12 +89,19 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.
 		Example: `  surfaceguard scan ./my-skill
   surfaceguard scan ./repo                        # every skill under ./repo
   surfaceguard scan ~/.claude/skills ./.claude/skills --format json
+  surfaceguard scan --installed                   # everything your agents can load
+  surfaceguard scan --installed --agent claude-code,codex --scope user
   surfaceguard scan ./my-skill/SKILL.md --verbose
   surfaceguard scan ./my-skill --snippet          # show the triggering source line
   surfaceguard scan ./my-skill --snippet=0 -v     # no context lines, full rationale
   surfaceguard scan ./my-skill --format json --out report.json
   surfaceguard scan ./my-skill --policy .surfaceguard.yaml --fail-on critical`,
-		Args: scanPathsArg,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if installed {
+				return nil // the registry supplies the roots; paths are optional extras
+			}
+			return scanPathsArg(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
@@ -93,12 +109,33 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.
 			if err := validateSeverity("--fail-on", failOn); err != nil {
 				return err
 			}
+			mo := multiScanOpts{
+				format: format, out: out, policyPath: policyPath, failOn: failOn,
+				rulepacks: rulepacks, verbose: verbose, quiet: quiet, noColor: noColor,
+				maxDepth: maxDepth, maxBundles: maxBundles,
+			}
+			if !installed {
+				for _, name := range []string{"agent", "scope", "project-dir"} {
+					if cmd.Flags().Changed(name) {
+						return fail(3, "--%s selects installed-skill locations; it needs --installed", name)
+					}
+				}
+			}
+			if installed {
+				locs, err := inst.resolve()
+				if err != nil {
+					return err
+				}
+				roots := existingRoots(locs)
+				if len(roots) == 0 && len(args) == 0 {
+					return fail(3, "none of the %d known skill locations exist on this machine for this selection\n"+
+						"  run 'surfaceguard locations' to see where scan --installed looks.", len(locs))
+				}
+				mo.locs = locs
+				return runMultiScan(append(args, roots...), mo)
+			}
 			if len(args) > 1 || !isSingleBundle(args[0]) {
-				return runMultiScan(args, multiScanOpts{
-					format: format, out: out, policyPath: policyPath, failOn: failOn,
-					rulepacks: rulepacks, verbose: verbose, quiet: quiet, noColor: noColor,
-					maxDepth: maxDepth, maxBundles: maxBundles,
-				})
+				return runMultiScan(args, mo)
 			}
 			b, err := loadBundleFriendly(args[0])
 			if err != nil {
@@ -168,6 +205,8 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.
 	f.BoolVar(&noColor, "no-color", false, "disable ANSI color in output")
 	f.IntVar(&maxDepth, "max-depth", skill.DefaultMaxDepth, "folder scans: how many directory levels below each path to search for skills")
 	f.IntVar(&maxBundles, "max-bundles", skill.DefaultMaxBundles, "folder scans: stop after this many skills (reported, never silent)")
+	f.BoolVar(&installed, "installed", false, "scan every skill well-known agents load on this machine (see 'surfaceguard locations')")
+	inst.register(f)
 	return cmd
 }
 

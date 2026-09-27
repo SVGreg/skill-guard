@@ -111,7 +111,7 @@ EXIT CODES: 0 ok · 1 scan verdict fail · 2 verification failed · 3 usage · 4
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(scanCmd(), guardCmd(), signCmd(), verifyCmd(), keygenCmd(), versionCmd())
+	root.AddCommand(scanCmd(), guardCmd(), signCmd(), verifyCmd(), keygenCmd(), locationsCmd(), versionCmd())
 
 	if err := root.Execute(); err != nil {
 		// Cobra usage/flag errors → exit 3; command errors set their own code
