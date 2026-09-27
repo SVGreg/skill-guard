@@ -15,7 +15,12 @@ project can't skew the corpus.
 
 Env:
   WANT          number of NEW skill bundles to save            (default 200)
-  OUTDIR        output dir under evaluation/                   (default skillsmp)
+  OUTROOT       root the corpus dir lives under                (default evaluation/)
+  OUTDIR        corpus dir name under OUTROOT                  (default skillsmp)
+  LEDGER_SOURCE when set (e.g. "skillsmp"), consult the sweep ledger and skip
+                bundles already seen and unchanged — packs moved, source repo has
+                new commits (one `git ls-remote` per repo), or TTL lapsed.
+                OUTROOT and LEDGER_SOURCE were silently ignored before #321.
   SKIP_DIRS     comma-separated corpus dirs whose skills to skip (dedup)
   MAX_PER_REPO  cap of skills taken from any one GitHub repo   (default 5)
   SORT          SkillsMP sort key                              (default recent)
@@ -30,10 +35,18 @@ import json
 import os
 import subprocess
 import time
+import sys
 import urllib.request
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import corpus_ledger  # noqa: E402  (same directory, not a package)
+
 API = "https://skillsmp.com/api/skills"
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", os.environ.get("OUTDIR", "skillsmp"))
+OUT_ROOT = os.environ.get("OUTROOT") or os.path.join(HERE, "..")
+OUT_NAME = os.environ.get("OUTDIR", "skillsmp")
+OUT_DIR = os.path.join(OUT_ROOT, OUT_NAME)
+LEDGER_SOURCE = os.environ.get("LEDGER_SOURCE") or None
 WANT = int(os.environ.get("WANT", "200"))
 MAX_PER_REPO = int(os.environ.get("MAX_PER_REPO", "5"))
 # Files taken from any one bundle. One GitHub API call per file means an
@@ -128,7 +141,7 @@ def download_dir(owner, repo, ref, path, dest, depth=0, budget=None):
 def load_skip():
     skip = set()
     for d in SKIP_DIRS:
-        base = os.path.join(os.path.dirname(__file__), "..", d)
+        base = os.path.join(HERE, "..", d)
         if os.path.isdir(base):
             for name in os.listdir(base):
                 if os.path.exists(os.path.join(base, name, "SKILL.md")):
@@ -139,7 +152,15 @@ def load_skip():
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     skip = load_skip()
-    manifest, ok, per_repo, page = [], 0, {}, 1
+    manifest, ok, per_repo, page, skipped = [], 0, {}, 1, 0
+    led = packs = None
+    heads = {}  # repo -> HEAD sha, one `git ls-remote` per repo per run
+    if LEDGER_SOURCE:
+        led = corpus_ledger.load()["skills"]
+        packs = corpus_ledger.pack_versions()
+        print(f"[*] ledger: {len(led)} skills known, "
+              f"{sum(1 for k in led if k.startswith(LEDGER_SOURCE + '/'))} from this source",
+              flush=True)
     print(f"[*] fetching {WANT} new SkillsMP skills (sort={SORT}, max {MAX_PER_REPO}/repo, "
           f"skipping {len(skip)} already-loaded) -> {OUT_DIR}", flush=True)
     while ok < WANT and page <= 200:
@@ -172,6 +193,18 @@ def main():
             slug = f"{owner}__{repo}__{name}".replace("/", "_")
             if name.lower() in skip or slug.lower() in skip:
                 continue
+            if led is not None:
+                # One `ls-remote` per repo per run: it is both the drift check for
+                # bundles already seen and the commit recorded for new ones, so a
+                # later sweep can tell whether the repo moved.
+                if repo_key not in heads:
+                    heads[repo_key] = corpus_ledger.repo_head(repo_key)
+                key = f"{LEDGER_SOURCE}/{slug}"
+                fetch, _ = corpus_ledger.decide(key, led.get(key), packs,
+                                                repo_head=heads[repo_key], source=LEDGER_SOURCE)
+                if not fetch:
+                    skipped += 1
+                    continue
             skill_dir = os.path.dirname(skill_path)
             dest = os.path.join(OUT_DIR, slug)
             n = download_dir(owner, repo, branch, skill_dir, dest)
@@ -181,7 +214,9 @@ def main():
             per_repo[repo_key] = per_repo.get(repo_key, 0) + 1
             manifest.append({"slug": slug, "name": name, "owner": owner, "repo": repo,
                              "branch": branch, "skill_path": skill_path, "stars": s.get("stars"),
-                             "github": s.get("githubUrl"), "dir": f"skillsmp/{slug}", "files": n})
+                             "github": s.get("githubUrl"), "dir": f"{OUT_NAME}/{slug}", "files": n,
+                             # read by `corpus_ledger.py record` as repo / repo_commit
+                             "source": repo_key, "commit": heads.get(repo_key)})
             # flush: this fetcher makes one GitHub API call per file, so a
             # 150-bundle run takes tens of minutes. Without flushing, the
             # progress lines sit in the buffer and the run looks hung — which
@@ -191,7 +226,12 @@ def main():
         page += 1
     with open(os.path.join(OUT_DIR, "_manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
-    print(f"\n[done] {ok} bundles saved -> {OUT_DIR}")
+    tail = f", {skipped} skipped as already-seen-and-unchanged" if LEDGER_SOURCE else ""
+    print(f"\n[done] {ok} bundles saved{tail} -> {OUT_DIR}")
+    if LEDGER_SOURCE:
+        print("[*] record the results afterwards: "
+              f"corpus_ledger.py record --source {LEDGER_SOURCE} --raw-dir <RAW_DIR> "
+              f"--manifest {os.path.join(OUT_DIR, '_manifest.json')}")
     # A sweep that fetched nothing is a failure, not an empty result. Exiting 0
     # here let the 2026-09-15 cycle's `limit=50` breakage read as "[done] 0
     # bundles saved" and flow straight into run_scans.sh, which then had nothing
