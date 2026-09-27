@@ -606,7 +606,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | done | M9-05, M9-06 | #356 |
 | M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | done | M9-05 | #358 |
 | M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | done | M9-04, M9-05 | #359 |
-| M9-10 | `verify --installed`: attestation status across installed skills | in-progress | M9-07 | |
+| M9-10 | `verify --installed`: attestation status across installed skills | done | M9-07 | #360 |
 
 ### M9-01 — Skill-location spike (docs only, do first for the registry)
 **Goal.** Know, from each vendor's own documentation or source, where each agent loads skills
