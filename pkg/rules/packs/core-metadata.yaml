@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-metadata
-version: 1.1.1
+version: 1.2.0
 description: Manifest integrity and over-privilege (rule-verification.md §4).
 rules:
   - id: SG-MTA-001
@@ -20,8 +20,25 @@ rules:
       any:
         - regex: '!!python/(object|apply|name|module)'
           confidence: 0.95
-        - regex: '!ruby/object|!!java'
+        # Ruby Psych tags `Psych.unsafe_load` instantiates. `!ruby/object` alone
+        # missed the published universal gadget chain, `!ruby/hash:Gem::Requirement`
+        # (#344). `!ruby/hash` / `!ruby/sym` WITHOUT a class name are plain data and
+        # stay out; the hash forms need the `:Class` suffix.
+        - regex: '!ruby/(object|struct|exception|class|module)\b|!ruby/hash(-with-ivars)?:|!!java'
           confidence: 0.9
+        # The same tags spelled out. YAML defines `!<tag:yaml.org,2002:X>` as the
+        # node `!!X`, and PyYAML's unsafe loaders resolve it identically, so the
+        # shorthand-only leaves above were bypassed by the long form (#344, OWASP
+        # AST04 "YAML tags in SKILL.md frontmatter"). 0 corpus files carry it.
+        - regex: '!<tag:yaml\.org,2002:(python/(object|apply|name|module)|ruby/|java)'
+          confidence: 0.95
+        # A `%TAG` directive that maps a custom handle onto those namespaces
+        # (`%TAG !p! tag:yaml.org,2002:python/` then `!p!object/apply:…`).
+        # Directives precede `---`, so this cannot sit in frontmatter; it lives in
+        # standalone .yaml files, which are `asset`-role and unread until #187 —
+        # shipped now so it is live the day that fix lands.
+        - regex: '(?m)^%TAG[ \t]+!\S*![ \t]+tag:yaml\.org,2002:(python|ruby|java)'
+          confidence: 0.95
         # 0.8 per rule-verification.md §SG-MTA-001 ("yaml.load no SafeLoader
         # 0.8"); the pack had drifted to 0.7.
         - regex: '(?i)\byaml\.load\s*\('

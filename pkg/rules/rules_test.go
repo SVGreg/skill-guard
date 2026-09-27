@@ -3450,6 +3450,16 @@ func TestUnsafeDeserializationCovered(t *testing.T) {
 		{"g2 = numpy.load(path, allow_pickle=True)", true},
 		{"h = jsonpickle.decode(payload)", true},
 		{"m = torch.load('model.pt', weights_only=False)", true},
+		// TP — the other spellings of the same tags (#344): verbatim, the Ruby
+		// Psych gadget tags beyond !ruby/object, and a %TAG handle.
+		{"config: !<tag:yaml.org,2002:python/object/apply:os.system> [\"id\"]", true},
+		{"x: !<tag:yaml.org,2002:python/object/new:subprocess.Popen> [[\"id\"]]", true},
+		{"gem: !ruby/hash:Gem::Requirement {}", true},
+		{"x: !ruby/hash-with-ivars:Gem::Package::TarReader {}", true},
+		{"x: !ruby/class Gem::Installer", true},
+		{"x: !ruby/struct:Gem::Specification {}", true},
+		{"x: !<tag:yaml.org,2002:ruby/object:Gem::Installer> {}", true},
+		{"%TAG !p! tag:yaml.org,2002:python/\n---\nconfig: !p!object/apply:os.system [\"id\"]", true},
 
 		// FP — safe loaders stay clean, and the boundary fix must not break that.
 		{"data = yaml.safe_load(f)", false},
@@ -3462,6 +3472,11 @@ func TestUnsafeDeserializationCovered(t *testing.T) {
 		// numpy's default is allow_pickle=False.
 		{"g = np.load('arr.npy')", false},
 		{"import json; json.loads(payload)", false},
+		// FP — standard, harmless tags in the same spellings.
+		{"n: !<tag:yaml.org,2002:str> 123", false},
+		{"%TAG !e! tag:example.com,2026:\n---\nx: !e!widget {}", false},
+		{"opts: !ruby/hash {}", false},
+		{"key: !ruby/sym name", false},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("scripts", c.text)) > 0
