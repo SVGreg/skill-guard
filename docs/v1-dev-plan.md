@@ -598,7 +598,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
 | M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | done | — | #349 |
-| M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | in-progress | — | |
+| M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | done | — | #350 |
 | M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | todo | — | |
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | todo | M9-03 | |
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | todo | M9-02, M9-03 | |
