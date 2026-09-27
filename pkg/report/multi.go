@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/SVGreg/surfaceguard/pkg/model"
 	"github.com/SVGreg/surfaceguard/pkg/scan"
@@ -33,14 +34,29 @@ func MultiText(w io.Writer, m *scan.MultiReport, opt Options) {
 	if len(rows) > 0 {
 		fmt.Fprintf(w, "\n  %s%-7s %-8s %-8s %s%s\n", col(cGray), "VERDICT", "RISK", "FINDINGS", "PATH", col(cReset))
 	}
-	for _, r := range rows {
+	row := func(r scan.BundleResult, indent string) {
 		status := r.Status()
 		risk, found := "-", "-"
 		if r.Report != nil {
 			risk = fmt.Sprintf("%d %s", r.RiskScore, r.RiskTier)
 			found = fmt.Sprint(len(r.Findings))
 		}
-		fmt.Fprintf(w, "  %s%-7s%s %-8s %-8s %s\n", col(statusColor(status)), status, col(cReset), risk, found, sanitize(r.Path))
+		fmt.Fprintf(w, "%s%s%-7s%s %-8s %-8s %s\n", indent, col(statusColor(status)), status, col(cReset), risk, found, sanitize(r.Path))
+	}
+	if groups := agentGroups(rows); groups == nil {
+		for _, r := range rows {
+			row(r, "  ")
+		}
+	} else {
+		// An installed-skills scan: one block per agent, so a reader sees
+		// what each agent can load. A skill several agents share is listed
+		// under each, though it was scanned once.
+		for _, g := range groups {
+			fmt.Fprintf(w, "  %s%s%s\n", col(cCyan), sanitize(g.agent), col(cReset))
+			for _, r := range g.rows {
+				row(r, "    ")
+			}
+		}
 	}
 	for _, n := range m.Notes {
 		fmt.Fprintf(w, "  %snote: %s%s\n", col(cGray), sanitize(n), col(cReset))
@@ -110,4 +126,43 @@ func statusColor(s string) string {
 		return cRed
 	}
 	return verdictColor(model.Verdict(s))
+}
+
+type agentGroup struct {
+	agent string
+	rows  []scan.BundleResult
+}
+
+// agentGroups splits worst-first rows by agent, agents sorted, keeping each
+// group's rows worst first. It returns nil when no row names an agent (any
+// scan but --installed). Rows no agent claims — explicit paths given
+// alongside --installed — form a trailing "other paths" group.
+func agentGroups(rows []scan.BundleResult) []agentGroup {
+	by := map[string][]scan.BundleResult{}
+	var other []scan.BundleResult
+	for _, r := range rows {
+		if len(r.Agents) == 0 {
+			other = append(other, r)
+			continue
+		}
+		for _, a := range r.Agents {
+			by[a] = append(by[a], r)
+		}
+	}
+	if len(by) == 0 {
+		return nil
+	}
+	agents := make([]string, 0, len(by))
+	for a := range by {
+		agents = append(agents, a)
+	}
+	sort.Strings(agents)
+	out := make([]agentGroup, 0, len(agents)+1)
+	for _, a := range agents {
+		out = append(out, agentGroup{a, by[a]})
+	}
+	if len(other) > 0 {
+		out = append(out, agentGroup{"other paths", other})
+	}
+	return out
 }

@@ -212,6 +212,10 @@ surfaceguard scan ./my-skill --rulepack ./extra-rules.yaml   # add rules (repeat
 | `--no-color` | disable ANSI color |
 | `--max-depth` | folder scans: directory levels to search below each path (default 8) |
 | `--max-bundles` | folder scans: stop after this many skills; reported, never silent (default 5000) |
+| `--installed` | scan every skill well-known agents load on this machine |
+| `--agent` | with `--installed`: limit to these agents (comma-separated) |
+| `--scope` | with `--installed`: `user`, `project`, `plugin`, `admin`, or `all` (default) |
+| `--project-dir` | with `--installed`: base for project-scope locations (default: cwd) |
 
 #### Scanning a folder of skills
 
@@ -252,6 +256,43 @@ Exit codes keep their meaning over the set:
 - `3` if no skill was found.
 
 A single skill path still gives exactly the single-skill report.
+
+#### Scanning everything your agents can load (`--installed`)
+
+`--installed` scans every skill directory that well-known agents load from on
+this machine: Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor,
+OpenCode and Goose, at user, project, plugin and admin scope. See where it
+looks first with `surfaceguard locations`:
+
+```sh
+surfaceguard locations                                   # dry run: what exists, how many skills
+surfaceguard scan --installed                            # audit all of it
+surfaceguard scan --installed --agent claude-code,codex --scope user
+surfaceguard scan --installed --format json --out installed.json
+```
+
+```
+SCOPE   EXISTS  SKILLS  AGENTS                                      PATH
+user    no      -       codex,gemini,copilot,cursor,opencode,goose  /home/me/.agents/skills
+user    yes     14      claude-code,cursor,opencode,goose           /home/me/.claude/skills
+plugin  yes     2       claude-code                                 /home/me/.claude/plugins/cache
+…
+```
+
+How it behaves:
+- **Shared skills.** A directory several agents read, such as `~/.agents/skills`
+  or `~/.claude/skills`, is searched once. A skill reached by two paths (a
+  symlink into `~/.claude/skills`) is scanned once and listed under every agent
+  that loads it. JSON carries this as each bundle's `agents`.
+- **Project scope** is relative to `--project-dir` (default: the current
+  directory). For agents that do so, it also walks up to the repository root.
+- **Overrides.** `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_PLUGIN_CACHE_DIR` are
+  honoured.
+- **What is scanned is what is on disk.** That includes marketplace clones and
+  plugins you have disabled, so it is a superset of what loads.
+
+The registry is data (`pkg/locations/locations.yaml`), and every path cites a
+vendor source in [`docs/skill-locations.md`](docs/skill-locations.md).
 
 ### `keygen`
 

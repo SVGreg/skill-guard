@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/SVGreg/surfaceguard/pkg/locations"
 	"github.com/SVGreg/surfaceguard/pkg/model"
 	"github.com/SVGreg/surfaceguard/pkg/policy"
 	"github.com/SVGreg/surfaceguard/pkg/report"
@@ -46,6 +47,9 @@ type multiScanOpts struct {
 	rulepacks                       []string
 	verbose, quiet, noColor         bool
 	maxDepth, maxBundles            int
+	// locs is set by --installed: the resolved registry locations, used to
+	// attribute each bundle to the agents that load it.
+	locs []locations.Location
 }
 
 // runMultiScan discovers bundles under paths, scans them all, and renders one
@@ -88,6 +92,9 @@ func runMultiScan(paths []string, o multiScanOpts) error {
 	m := scan.New(rs, pol).WithContexts(cs).ScanAll(cands, nil, 0)
 	for _, d := range derrs {
 		m.Notes = append(m.Notes, d.Error())
+	}
+	if o.locs != nil {
+		attributeAgents(m, o.locs)
 	}
 
 	w, err := outputWriter(o.out)

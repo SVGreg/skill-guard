@@ -17,6 +17,9 @@ type BundleResult struct {
 	Via      string   `json:"via,omitempty"`
 	Also     []string `json:"also,omitempty"`
 	Name     string   `json:"name,omitempty"`
+	// Agents names every agent whose skill location reaches this bundle; set
+	// only by an installed-skills scan.
+	Agents []string `json:"agents,omitempty"`
 	// SingleFile marks a bundle that is one SKILL.md named directly, so a
 	// renderer mapping its findings back to disk uses the file's directory.
 	SingleFile bool   `json:"single_file,omitempty"`
