@@ -407,6 +407,27 @@ Check a skill's signatures: that each is valid, that the content still matches
 what was signed (no tampering or drift), and — with a trust roster — that the
 signing key is trusted.
 
+Like `scan`, `verify` also takes a folder, several paths, or `--installed`
+(every skill your agents load; see
+[`--installed`](#scanning-everything-your-agents-can-load---installed)), and
+prints one table:
+
+```
+verify: 3 skills — 1 merkle-mismatch, 1 unsigned, 1 verified — 1 failed verification
+
+STATE            FORMAT  SIGNER                   PATH
+merkle-mismatch  sgmt-1  oidc:dev@example.com     /home/me/.claude/skills/tampered
+unsigned         -       -                        /home/me/.claude/skills/notes
+verified         sgmt-1  oidc:dev@example.com     /home/me/.claude/skills/deploy
+```
+
+The states, worst first: `error` (could not be loaded), `merkle-mismatch`,
+`invalid`, `revoked`, `expired`, `unverified` (the key is not in your roster),
+`unsigned`, `verified`. The command exits 2 if any skill fails verification.
+`unverified` and `unsigned` do not fail it, because trusting a key is your
+decision to make. The exception is a policy that sets
+`attestation.required`, which makes an unsigned skill fail.
+
 **Both signature formats are detected automatically.** `verify` reports each one
 it finds, so you can see which trust path produced the verdict:
 

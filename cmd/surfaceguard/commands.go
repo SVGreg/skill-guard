@@ -375,10 +375,11 @@ EXIT CODES: 0 success · 3 usage error · 4 internal error.`,
 
 func verifyCmd() *cobra.Command {
 	var policyPath, format, cardPath string
-	var noColor bool
+	var noColor, installed bool
+	var inst installedOpts
 
 	cmd := &cobra.Command{
-		Use:   "verify <path>",
+		Use:   "verify <path>...",
 		Short: "Verify a bundle's attestation, Merkle root, and trust",
 		Long: `Check a skill's detached attestation: that the DSSE signature is valid,
 that the recomputed Merkle root still matches the signed one (no tampering or
@@ -408,12 +409,52 @@ content_hash is the bundle's own SGMT-1 root, so the card cannot be detached
 from its subject, edited, and re-presented. A mismatch exits 2. See
 docs/skill-card-schema.md.
 
+MANY SKILLS: a folder that is not itself a skill, several paths, or
+--installed (every skill well-known agents load on this machine; see
+'surfaceguard locations') verifies each skill found and prints one table:
+state (verified · unverified · unsigned · expired · revoked · invalid ·
+merkle-mismatch · error), signature format, signer, path. Exit 2 if any
+skill fails verification; an unsigned or unverified one does not, unless the
+policy requires an attestation.
+
 EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.`,
 		Example: `  surfaceguard verify ./my-skill
   surfaceguard verify ./my-skill --policy .surfaceguard.yaml
-  surfaceguard verify ./my-skill --card card.json`,
-		Args: bundlePathArg,
+  surfaceguard verify ./my-skill --card card.json
+  surfaceguard verify ./skills --policy .surfaceguard.yaml
+  surfaceguard verify --installed --policy ~/.surfaceguard.yaml`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if installed {
+				return nil
+			}
+			return scanPathsArg(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !installed {
+				for _, name := range []string{"agent", "scope", "project-dir"} {
+					if cmd.Flags().Changed(name) {
+						return fail(3, "--%s selects installed-skill locations; it needs --installed", name)
+					}
+				}
+			}
+			if installed || len(args) > 1 || !isSingleBundle(args[0]) {
+				if cardPath != "" {
+					return fail(3, "--card checks one card against one skill; it cannot be combined with a multi-skill verify")
+				}
+				roots := args
+				if installed {
+					locs, err := inst.resolve()
+					if err != nil {
+						return err
+					}
+					roots = append(roots, existingRoots(locs)...)
+					if len(roots) == 0 {
+						return fail(3, "none of the %d known skill locations exist on this machine for this selection\n"+
+							"  run 'surfaceguard locations' to see where --installed looks.", len(locs))
+					}
+				}
+				return runMultiVerify(roots, policyPath)
+			}
 			b, err := loadBundleFriendly(args[0])
 			if err != nil {
 				return err
@@ -481,6 +522,8 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 	f.StringVar(&format, "format", "text", "output format: text (json planned)")
 	f.StringVar(&cardPath, "card", "", "check this skill card against the bundle instead of checking signatures")
 	f.BoolVar(&noColor, "no-color", false, "disable ANSI color in output")
+	f.BoolVar(&installed, "installed", false, "verify every skill well-known agents load on this machine (see 'surfaceguard locations')")
+	inst.register(f)
 	return cmd
 }
 

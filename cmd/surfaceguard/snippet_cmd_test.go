@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,8 +15,8 @@ func runScan(t *testing.T, extra ...string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "report.txt")
 	cmd := scanCmd()
-	cmd.SetOut(os.NewFile(0, os.DevNull))
-	cmd.SetErr(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 	cmd.SetArgs(append([]string{filepath.Join("..", "..", "testdata", "malicious"),
 		"--out", out, "--quiet", "--no-color"}, extra...))
 	// The fixture fails the gate by design, so a non-nil exitErr is expected.

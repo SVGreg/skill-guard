@@ -80,10 +80,10 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
 | **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
 | **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | **complete** |
-| **M6** | Taint analysis engine | titles only | after M9 — needs `/sg-plan` |
+| **M6** | Taint analysis engine | titles only | **next — needs `/sg-plan`** |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
 | **M8** | Hardening (parallel) | titles only | needs `/sg-plan` |
-| **M9** | Multi-skill discovery + installed-skill scan | M9-01 … M9-10 | **expanded — next, ahead of M6** (owner request) |
+| **M9** | Multi-skill discovery + installed-skill scan | M9-01 … M9-10 | **complete** (owner request) |
 | **D** | Distribution track (parallel from M3) | D-01 … D-06 | expanded |
 
 ---
@@ -606,7 +606,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | done | M9-05, M9-06 | #356 |
 | M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | done | M9-05 | #358 |
 | M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | done | M9-04, M9-05 | #359 |
-| M9-10 | `verify --installed`: attestation status across installed skills | todo | M9-07 | |
+| M9-10 | `verify --installed`: attestation status across installed skills | in-progress | M9-07 | |
 
 ### M9-01 — Skill-location spike (docs only, do first for the registry)
 **Goal.** Know, from each vendor's own documentation or source, where each agent loads skills
@@ -810,6 +810,11 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-10 separates **`unsigned`** (no signature) from **`unverified`** (signed by a key
+  not in the roster). The card's acceptance named the unsigned bundle's state `unverified`, but they
+  are different facts that ask for different actions. The full state set, worst first, is error,
+  merkle-mismatch, invalid, revoked, expired, unverified, unsigned, verified. `--card` with a
+  multi-skill verify is a usage error. **M9 is complete.**
 - 2026-09-27 — M9-08 measured **parity, not a speed-up**. Over clawhub, 0 of 500 common bundles
   differ. Wall clock is equal (542 s each), because per-bundle scanning dominates. Peak RSS is
   141 MiB for the one-process run, against 71 MiB for the largest single scan. `run_scans.sh`
