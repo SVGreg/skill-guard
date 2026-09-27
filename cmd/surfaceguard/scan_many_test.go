@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,8 @@ func execScan(t *testing.T, args ...string) (string, int) {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "report")
 	cmd := scanCmd()
-	cmd.SetOut(os.NewFile(0, os.DevNull))
-	cmd.SetErr(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 	cmd.SetArgs(append(args, "--out", out, "--quiet", "--no-color"))
 	code := 0
 	if err := cmd.Execute(); err != nil {
