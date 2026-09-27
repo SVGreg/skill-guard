@@ -597,7 +597,7 @@ surfaceguard locations                           # agent · scope · path · exi
 
 | ID | Task | Status | Deps | PR |
 |---|---|---|---|---|
-| M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | todo | — | |
+| M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | in-progress | — | |
 | M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | todo | — | |
 | M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | todo | — | |
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | todo | M9-03 | |
@@ -694,19 +694,37 @@ contract in CLAUDE.md.
 - A CLI test covers a bundle whose load fails, which exits 1 and shows up in the summary as
   `error`.
 
-### M9-06 — Agent-location registry
-**Goal.** "Where does agent X keep skills" is **data**, like rule packs: adding an agent or fixing
+### M9-06 — Agent-location registry *(rewritten by M9-01)*
+**Goal.** "Where does agent X keep skills" is **data**, like rule packs. Adding an agent or fixing
 a path is a YAML edit.
 **Deliverables.** `pkg/locations/locations.yaml` (`//go:embed`) with `apiVersion:
-surfaceguard.svgreg.net/locations.v1` and its own `version:`. Each entry has agent id, display name,
-scope (`user`/`project`/`plugin`), per-OS path templates with `~`, `${ENV}` and env-override
-precedence, and optional globs, all per M9-01's findings. `locations.Resolve(filter, projectDir)
-[]Location{Agent, Scope, Path, Exists, Source}` expands templates using only env and `os.UserHomeDir`
-— no exec, no network. Project scope resolves against `--project-dir` (default: cwd). Glob expansion
-is bounded and does not follow symlinked directories.
-**Acceptance.** Table tests with a fake `HOME` / `XDG_CONFIG_HOME` / override vars per OS template.
-A test asserts that every registry entry cites a `docs/skill-locations.md` row, and that
-`locations.yaml` loads through a strict decoder (unknown fields are rejected).
+surfaceguard.svgreg.net/locations.v1` and its own `version:`. Each entry carries the six fields
+`docs/skill-locations.md` "What this means for M9-06" asks for, and no others:
+- **Per-OS path templates**: `~` and `${ENV}` expansion, plus a prefix `override` variable
+  (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`).
+- **Bounded `glob`s**: Claude Code's plugin cache `cache/*/*/*`, and Goose's `~/.agents/plugins/*`.
+- **A `walk_up` flag** for project entries of agents that read ancestors up to the repo root
+  (Claude Code, Codex, OpenCode).
+- **`status: documented | legacy`**: legacy candidates are still scanned, and `locations` shows the
+  status.
+- **Shared-location ownership**: `~/.agents/skills` and `.agents/skills` are owned by the `agents`
+  pseudo-agent, and other agents reference them via `reads_shared`.
+- **A `source`**: a `docs/skill-locations.md` anchor.
+
+`locations.Resolve(filter, projectDir) []Location{Agent, Scope, Path, Exists, Status, Source}`
+expands templates using only env and `os.UserHomeDir`, with no exec and no network. Walk-up stops
+at the first ancestor containing `.git` (file or dir) or at `/`, and returns at most 32 ancestors.
+It de-duplicates by cleaned path and keeps every agent that reads a path. Glob expansion is bounded
+(≤ 1000 matches) and doesn't follow symlinked directories. Agent ids, taken from the doc:
+`claude-code`, `codex`, `gemini`, `copilot`, `cursor`, `opencode`, `goose`, `agents`.
+**Acceptance.** Table tests with a fake `HOME`, `CLAUDE_CONFIG_DIR` and
+`CLAUDE_CODE_PLUGIN_CACHE_DIR` for each OS template, covering:
+- the Claude plugin glob over a fake cache
+- walk-up stopping at `.git`
+- `--agent codex` including the shared `~/.agents/skills` once
+
+A test asserts every entry's `source` anchor exists as a heading in `docs/skill-locations.md`.
+`locations.yaml` loads through a strict decoder, so unknown fields are rejected.
 
 ### M9-07 — `scan --installed` and `surfaceguard locations`
 **Goal.** One command audits everything the user's agents can load.
@@ -792,6 +810,12 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-01 spike done; **M9-06 rewritten** from its findings. The registry needs a
+  `walk_up` flag, prefix overrides (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`), bounded
+  globs for plugin caches, a `documented`/`legacy` status, and a shared `agents` pseudo-agent for
+  `~/.agents/skills` (read by six of seven agents). Gemini's extension skills have no documented
+  path and are left out. One vendor-doc conflict is recorded: Claude Code's Windows managed skills
+  dir.
 - 2026-09-27 — **M9 added and expanded** (10 tasks) from an owner request, not the roadmap (§0
   item 8): folder discovery and well-known-location scanning. Ordered **ahead of M6** deliberately
   — it is a user-facing gap in the existing command, needs no new analysis engine, and M6 is still
