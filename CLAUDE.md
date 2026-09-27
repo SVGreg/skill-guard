@@ -60,7 +60,7 @@ Package responsibilities:
 
 | Package | Responsibility |
 |---------|----------------|
-| `pkg/skill` | parse a `SKILL.md` bundle into an inert model (nothing executed); file walk + language detection |
+| `pkg/skill` | parse a `SKILL.md` bundle into an inert model (nothing executed); file walk + language detection; `Discover()` finds bundles under a root (M9) |
 | `pkg/rules` | rule-pack schema, YAML loader, matcher primitives, confidence/context math |
 | `pkg/scan` | orchestrate rules → findings, dedup, waivers, verdict, risk score, skill-card |
 | `pkg/policy` | `.surfaceguard.yaml` model, thresholds, waivers, allowlists, trust roster |
