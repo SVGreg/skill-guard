@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/SVGreg/surfaceguard/pkg/attest/oms"
 	"github.com/SVGreg/surfaceguard/pkg/model"
@@ -144,10 +145,14 @@ func VerifyOMSAt(b *skill.Bundle, data []byte, roster policy.Trust, policyDir st
 
 	manifest, err := oms.VerifyManifest(b, st)
 	switch {
-	case err != nil:
+	case errors.Is(err, oms.ErrBadAlgorithm):
 		res.Findings = append(res.Findings, prv("SG-PRV-003", model.SevCritical,
 			"OMS manifest cannot be checked", err.Error(),
 			"Re-sign with a supported hash algorithm."))
+	case err != nil:
+		res.Findings = append(res.Findings, prv("SG-PRV-003", model.SevCritical,
+			"OMS statement is internally inconsistent", err.Error(),
+			"Do not trust this bundle; re-sign it with a conformant OMS v1.0 signer."))
 	case manifest.OK():
 		res.MerkleMatch = true
 	default:
@@ -245,12 +250,25 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 		res.SignedAt = when
 	}
 
-	// The timestamp above is only a claim until the log entry is checked. Doing
-	// it here, before the certificate is chained, means a forged timestamp
-	// cannot smuggle an expired certificate through the validity window.
-	if err := verifyTransparency(res, bundle, roster); err != nil {
+	// The timestamp above is only a claim until the log entry is checked, and
+	// it is the earliest time over EVERY entry, proven or not. The certificate
+	// is therefore checked at the time of an entry that passed verification,
+	// never at the reported claim: otherwise a bundle carrying one genuine
+	// entry plus one proof-less entry with a backdated time would anchor the
+	// validity window on the backdated one (#333, step 1).
+	//
+	// Still open (#333): integratedTime is not covered by the inclusion proof —
+	// a Rekor leaf is the canonicalized body only — so even a proven entry's
+	// time is unauthenticated until the SignedEntryTimestamp is verified, and
+	// the entry is not yet bound to this bundle's signature.
+	proven, err := verifyTransparency(res, bundle, roster)
+	if err != nil {
 		res.CertError = err.Error()
 		return
+	}
+	when, ok = proven, !proven.IsZero()
+	if ok {
+		res.SignedAt = when
 	}
 
 	pool, err := roster.CertPool(policyDir)
@@ -318,12 +336,25 @@ func verifyCertBound(res *Result, bundle *oms.Bundle, pae []byte, sigs [][]byte,
 // enforced only when trust.log_keys is configured: without pinned keys there is
 // nothing to check a signature against, and inventing a default log would be
 // the same mistake as shipping a default CA.
-func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) error {
+//
+// It returns the earliest integratedTime among the entries that passed — the
+// only log time the caller may anchor a certificate on.
+func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) (time.Time, error) {
 	entries, err := oms.TlogEntries(bundle)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	var lastErr error
+	var proven time.Time
+	accept := func(e oms.TlogEntry) {
+		if e.IntegratedTime <= 0 {
+			return
+		}
+		t := time.Unix(e.IntegratedTime, 0).UTC()
+		if proven.IsZero() || t.Before(proven) {
+			proven = t
+		}
+	}
 	for _, e := range entries {
 		if e.Proof == nil {
 			continue
@@ -331,7 +362,7 @@ func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) er
 		if err := e.VerifyInclusion(); err != nil {
 			// A broken proof is evidence, not an absence of it: report the
 			// first one rather than letting a later good entry mask it.
-			return err
+			return time.Time{}, err
 		}
 		res.LogInclusionVerified = true
 
@@ -341,9 +372,10 @@ func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) er
 			continue
 		}
 		if err := cp.MatchesProof(e.Proof); err != nil {
-			return err
+			return time.Time{}, err
 		}
 		if len(roster.LogKeys) == 0 {
+			accept(e)
 			continue
 		}
 		if err := verifyCheckpointSignature(cp, e.LogKeyID, roster.LogKeys); err != nil {
@@ -351,18 +383,19 @@ func verifyTransparency(res *Result, bundle *oms.Bundle, roster policy.Trust) er
 			continue
 		}
 		res.LogCheckpointVerified = true
+		accept(e)
 	}
 
 	if !res.LogInclusionVerified {
-		return oms.ErrNoInclusionProof
+		return time.Time{}, oms.ErrNoInclusionProof
 	}
 	if len(roster.LogKeys) > 0 && !res.LogCheckpointVerified {
 		if lastErr != nil {
-			return fmt.Errorf("no configured transparency-log key verified the checkpoint: %w", lastErr)
+			return time.Time{}, fmt.Errorf("no configured transparency-log key verified the checkpoint: %w", lastErr)
 		}
-		return errors.New("no configured transparency-log key verified the checkpoint")
+		return time.Time{}, errors.New("no configured transparency-log key verified the checkpoint")
 	}
-	return nil
+	return proven, nil
 }
 
 // verifyCheckpointSignature checks the note signature against the pinned log

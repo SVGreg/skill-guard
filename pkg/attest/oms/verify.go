@@ -20,6 +20,7 @@ var (
 	ErrMissingFile    = errors.New("oms: a signed file is missing from the bundle")
 	ErrUnsignedFile   = errors.New("oms: bundle contains a file the signature does not cover")
 	ErrBadAlgorithm   = errors.New("oms: manifest uses a hash algorithm this build does not implement")
+	ErrRootMismatch   = errors.New("oms: subject root digest does not match the signed resources")
 )
 
 // SignedPAE returns the DSSE Pre-Authentication Encoding the bundle's signature
@@ -100,6 +101,25 @@ func VerifyManifest(b *skill.Bundle, st *Statement) (ManifestResult, error) {
 		// blake2b/blake3 are optional in the registry and not implemented here.
 		// Saying so beats reporting every file as mismatched.
 		return res, fmt.Errorf("%w: %q", ErrBadAlgorithm, alg)
+	}
+
+	// The subject's root digest (§6.5.1) and the resource list are two
+	// descriptions of one tree, and both are signed. Other in-toto tooling
+	// matches artifacts on the subject digest alone, so a statement whose
+	// subject names one tree while its resources list another would verify
+	// here while every subject-based consumer reads it as covering different
+	// content. Recompute the root and refuse a disagreement. RootDigest also
+	// refuses an unsorted manifest, which no conformant signer produces.
+	want, err := st.RootDigest()
+	if err != nil {
+		return res, err
+	}
+	got, err := RootDigest(st.Predicate.Resources)
+	if err != nil {
+		return res, err
+	}
+	if !strings.EqualFold(got, want) {
+		return res, fmt.Errorf("%w: subject %s, resources %s", ErrRootMismatch, want, got)
 	}
 
 	// Index the bundle by canonical name.
