@@ -144,10 +144,14 @@ func VerifyOMSAt(b *skill.Bundle, data []byte, roster policy.Trust, policyDir st
 
 	manifest, err := oms.VerifyManifest(b, st)
 	switch {
-	case err != nil:
+	case errors.Is(err, oms.ErrBadAlgorithm):
 		res.Findings = append(res.Findings, prv("SG-PRV-003", model.SevCritical,
 			"OMS manifest cannot be checked", err.Error(),
 			"Re-sign with a supported hash algorithm."))
+	case err != nil:
+		res.Findings = append(res.Findings, prv("SG-PRV-003", model.SevCritical,
+			"OMS statement is internally inconsistent", err.Error(),
+			"Do not trust this bundle; re-sign it with a conformant OMS v1.0 signer."))
 	case manifest.OK():
 		res.MerkleMatch = true
 	default:

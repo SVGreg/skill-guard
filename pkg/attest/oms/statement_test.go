@@ -4,7 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/SVGreg/surfaceguard/pkg/skill"
 )
 
 // TestRootDigestMatchesVendoredVectors is the M4-04 acceptance check, and the
@@ -172,5 +175,44 @@ func TestSubjectName(t *testing.T) {
 		if got := SubjectName(in); got != want {
 			t.Errorf("SubjectName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestVerifyManifestChecksTheSubjectRoot pins the two refusals VerifyManifest
+// makes before comparing files: a subject root that disagrees with the
+// resources, and an unsorted manifest (whose root no conformant verifier can
+// reproduce).
+func TestVerifyManifestChecksTheSubjectRoot(t *testing.T) {
+	b := &skill.Bundle{Files: []skill.File{
+		{Path: "a.md", Content: []byte("a\n")},
+		{Path: "b.md", Content: []byte("b\n")},
+	}}
+	files, ser, err := Enumerate(b, EnumOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := func() *Statement {
+		st, err := BuildStatement("demo", BuildResources(files), ser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+
+	if res, err := VerifyManifest(b, fresh()); err != nil || !res.OK() {
+		t.Fatalf("consistent statement: res=%+v err=%v", res, err)
+	}
+
+	st := fresh()
+	st.Subject[0].Digest[AlgoSHA256] = strings.Repeat("0", 64)
+	if _, err := VerifyManifest(b, st); !errors.Is(err, ErrRootMismatch) {
+		t.Errorf("forged subject root: err=%v, want ErrRootMismatch", err)
+	}
+
+	st = fresh()
+	r := st.Predicate.Resources
+	r[0], r[1] = r[1], r[0]
+	if _, err := VerifyManifest(b, st); !errors.Is(err, ErrUnsortedManifest) {
+		t.Errorf("unsorted manifest: err=%v, want ErrUnsortedManifest", err)
 	}
 }

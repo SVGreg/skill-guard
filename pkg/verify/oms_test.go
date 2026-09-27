@@ -2,6 +2,7 @@ package verify
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -275,5 +276,72 @@ func TestVerifyOMSIdentityRules(t *testing.T) {
 	}
 	if !res.Revoked {
 		t.Error("revocation by identity was not reported")
+	}
+}
+
+// TestVerifyOMSRejectsSubjectRootMismatch: the subject's root digest and the
+// resource list are both signed, and other in-toto tooling matches artifacts on
+// the subject digest alone. A signer who points the subject at one tree while
+// listing another used to get MerkleMatch here, because only the per-file
+// digests were checked. The bundle below is validly signed by a trusted key
+// and its resources match the files on disk exactly; only the subject lies.
+func TestVerifyOMSRejectsSubjectRootMismatch(t *testing.T) {
+	signer, err := attest.GenerateKeyAlg("sg-aabbccdd0011", attest.AlgECDSAP256)
+	if err != nil {
+		t.Fatalf("GenerateKeyAlg: %v", err)
+	}
+	b := &skill.Bundle{Root: "/tmp/demo", Files: []skill.File{
+		{Path: "SKILL.md", Content: []byte("---\nname: demo\n---\nbody\n")},
+	}}
+	files, ser, err := oms.Enumerate(b, oms.EnumOptions{})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	st, err := oms.BuildStatement("demo", oms.BuildResources(files), ser)
+	if err != nil {
+		t.Fatalf("BuildStatement: %v", err)
+	}
+	// The root of a different tree: what a subject-matching consumer would see.
+	other, err := oms.RootDigest(oms.BuildResources([]oms.EnumFile{{Name: "SKILL.md", Content: []byte("something else\n")}}))
+	if err != nil {
+		t.Fatalf("RootDigest: %v", err)
+	}
+	st.Subject[0].Digest[oms.AlgoSHA256] = other
+
+	payload, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("marshal statement: %v", err)
+	}
+	sig, err := signer.Sign(context.Background(), attest.PAE(oms.PayloadType, payload))
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	data, err := json.Marshal(&oms.Bundle{
+		MediaType:            oms.BundleMediaType,
+		VerificationMaterial: &oms.VerificationMaterial{PublicKey: &oms.PublicKey{Hint: "aabbccdd0011"}},
+		DSSEEnvelope: &oms.DSSEEnvelope{
+			Payload:     base64.StdEncoding.EncodeToString(payload),
+			PayloadType: oms.PayloadType,
+			Signatures:  []oms.Signature{{Sig: base64.StdEncoding.EncodeToString(sig)}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal bundle: %v", err)
+	}
+	roster := policy.Trust{Keys: []policy.Key{{
+		KeyID:     signer.KeyID(),
+		Algorithm: attest.AlgECDSAP256,
+		PublicKey: signer.PublicKeyBase64(),
+	}}}
+
+	res := VerifyOMS(b, data, roster)
+	if !res.SignatureValid {
+		t.Fatalf("fixture should carry a valid signature: %+v", res)
+	}
+	if res.MerkleMatch {
+		t.Error("MerkleMatch reported for a statement whose subject disagrees with its resources")
+	}
+	if !hasRule(res, "SG-PRV-003") {
+		t.Errorf("no SG-PRV-003 finding: %+v", res.Findings)
 	}
 }
