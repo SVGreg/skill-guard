@@ -604,7 +604,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | done | M9-02, M9-03 | #354 |
 | M9-06 | Embedded agent-location registry (`pkg/locations`) | done | M9-01 | #355 |
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | done | M9-05, M9-06 | #356 |
-| M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | todo | M9-05 | |
+| M9-08 | One-process corpus scan matches per-bundle `run_scans.sh` results; latency recorded | in-progress | M9-05 | |
 | M9-09 | GitHub Action scans a multi-skill repo from its default `path: .` | todo | M9-04, M9-05 | |
 | M9-10 | `verify --installed`: attestation status across installed skills | todo | M9-07 | |
 
@@ -810,6 +810,11 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-08 measured **parity, not a speed-up**. Over clawhub, 0 of 500 common bundles
+  differ. Wall clock is equal (542 s each), because per-bundle scanning dominates. Peak RSS is
+  141 MiB for the one-process run, against 71 MiB for the largest single scan. `run_scans.sh`
+  scanned 32 more bundles, all `SKILL.md` dirs nested inside another bundle. The card assumed a
+  latency win, and the numbers say the win is operational (one command, one report), not time.
 - 2026-09-27 — M9-07 added an `agents` field on each multi-mode bundle, so JSON carries the same
   attribution the grouped text shows. `--agent`, `--scope` or `--project-dir` without `--installed`
   is a usage error rather than being silently ignored. An `--installed` selection where no location
