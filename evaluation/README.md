@@ -138,6 +138,7 @@ evaluation/
     sweep_diff.py          hit-rate movement between two sweeps of one source
     sweep_gaps.py          clean bundles that still carry a risky primitive
     corpus_ledger.py       what a sweep already saw; skip/revisit rules + drift
+    multi_parity.py        one-process `scan <corpus>` vs run_scans.sh: same findings? latency
   reports/
     raw/<source>__<slug>.json           combined-run scan results (one per bundle)
     raw_skillject/<source>__<slug>.json standalone SkillJect run
@@ -145,6 +146,36 @@ evaluation/
     REPORT.md / REPORT_skillject.md     the human-readable evaluation reports
     REPORT.html / REPORT_skillject.html the same reports as interactive pages
 ```
+
+## One process vs one process per bundle
+
+`surfaceguard scan <folder>` (M9) scans a whole corpus in one process.
+`multi_parity.py` runs that and `run_scans.sh` over the same corpus with the same
+binary, then checks that every bundle both runs scanned has identical findings,
+waivers, verdict and risk score:
+
+```sh
+CORPUS=clawhub evaluation/scripts/multi_parity.py   # exit 1 if any bundle differs
+```
+
+Measured on 2026-09-27 over `clawhub/`, on 4 cores, with parallelism at the core count for both runs:
+
+| | one process | per bundle (`run_scans.sh -P4`) |
+|---|--:|--:|
+| bundles scanned | 500 | 532 |
+| bundles in both, differing | **0** | — |
+| wall clock | 542 s | 542 s |
+| peak RSS | 141 MiB (whole run) | ≤ 71 MiB (largest single scan) |
+
+The one-process run is a **parity** result, not a speed-up. Per-bundle scanning
+dominates the wall clock, and the ~0.1 s of rule compilation a fresh process pays
+(M5-09) is small beside it. Both runs also overlapped with an unrelated test run
+on the same machine, so read the timings as equal rather than as precise.
+
+The 32 extra per-bundle bundles are `SKILL.md` directories that sit **inside**
+another bundle. `run_scans.sh` scans each of those on its own, while `scan
+<folder>` treats them as part of the outer skill, which is what `LoadBundle`
+reads. None of the 32 are one-process-only.
 
 ## Reproduce
 
