@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -61,10 +62,25 @@ type sarifLog struct {
 
 type sarifRun struct {
 	Tool               sarifTool               `json:"tool"`
+	Invocations        []sarifInvocation       `json:"invocations,omitempty"`
 	OriginalURIBaseIDs map[string]sarifURIBase `json:"originalUriBaseIds,omitempty"`
 	Taxonomies         []sarifTaxonomy         `json:"taxonomies,omitempty"`
 	Results            []sarifResult           `json:"results"`
 	Properties         map[string]any          `json:"properties,omitempty"`
+}
+
+// sarifInvocation reports how the run went. Only a multi-bundle log emits it,
+// and only when a bundle could not be loaded: that bundle has no results, so
+// without a notification its absence would read as "scanned clean".
+type sarifInvocation struct {
+	ExecutionSuccessful        bool                `json:"executionSuccessful"`
+	ToolExecutionNotifications []sarifNotification `json:"toolExecutionNotifications,omitempty"`
+}
+
+type sarifNotification struct {
+	Level     string          `json:"level"`
+	Message   sarifText       `json:"message"`
+	Locations []sarifLocation `json:"locations,omitempty"`
 }
 
 // sarifTaxonomy is a toolComponent describing an external classification —
@@ -197,16 +213,34 @@ type sarifRegion struct {
 // Waived findings are emitted as suppressed results rather than dropped, so a
 // policy waiver stays visible to review with its stated justification.
 func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
-	taxonomy, taxaIndex := astTaxonomy()
 	// Waived findings are described by rules[] too, or their results would
 	// reference a rule the log never defines.
 	all := append(append([]model.Finding{}, rep.Findings...), rep.Waived...)
+	run := buildRun(all, nil, opt, map[string]any{
+		"verdict":    string(rep.Verdict),
+		"risk_score": rep.RiskScore,
+		"risk_tier":  rep.RiskTier,
+		"counts":     rep.Counts,
+	})
+	return encodeRun(w, run)
+}
+
+// buildRun renders findings as one SARIF run. bundleOf, when non-nil, names
+// the bundle each finding (by index) came from; it is recorded as a result
+// property so a location-less finding in a multi-bundle log still says which
+// skill it belongs to.
+func buildRun(all []model.Finding, bundleOf []string, opt Options, props map[string]any) sarifRun {
+	taxonomy, taxaIndex := astTaxonomy()
 	rules, index := sarifRules(all, taxaIndex)
 
 	results := make([]sarifResult, 0, len(all))
 	seen := map[string]int{}
-	for _, f := range all {
-		results = append(results, sarifResultFor(f, index[f.RuleID], taxaIndex, seen))
+	for i, f := range all {
+		res := sarifResultFor(f, index[f.RuleID], taxaIndex, seen)
+		if bundleOf != nil {
+			res.Properties["bundle"] = bundleOf[i]
+		}
+		results = append(results, res)
 	}
 
 	run := sarifRun{
@@ -218,20 +252,95 @@ func SARIF(w io.Writer, rep *scan.Report, opt Options) error {
 		}},
 		Taxonomies: []sarifTaxonomy{taxonomy},
 		Results:    results,
-		Properties: map[string]any{
-			"verdict":    string(rep.Verdict),
-			"risk_score": rep.RiskScore,
-			"risk_tier":  rep.RiskTier,
-			"counts":     rep.Counts,
-		},
+		Properties: props,
 	}
 	if opt.Source != "" {
 		run.OriginalURIBaseIDs = map[string]sarifURIBase{srcRoot: {URI: opt.Source}}
 	}
+	return run
+}
 
+func encodeRun(w io.Writer, run sarifRun) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(sarifLog{Schema: sarifSchema, Version: sarifVersion, Runs: []sarifRun{run}})
+}
+
+// MultiSARIF writes a multi-bundle scan as ONE run, so a repository of skills
+// uploads as a single code-scanning analysis rather than N that overwrite
+// each other under one category.
+//
+// Artifact URIs are relative to opt.Source (the discovery root), not to each
+// bundle: a finding in skills/foo/SKILL.md must link to that file in the
+// repository tree, and "SKILL.md" alone would resolve to the repo root. The
+// fingerprint hashes that root-relative path too, so identical findings in
+// two bundles stay two alerts. Rule metadata is emitted once for the set.
+func MultiSARIF(w io.Writer, m *scan.MultiReport, opt Options) error {
+	base := opt.Source
+	if base == "" {
+		base = "."
+	}
+	var all []model.Finding
+	var bundleOf []string
+	var notes []sarifNotification
+	for _, b := range m.Bundles {
+		prefix := bundlePrefix(base, b)
+		if b.Report == nil {
+			notes = append(notes, sarifNotification{
+				Level:   "error",
+				Message: sarifText{Text: "bundle not scanned: " + b.Error},
+				Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
+					ArtifactLocation: sarifArtifactLocation{URI: artifactURI(prefix), URIBaseID: srcRoot},
+				}}},
+			})
+			continue
+		}
+		for _, fs := range [][]model.Finding{b.Findings, b.Waived} {
+			for _, f := range fs {
+				if f.File != "" {
+					f.File = path.Join(prefix, f.File)
+				}
+				all = append(all, f)
+				bundleOf = append(bundleOf, filepath.ToSlash(prefix))
+			}
+		}
+	}
+	if bundleOf == nil {
+		bundleOf = []string{}
+	}
+	run := buildRun(all, bundleOf, opt, map[string]any{
+		"mode":           "multi",
+		"verdict":        string(m.Verdict),
+		"risk_score_max": m.RiskScoreMax,
+		"counts":         m.Counts,
+		"bundles":        len(m.Bundles),
+		"errors":         m.Errors,
+	})
+	if len(notes) > 0 {
+		run.Invocations = []sarifInvocation{{ExecutionSuccessful: false, ToolExecutionNotifications: notes}}
+	}
+	return encodeRun(w, run)
+}
+
+// bundlePrefix is the bundle's directory relative to base, '/'-separated. A
+// single-file bundle's findings name "SKILL.md" whatever the file is called,
+// so its prefix is the file's directory and the manifest keeps that name —
+// the one case where the URI cannot be exact is the one where the scanned
+// file is not called SKILL.md. Paths outside base keep their "../" form: a
+// legal relative reference, and honest about where the file is.
+func bundlePrefix(base string, b scan.BundleResult) string {
+	dir := b.Path
+	if b.SingleFile {
+		dir = filepath.Dir(dir)
+	}
+	absBase, err1 := filepath.Abs(base)
+	absDir, err2 := filepath.Abs(dir)
+	if err1 == nil && err2 == nil {
+		if rel, err := filepath.Rel(absBase, absDir); err == nil {
+			dir = rel
+		}
+	}
+	return filepath.ToSlash(dir)
 }
 
 // astTaxonomy renders the OWASP Agentic Skills Top 10 as a SARIF taxonomy

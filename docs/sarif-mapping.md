@@ -145,3 +145,26 @@ recorded in `originalUriBaseIds.SRCROOT`, which is the SARIF-standard way to
 resolve it, but whether GitHub's uploader honours that base is unconfirmed —
 tracked as **M3-09** in `docs/v1-dev-plan.md`. Scanning from the repository root
 avoids the question entirely.
+
+## Many bundles in one log
+
+When `scan` covers more than one bundle (a folder of skills, several paths, or
+`--installed`), the log is still **one run**, so a repository of skills uploads
+as a single code-scanning analysis. Several runs under one category would
+overwrite each other.
+
+- **URIs are relative to the discovery root**, and `originalUriBaseIds.SRCROOT`
+  records that root. A finding in `skills/foo/SKILL.md` carries that whole path,
+  not `SKILL.md`. That is also why scanning the repository root sidesteps the
+  single-bundle limitation above.
+- **Every result carries `properties.bundle`**, the bundle's directory relative
+  to the root. It still identifies the skill when a finding has no location.
+- **Fingerprints hash the root-relative path**, so the same rule and excerpt in
+  two bundles stay two alerts.
+- **`tool.driver.rules[]` lists each rule once** for the whole set.
+- **A bundle that could not be loaded** has no results. It is reported in
+  `invocations[0].toolExecutionNotifications` at level `error`, with
+  `executionSuccessful: false`, so it can't read as "scanned clean".
+- **Run properties** are `mode: "multi"`, `verdict` (the worst of the set, where
+  a load error counts as `fail`), `risk_score_max`, `counts`, `bundles` and
+  `errors`.

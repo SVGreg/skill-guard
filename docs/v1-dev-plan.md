@@ -600,7 +600,7 @@ surfaceguard locations                           # agent · scope · path · exi
 | M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | done | — | #349 |
 | M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | done | — | #350 |
 | M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | done | — | #352 |
-| M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | todo | M9-03 | |
+| M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | in-progress | M9-03 | |
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | todo | M9-02, M9-03 | |
 | M9-06 | Embedded agent-location registry (`pkg/locations`) | todo | M9-01 | |
 | M9-07 | `scan --installed` + `--agent`/`--scope`, and `surfaceguard locations` | todo | M9-05, M9-06 | |
@@ -810,6 +810,10 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-04 reports an unloadable bundle as a SARIF `invocations[].toolExecutionNotifications`
+  entry, with `executionSuccessful: false`. The card didn't say how, and without it the bundle
+  would just be missing from the results, which looks like "clean". It also added a `bundle`
+  result property, so location-less findings still name their skill.
 - 2026-09-27 — M9-03 moved documenting the multi-mode JSON envelope in the README to **M9-05**.
   Until the CLI emits that shape, the README would advertise output nobody can produce. The
   envelope is `mode: "multi"` with `ast_references` hoisted once to the top level, and each bundle
