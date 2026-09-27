@@ -30,6 +30,7 @@ go vet ./...                                # static checks
 # end-to-end smoke test against fixtures (also the exit-code contract)
 go run ./cmd/surfaceguard scan testdata/malicious   # verdict: fail, exit 1
 go run ./cmd/surfaceguard scan testdata/benign      # verdict: pass, exit 0
+go run ./cmd/surfaceguard scan testdata             # folder scan, both fixtures: exit 1
 ```
 
 Exit codes are part of the contract and are asserted in the smoke test: `0` ok · `1` scan

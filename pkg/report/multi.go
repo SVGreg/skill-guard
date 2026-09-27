@@ -22,9 +22,13 @@ func MultiText(w io.Writer, m *scan.MultiReport, opt Options) {
 	for _, r := range rows {
 		tally[r.Status()]++
 	}
-	fmt.Fprintf(w, "%sverdict: %s%s%s   %d skills: %d fail, %d warn, %d pass, %d error   max risk: %d/100   %s\n",
+	noun := "skills"
+	if len(rows) == 1 {
+		noun = "skill"
+	}
+	fmt.Fprintf(w, "%sverdict: %s%s%s   %d %s: %d fail, %d warn, %d pass, %d error   max risk: %d/100   %s\n",
 		col(cBold), col(verdictColor(m.Verdict)), m.Verdict, col(cReset),
-		len(rows), tally["fail"], tally["warn"], tally["pass"], tally["error"],
+		len(rows), noun, tally["fail"], tally["warn"], tally["pass"], tally["error"],
 		m.RiskScoreMax, countsLine(m.Counts))
 	if len(rows) > 0 {
 		fmt.Fprintf(w, "\n  %s%-7s %-8s %-8s %s%s\n", col(cGray), "VERDICT", "RISK", "FINDINGS", "PATH", col(cReset))

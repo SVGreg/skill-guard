@@ -32,8 +32,8 @@ func bundlePathArg(cmd *cobra.Command, args []string) error {
 	case len(args) > 1:
 		return fmt.Errorf(
 			"too many arguments: expected one <path>, got %d (%s)\n"+
-				"  scan/sign/verify operate on a single skill at a time.",
-			len(args), strings.Join(args, " "))
+				"  %s operates on a single skill at a time.",
+			len(args), strings.Join(args, " "), cmd.Name())
 	}
 	return nil
 }

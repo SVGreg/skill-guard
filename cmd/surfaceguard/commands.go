@@ -14,6 +14,7 @@ import (
 	"github.com/SVGreg/surfaceguard/pkg/report"
 	"github.com/SVGreg/surfaceguard/pkg/rules"
 	"github.com/SVGreg/surfaceguard/pkg/scan"
+	"github.com/SVGreg/surfaceguard/pkg/skill"
 	sgverify "github.com/SVGreg/surfaceguard/pkg/verify"
 	"github.com/spf13/cobra"
 )
@@ -45,17 +46,24 @@ func scanCmd() *cobra.Command {
 	var format, out, policyPath, failOn string
 	var rulepacks []string
 	var verbose, quiet, noColor bool
-	var snippet int
+	var snippet, maxDepth, maxBundles int
 
 	cmd := &cobra.Command{
-		Use:   "scan <path>",
-		Short: "Scan a SKILL.md bundle against the static ruleset",
+		Use:   "scan <path>...",
+		Short: "Scan one skill, or every skill under a folder, against the static ruleset",
 		Long: `Scan a skill for prompt-injection, jailbreak, data-exfiltration, unsafe
 execution, secret, and metadata risks (OWASP Agentic Skills Top 10).
 
-INPUT <path>:
+INPUT <path>...:
   • a bundle directory containing SKILL.md (plus any scripts/config), or
-  • a single SKILL.md file.
+  • a single SKILL.md file, or
+  • any other folder: every skill below it is discovered and scanned
+    (a directory holding SKILL.md is one skill; .git and vendored trees
+    like node_modules are skipped; symlinked skill folders are followed
+    once, never for descent).
+  One skill path gives the single-skill report. A folder, or several paths,
+  gives one aggregate report: a row per skill, worst first, then the
+  findings of every skill that did not pass (all of them with -v).
 
 OUTPUT (--format):
   • text        human-readable findings (default)
@@ -66,20 +74,31 @@ OUTPUT (--format):
 POLICY (--policy .surfaceguard.yaml): sets fail_on/warn_on thresholds, waivers,
 allowlists, and the trust roster. Without one, the default gates fail on high+.
 
-EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
+EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.
+  Over many skills: 1 if any skill fails OR could not be loaded (an audit
+  that cannot read a skill has not shown it is safe); 3 if none were found.`,
 		Example: `  surfaceguard scan ./my-skill
+  surfaceguard scan ./repo                        # every skill under ./repo
+  surfaceguard scan ~/.claude/skills ./.claude/skills --format json
   surfaceguard scan ./my-skill/SKILL.md --verbose
   surfaceguard scan ./my-skill --snippet          # show the triggering source line
   surfaceguard scan ./my-skill --snippet=0 -v     # no context lines, full rationale
   surfaceguard scan ./my-skill --format json --out report.json
   surfaceguard scan ./my-skill --policy .surfaceguard.yaml --fail-on critical`,
-		Args: bundlePathArg,
+		Args: scanPathsArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
 			}
 			if err := validateSeverity("--fail-on", failOn); err != nil {
 				return err
+			}
+			if len(args) > 1 || !isSingleBundle(args[0]) {
+				return runMultiScan(args, multiScanOpts{
+					format: format, out: out, policyPath: policyPath, failOn: failOn,
+					rulepacks: rulepacks, verbose: verbose, quiet: quiet, noColor: noColor,
+					maxDepth: maxDepth, maxBundles: maxBundles,
+				})
 			}
 			b, err := loadBundleFriendly(args[0])
 			if err != nil {
@@ -147,6 +166,8 @@ EXIT CODES: 0 pass/warn · 1 fail · 3 usage error · 4 internal error.`,
 	f.Lookup("snippet").NoOptDefVal = "2"
 	f.BoolVarP(&quiet, "quiet", "q", false, "suppress the secondary text summary when using --out")
 	f.BoolVar(&noColor, "no-color", false, "disable ANSI color in output")
+	f.IntVar(&maxDepth, "max-depth", skill.DefaultMaxDepth, "folder scans: how many directory levels below each path to search for skills")
+	f.IntVar(&maxBundles, "max-bundles", skill.DefaultMaxBundles, "folder scans: stop after this many skills (reported, never silent)")
 	return cmd
 }
 

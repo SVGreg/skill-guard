@@ -210,6 +210,48 @@ surfaceguard scan ./my-skill --rulepack ./extra-rules.yaml   # add rules (repeat
 | `-v, --verbose` | show rationale and suggested fix per finding |
 | `--snippet[=N]` | show each finding's source line with the match underlined, plus N context lines (default 2) |
 | `--no-color` | disable ANSI color |
+| `--max-depth` | folder scans: directory levels to search below each path (default 8) |
+| `--max-bundles` | folder scans: stop after this many skills; reported, never silent (default 5000) |
+
+#### Scanning a folder of skills
+
+Point `scan` at any folder that is not itself a skill, or name several paths,
+and it discovers every skill below and scans them all in one run:
+
+```sh
+surfaceguard scan ./repo                              # every skill under ./repo
+surfaceguard scan ~/.claude/skills ./.claude/skills   # several roots, one report
+surfaceguard scan ./repo --format sarif --out results.sarif
+```
+
+```
+verdict: fail   2 skills: 1 fail, 0 warn, 1 pass, 0 error   max risk: 100/100   [crit 15, high 50, med 8, low 0, info 0]
+
+  VERDICT RISK     FINDINGS PATH
+  fail    100 L3   73       testdata/malicious
+  pass    0 L0     0        testdata/benign
+
+── testdata/malicious  (helper-tool)
+verdict: fail   risk score: 100/100 (L3)   [crit 15, high 50, med 8, low 0, info 0]
+  …
+```
+
+Discovery follows these rules:
+- A directory holding `SKILL.md` is one skill, and its subtree belongs to it.
+- `.git` and vendored trees (`node_modules`, `.venv`, `vendor`, …) are skipped.
+- A symlinked skill folder is scanned once, by its real path, and never
+  followed for descent. A symlink to a folder that is not a skill is noted in
+  the report rather than followed.
+
+The summary lists every skill worst first. Findings are shown for each skill
+that did not pass, or for all of them with `-v`.
+
+Exit codes keep their meaning over the set:
+- `1` if **any** skill fails, **or could not be loaded**: an audit that cannot
+  read a skill has not shown it is safe.
+- `3` if no skill was found.
+
+A single skill path still gives exactly the single-skill report.
 
 ### `keygen`
 
@@ -527,6 +569,9 @@ under a millisecond. Setup and the full mode table:
 - a **bundle directory** containing `SKILL.md` (plus scripts/config), or
 - a **single `SKILL.md` file**.
 
+`scan` also accepts **any folder**, or **several paths**, and scans every skill
+it discovers below them (see [Scanning a folder of skills](#scanning-a-folder-of-skills)).
+
 **Output** (`scan --format`):
 
 | Format | Use |
@@ -553,6 +598,32 @@ instead of degrading into an opaque rule id. Findings waived by policy are
 emitted as SARIF `suppressions` carrying the waiver's stated reason, rather than
 dropped — a waiver stays visible to review instead of silently shrinking the
 report.
+
+A scan over several skills emits one aggregate object in `json`, marked
+`"mode": "multi"`. The single-skill object has no `mode` key, so a consumer can
+tell the two apart:
+
+```json
+{
+  "mode": "multi",
+  "bundles": [
+    { "path": "skills/foo", "name": "foo", "verdict": "fail", "risk_score": 40, "findings": [ … ] },
+    { "path": "skills/bar", "error": "bundle contains symlink skills/bar/x (rejected)" }
+  ],
+  "verdict": "fail", "risk_score_max": 40, "max_severity": "critical",
+  "counts": { … }, "errors": 1, "notes": [ … ],
+  "ast_references": { … }
+}
+```
+
+- Each `bundles[]` element is the single-skill report, inline, plus `path`,
+  `name`, and `real_path`/`via`/`also` when a symlink reached it. A skill that
+  failed to load has `error` instead of report fields.
+- `ast_references` covers the whole set, once.
+- `notes` lists what discovery did not cover: limits hit, symlinks not followed.
+- In `sarif`, the set is one run with URIs relative to the scanned folder (see
+  [`docs/sarif-mapping.md`](docs/sarif-mapping.md#many-bundles-in-one-log)).
+- `skill-card` describes one skill, so it is refused (exit 3) for a set.
 
 Each finding carries its OWASP `ast` ids, and the report includes an
 `ast_references` map resolving every cited id to its title and page — so
