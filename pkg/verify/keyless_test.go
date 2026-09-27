@@ -461,3 +461,52 @@ func TestTransparencyCheckpointEnforcedWhenPinned(t *testing.T) {
 		t.Error("no explanation for the unverified checkpoint")
 	}
 }
+
+// TestKeylessIgnoresTimestampsFromUnprovenEntries (#333, step 1): the
+// certificate is checked at the time of a log entry that passed verification,
+// never at the earliest time over every entry. The bundle below carries the
+// genuine, proven entry — moved to a day after the short-lived certificate
+// expired, which is when the log "really" recorded it — plus a second entry
+// with no inclusion proof and a backdated time inside the certificate's
+// window. Before the fix, oms.IntegratedTime picked the backdated entry and
+// the expired certificate verified.
+func TestKeylessIgnoresTimestampsFromUnprovenEntries(t *testing.T) {
+	f := newKeylessFixture(t, testIdentity, testIssuer, time.Now().Add(-90*24*time.Hour))
+	roster := policy.Trust{
+		Roots:      []policy.Root{{Name: "test-fulcio", PEM: f.rootPEM}},
+		Identities: []policy.IdentityRule{{Pattern: "https://github.com/acme/*", Issuer: testIssuer}},
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(f.bundle, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	vm := raw["verificationMaterial"].(map[string]any)
+	entries := vm["tlogEntries"].([]any)
+	genuine := entries[0].(map[string]any)
+	// integratedTime is not covered by the inclusion proof, so moving it keeps
+	// the proof valid — the proven entry now says "logged after expiry".
+	genuine["integratedTime"] = f.signedAt.Add(24 * time.Hour).Unix()
+	forged := map[string]any{
+		"logIndex":          "1",
+		"integratedTime":    f.signedAt.Unix(),
+		"logId":             genuine["logId"],
+		"canonicalizedBody": genuine["canonicalizedBody"],
+	}
+	vm["tlogEntries"] = append(entries, forged)
+	data, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	res := VerifyOMS(f.skill, data, roster)
+	if res.Trusted || res.SignatureValid {
+		t.Fatalf("expired certificate verified via a proof-less backdated entry: %+v", res)
+	}
+	if res.CertError == "" {
+		t.Error("no explanation for the rejected certificate")
+	}
+	if !res.SignedAt.Equal(f.signedAt.Add(24 * time.Hour).Truncate(time.Second)) {
+		t.Errorf("SignedAt = %v, want the proven entry's time", res.SignedAt)
+	}
+}
