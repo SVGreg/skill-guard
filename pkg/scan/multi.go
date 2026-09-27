@@ -17,7 +17,10 @@ type BundleResult struct {
 	Via      string   `json:"via,omitempty"`
 	Also     []string `json:"also,omitempty"`
 	Name     string   `json:"name,omitempty"`
-	Error    string   `json:"error,omitempty"`
+	// SingleFile marks a bundle that is one SKILL.md named directly, so a
+	// renderer mapping its findings back to disk uses the file's directory.
+	SingleFile bool   `json:"single_file,omitempty"`
+	Error      string `json:"error,omitempty"`
 	*Report
 }
 
@@ -94,7 +97,7 @@ func (s *Scanner) ScanAll(cands []skill.Candidate, load Loader, parallel int) *M
 }
 
 func (s *Scanner) scanOne(c skill.Candidate, load Loader) BundleResult {
-	r := BundleResult{Path: c.Path, Via: c.Via, Also: c.Also}
+	r := BundleResult{Path: c.Path, Via: c.Via, Also: c.Also, SingleFile: c.File}
 	if c.RealPath != c.Path {
 		r.RealPath = c.RealPath
 	}
