@@ -142,29 +142,33 @@ OpenCode and Goose. For discovery it recommends:
 M9-02's defaults are looser on depth (8) because they also serve `scan <repo>`, where a skill can
 sit deeper than an installed-skills root.
 
-**Consequence for the registry:** `~/.agents/skills` is **one location shared by several agents**,
-not one per agent. The registry lists it once, under agent id `agents`, and every agent that reads
-it names it in `reads_shared`. `scan --installed --agent codex` then includes it without scanning
-the same bundle twice.
+**Consequence for the registry:** `~/.agents/skills` is **one directory read by several agents**.
+The registry lists it under each agent that reads it, which keeps each agent's entry a faithful
+copy of its own docs. The resolver then merges identical paths into one location that names every
+reader, so `scan --installed --agent codex` includes it and a full audit scans it once.
 
 ## What this means for M9-06
 
-The registry schema needs everything below, and nothing more:
+As built in `pkg/locations/locations.yaml`:
 
-1. **Per-OS path templates** with `~` and `${ENV}` expansion, plus an **override variable** that
-   replaces a prefix: `CLAUDE_CONFIG_DIR` for `~/.claude`, `CLAUDE_CODE_PLUGIN_CACHE_DIR` for
-   `~/.claude/plugins`.
-2. **Bounded globs**, for the Claude Code plugin cache
-   (`cache/*/*/*/skills` plus the plugin root itself) and Goose plugins (`~/.agents/plugins/*`).
-   Every other location is a fixed directory.
-3. **A `walk_up` flag** for project-scope entries of agents that read ancestors up to the repo root
-   (Claude Code, Codex, OpenCode).
-4. **A `status` of `documented` / `legacy`**, so `locations` can show which candidates a vendor no
-   longer documents. Legacy entries are still scanned.
-5. **Shared locations**, meaning `~/.agents/skills` and `.agents/skills`, owned by the `agents`
-   pseudo-agent and referenced from others by `reads_shared`.
-6. **A `source`** on each entry, linking back to this page's row.
+1. **Path templates** use `~` and `${VAR:-default}`. The default form is the prefix override, e.g.
+   `${CLAUDE_CONFIG_DIR:-~/.claude}/skills` and `${CLAUDE_CODE_PLUGIN_CACHE_DIR:-~/.claude/plugins}/cache`.
+   An `os:` list restricts an entry to some operating systems.
+2. **No globs.** Plugin caches (`<plugins-root>/cache`, `marketplaces`, `synced`,
+   `~/.agents/plugins`) are listed as their top directory. `skill.Discover` finds the bundles
+   below, and the Claude cache's `cache/<mkt>/<plugin>/<version>/skills/<name>` is well inside its
+   depth limit. A glob would re-implement discovery with weaker bounds.
+3. **`walk_up`** on project entries of agents that read ancestors up to the repo root (Claude
+   Code, Codex, OpenCode). The walk stops at the first directory holding `.git`. Outside a
+   repository it covers the project directory only.
+4. **`status: documented | legacy`**. Legacy candidates are still scanned. A path is `documented`
+   if any agent that reads it documents it.
+5. **Shared directories** are listed under every reading agent and merged by the resolver. There
+   is no pseudo-agent.
+6. **`source`** on each agent is a heading anchor on this page. A test fails if one doesn't
+   resolve.
 
 Out of scope, and deliberately so: reading `installed_plugins.json` or `enabledPlugins` to narrow
 the set to what is *enabled*. That would parse agent config for a policy decision, so the audit
-scans what is **on disk**, which is a superset of what loads.
+scans what is **on disk**, which is a superset of what loads. Claude Code's nested
+`<subdir>/.claude/skills` is not a fixed location either. `scan <repo>` discovers those.
