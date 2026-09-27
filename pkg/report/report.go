@@ -57,6 +57,18 @@ type Options struct {
 // Text writes a human-readable report.
 func Text(w io.Writer, rep *scan.Report, opt Options) {
 	col := colorer(opt.NoColor)
+	used := map[string]bool{}
+	textBody(w, rep, opt, col, used)
+	// With --verbose every finding already carries its own owasp lines, so the
+	// legend at the foot would be a third copy of the same URLs.
+	if !opt.Verbose {
+		astLegend(w, used, col)
+	}
+}
+
+// textBody writes one report's verdict line and findings, recording the AST
+// ids it cites in used so a caller rendering many reports prints one legend.
+func textBody(w io.Writer, rep *scan.Report, opt Options, col func(string) string, used map[string]bool) {
 	verdictLine(w, rep, col)
 	if len(rep.Findings) == 0 {
 		fmt.Fprintf(w, "  %sno findings%s\n", col(cGray), col(cReset))
@@ -64,7 +76,6 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 	if opt.Snippet && len(rep.Findings) > 0 {
 		fmt.Fprintln(w)
 	}
-	used := map[string]bool{}
 	fc := newFrameCache()
 	for i, f := range rep.Findings {
 		for _, id := range f.AST {
@@ -78,11 +89,6 @@ func Text(w io.Writer, rep *scan.Report, opt Options) {
 	}
 	if len(rep.Waived) > 0 {
 		fmt.Fprintf(w, "  %s%d waived%s\n", col(cGray), len(rep.Waived), col(cReset))
-	}
-	// With --verbose every finding already carries its own owasp lines, so the
-	// legend at the foot would be a third copy of the same URLs.
-	if !opt.Verbose {
-		astLegend(w, used, col)
 	}
 }
 
@@ -223,15 +229,7 @@ func astLegend(w io.Writer, used map[string]bool, col func(string) string) {
 }
 
 func verdictLine(w io.Writer, rep *scan.Report, col func(string) string) {
-	var vc string
-	switch rep.Verdict {
-	case model.Fail:
-		vc = cRed
-	case model.Warn:
-		vc = cYellow
-	default:
-		vc = cGreen
-	}
+	vc := verdictColor(rep.Verdict)
 	fmt.Fprintf(w, "%sverdict: %s%s%s   risk score: %d/100 (%s)   %s\n",
 		col(cBold), col(vc), rep.Verdict, col(cReset),
 		rep.RiskScore, rep.RiskTier,

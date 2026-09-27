@@ -599,7 +599,7 @@ surfaceguard locations                           # agent · scope · path · exi
 |---|---|---|---|---|
 | M9-01 | Spike: verify each agent's skill locations against primary docs → `docs/skill-locations.md` | done | — | #349 |
 | M9-02 | `skill.Discover()` — bounded, symlink-safe, deterministic bundle discovery | done | — | #350 |
-| M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | todo | — | |
+| M9-03 | Multi-bundle scan engine + aggregate report (text + JSON) | in-progress | — | |
 | M9-04 | SARIF for multi mode: one run, per-bundle artifacts, root-relative URIs | todo | M9-03 | |
 | M9-05 | `scan <path>...`: folder discovery and many paths on the CLI | todo | M9-02, M9-03 | |
 | M9-06 | Embedded agent-location registry (`pkg/locations`) | todo | M9-01 | |
@@ -683,8 +683,8 @@ under the root.
 contract. New flags: `--max-depth`, `--max-bundles`. The "no SKILL.md at its root" usage error
 becomes discovery, and "discovery found nothing" gets its own exit-3 message naming the roots
 searched. A progress line goes to **stderr** only when stderr is a TTY. `--out` and the text mirror
-behave as in single mode. Update `scan --help`, the README usage section, and the smoke-test
-contract in CLAUDE.md.
+behave as in single mode. Update `scan --help`, the README usage section (including the multi-mode JSON envelope
+M9-03 defined), and the smoke-test contract in CLAUDE.md.
 **Acceptance.**
 - `scan testdata/benign` and `scan testdata/malicious` produce byte-identical stdout to `main`
   (golden diff) with unchanged exit codes 0/1.
@@ -810,6 +810,11 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-27 — M9-03 moved documenting the multi-mode JSON envelope in the README to **M9-05**.
+  Until the CLI emits that shape, the README would advertise output nobody can produce. The
+  envelope is `mode: "multi"` with `ast_references` hoisted once to the top level, and each bundle
+  element is the single-report object inline plus `path`/`name`/`error`. `pkg/report` gained
+  `textBody` so N reports share one OWASP legend. Single-bundle `Text` output is byte-identical.
 - 2026-09-27 — M9-02 added two `Candidate` fields that the card didn't list: `Also`, for the other
   paths reaching one real bundle, which M9-07 needs to list a shared bundle under every agent; and
   `File`, for a `SKILL.md` named directly as a root. It also added one reported condition,
