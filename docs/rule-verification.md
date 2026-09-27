@@ -778,6 +778,17 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   action"*, *"remove the entry from the audit log"* — likewise.
 
 ### SG-INJ-011 — Agent-relayed user command ("ClickFix 2.0")  (AST01, high) — **implemented** (`core-injection`)
+> **Negated relay (core-injection 1.5.1, #336).** Leaves 4 and 5 let any text sit in front of the relay verb, so
+> *"…use an account-owned API token when granular access is required, and never ask the user to paste its value
+> into chat"* (`cloudflare/skills/wrangler`, ~97k installs, 2026-09-26 skills.sh sweep) was a `high` finding.
+> That line is secret-handling guidance, and the finding turned the skill from **pass → fail**. The fix: the relay
+> verb must **start a clause** (line start, punctuation, or `and/then/so/now/first/next/also`), optionally after
+> a modal (`you must`) or an adverb (`please`, `always`), so a negation in front of it fails the match. A per-line
+> `suppress` for "never ask the user…" was **rejected**: suppress drops the whole line, so appending a negated
+> clause to a real relay would have muted it, and a test row pins that case. Corpus: 0 findings / 1,036 before
+> and after (the rule has no pinned-corpus hits; precision evidence is the sweep line plus 3 negated rows).
+> `TestAgentRelayedCommandCovered` gains 4 benign and 5 TP rows.
+>
 - **Threat:** the skill does not run the payload itself — it instructs the **agent to hand a command to
   the human** and have them paste it into their own terminal, framed as a mandatory prerequisite or
   device verification. The agent becomes the trusted intermediary that launders an attacker's command
