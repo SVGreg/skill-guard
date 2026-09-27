@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.5](https://github.com/SVGreg/surfaceguard/compare/v0.5.4...v0.5.5) (2026-09-27)
+
+
+### Features
+
+* **rules:** add SG-EVA-004 — reviewer-directed verdict manipulation (AST08) ([#331](https://github.com/SVGreg/surfaceguard/issues/331)) ([e9ccd1b](https://github.com/SVGreg/surfaceguard/commit/e9ccd1b116d7f3649bf9d0ccbd66c0219d0e3708))
+* **rules:** widen SG-MTA-001 to the verbatim YAML tag, Ruby Psych gadget tags and %TAG handles (AST04) ([#346](https://github.com/SVGreg/surfaceguard/issues/346)) ([a2fd91e](https://github.com/SVGreg/surfaceguard/commit/a2fd91e6b4ae22593fb82d03c44deea2235f6330))
+* **rules:** widen SG-SEC-001 to CLI-printed and env-held credentials (AST03) ([#332](https://github.com/SVGreg/surfaceguard/issues/332)) ([cc70ff6](https://github.com/SVGreg/surfaceguard/commit/cc70ff61523848e3b69edef039e39645936daea7))
+
+
+### Bug Fixes
+
+* **evaluation:** fetch_clawhub and fetch_skillsmp honour OUTROOT and LEDGER_SOURCE ([#347](https://github.com/SVGreg/surfaceguard/issues/347)) ([9ecff67](https://github.com/SVGreg/surfaceguard/commit/9ecff6720581c63b7b194ef1471b49a68824657f))
+* **oms:** refuse a statement whose subject root disagrees with its resources ([#334](https://github.com/SVGreg/surfaceguard/issues/334)) ([750c772](https://github.com/SVGreg/surfaceguard/commit/750c77223f09a663b153835f94f58bb33b507ec5))
+* **rules:** narrow and widen SG-NET-002 — table pipes, argument-less mentions, data to interpreters; sudo -E, /bin/bash, env, tee ([#341](https://github.com/SVGreg/surfaceguard/issues/341)) ([dff88fe](https://github.com/SVGreg/surfaceguard/commit/dff88fe8b38409313eabb3ae94823eed3595e7fa))
+* **rules:** narrow SG-INJ-011 — the relay verb must start a clause, so a negated relay no longer fires ([#342](https://github.com/SVGreg/surfaceguard/issues/342)) ([aaec47c](https://github.com/SVGreg/surfaceguard/commit/aaec47c75098916da92668c1152590558e194b10))
+* **rules:** narrow SG-SEC-001 — the verb→path gap no longer crosses a sentence ([#327](https://github.com/SVGreg/surfaceguard/issues/327)) ([00e30fa](https://github.com/SVGreg/surfaceguard/commit/00e30fa9ba245b89134bc9239575ed6d0ef4cfcd)), closes [#325](https://github.com/SVGreg/surfaceguard/issues/325)
+* **verify:** anchor keyless certificate validity on a proven log entry's time ([#343](https://github.com/SVGreg/surfaceguard/issues/343)) ([71c6d5d](https://github.com/SVGreg/surfaceguard/commit/71c6d5d6e70cc80c312e0c62b236bbb3fdb92e75))
+
 ## [0.5.4](https://github.com/SVGreg/surfaceguard/compare/v0.5.3...v0.5.4) (2026-09-19)
 
 
