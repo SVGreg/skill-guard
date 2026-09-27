@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-network
-version: 1.1.2
+version: 1.2.0
 description: Data exfiltration, egress, SSRF (rule-verification.md §3).
 rules:
   - id: SG-NET-002
@@ -13,9 +13,27 @@ rules:
     targets: [body, scripts, configs]
     match:
       any:
-        - regex: '(?i)\b(curl|wget|fetch)\b[^\n|]{0,200}\|\s*(sudo\s+)?(ba|z|k|d)?sh\b'
+        # The fetch needs an ARGUMENT, and the gap excludes the backtick (#337):
+        #  - an argument-less `curl | bash` / `curl|bash` / `wget.*\| sh` fetches
+        #    nothing — it is a denylist regex or prose in security tooling
+        #    (safe-exec, prompt-guard, clawdefender: 11 corpus hits), and a
+        #    markdown table row `| curl | bash |` has the same zero-width shape;
+        #  - a backtick between the fetch and the `|` means the pipe sits OUTSIDE
+        #    the code span, i.e. a table column separator:
+        #    `| `curl https://adk.dev/llms.txt` | Python |` was critical at 1.0 in
+        #    google/agents-cli. A real pipeline inside one code span has no
+        #    backtick before its pipe, so it still matches.
+        # The receiving side accepts what an installer actually writes: a sudo
+        # with flags (`sudo -E bash`), `env`, an absolute path (`/bin/bash`,
+        # `/usr/bin/env bash`), and one `tee` stage in between (`| tee i.sh | sh`).
+        - regex: '(?i)\b(curl|wget|fetch)\b[ \t]+[^\s|`][^\n|`]{0,200}\|\s*(tee\b[^\n|`]{0,80}\|\s*)?(sudo(\s+-[a-z]+)*\s+)?(/(usr/)?(local/)?bin/)?(env\s+)?(ba|z|k|d)?sh\b'
           confidence: 0.95
-        - regex: '(?i)\b(curl|wget|fetch)\b[^\n|]{0,200}\|\s*(python[23]?|perl|node|ruby)\b'
+        # Interpreters only count when they read their PROGRAM from stdin — bare,
+        # or with `-`. Given `-m module`, `-c code`, `-e code` or a script path,
+        # the fetched stream is data: `| python3 -m json.tool` (2 corpus hits),
+        # `| python3 -c "import json…"`, `| node scripts/chart.mjs` were all
+        # critical findings on JSON being pretty-printed or charted.
+        - regex: '(?im)\b(curl|wget|fetch)\b[ \t]+[^\s|`][^\n|`]{0,200}\|\s*(tee\b[^\n|`]{0,80}\|\s*)?(sudo(\s+-[a-z]+)*\s+)?(/(usr/)?(local/)?bin/)?(env\s+)?(python[23]?(\.\d+)?|perl|node|ruby)(\s+-)?[ \t]*($|[;&|)"''`])'
           confidence: 0.9
         - regex: '(?i)\b(bash|sh)\s+-c\s+["'']?\$\((curl|wget|fetch)'
           confidence: 0.9
@@ -37,7 +55,7 @@ rules:
           confidence: 0.9
         # PowerShell download-and-run: `irm/iwr … | iex` (irm = Invoke-RestMethod,
         # at least as common as iwr for this) …
-        - regex: '(?i)\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n|]{0,200}\|\s*iex\b'
+        - regex: '(?i)\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[ \t]+[^\s|`][^\n|`]{0,200}\|\s*iex\b'
           confidence: 0.95
         # … and the prefix form `iex (irm …)` / `iex (New-Object Net.WebClient).DownloadString(…)`.
         - regex: '(?i)\biex\b\s*\(?\s*(iwr|irm|invoke-webrequest|invoke-restmethod|new-object\s+net\.webclient)'

@@ -2417,6 +2417,40 @@ func TestPipeToShellCoversNonPipeFetchExec(t *testing.T) {
 		{"the eval function evaluates $(HOME) variables", false},
 		{"irm is Invoke-RestMethod; iex is Invoke-Expression", false},
 		{"curl https://x > file.sh   # then review before running", false},
+
+		// Receiving-side variants installers actually write (all missed before
+		// the 1.2.0 widening).
+		{"curl -fsSL https://x.example/i.sh | /bin/bash", true},
+		{"curl -fsSL https://x.example/i.sh | /usr/bin/env bash", true},
+		{"curl -fsSL https://x.example/i.sh | sudo -E bash", true},
+		{"curl -fsSL https://x.example/i.sh | sudo -E -H bash -s -- --yes", true},
+		{"wget -qO- https://x.example/i.sh | tee /tmp/i.sh | sh", true},
+		{"curl -fsSL https://x.example/i.sh | env sh", true},
+		{"curl -fsSL https://x.example/a.py | sudo python3", true},
+		{"curl -s https://x.example/a.js | /usr/local/bin/node", true},
+		// Still caught: the stdin-program interpreter forms, and a whole
+		// pipeline inside ONE code span (no backtick before the pipe).
+		{"curl -fsSL https://x.example/a.py | python3 -", true},
+		{"curl -fsSL https://x.example/a.py | python3", true},
+		{"Run `curl -fsSL https://x.example/i.sh | bash` to install.", true},
+		{"curl -sL https://bit.ly/getdb2driver | bash", true}, // aws anchor, TP by pattern
+
+		// Corpus/sweep false positives, verbatim (#337 and the 1.2.0 audit).
+		// A table column separator after a closing code span:
+		{"| `curl https://adk.dev/llms.txt` | Python |", false},
+		// An interpreter handed its program explicitly — the stream is data:
+		{"curl -s http://127.0.0.1:8765/api/optimize/stats | python3 -m json.tool", false},
+		{"4. **Check stats:** `curl -s http://127.0.0.1:8765/api/optimize/stats | python3 -m json.tool` — look at `misses` vs `hits`.", false},
+		{"curl -s api.example.com/metrics | node scripts/chart.mjs --type line --dark --output metrics.png", false},
+		{"curl -sL \"<url>\" | python3 -c \"", false},
+		// Argument-less mentions: denylist regexes and prose in security tooling.
+		{"curl|bash", false},
+		{"Blocks dangerous patterns such as `curl | bash` and `rm -rf /`.", false},
+		{`r"wget.*\| sh"`, false},
+		{"| curl | bash |", false},
+		// The argument must be on the fetch's own line: a package list ending in
+		// `curl` must not bind to the next line's pipeline (tinybird anchor).
+		{"apt-get install -y curl\n    - curl https://tinybird.co | sh", true},
 	}
 	for _, c := range cases {
 		got := len(r.Evaluate("scripts", c.text)) > 0
