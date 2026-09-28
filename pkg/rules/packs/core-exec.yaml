@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-exec
-version: 1.5.0
+version: 1.6.0
 description: Dangerous commands, code execution, privilege escalation, persistence (rule-verification.md §3).
 rules:
   - id: SG-EXE-001
@@ -230,13 +230,48 @@ rules:
     targets: [scripts, configs]
     match:
       any:
-        - regex: '(?i)\bcrontab\b|@reboot|/etc/cron'
+        # --- cron. `crontab` must be a command being run, not a word: the bare
+        # `\bcrontab\b` leaf fired on "Does NOT modify crontab directly." in a
+        # docstring, on a code comment, and on a detection regex listing
+        # `...|crontab)`. Installing forms: a file argument, `-e`, or `-` (the
+        # stdin form `... | crontab -`); `crontab -l` only reads. The Python
+        # argv form (`["crontab", tmpfile]`) is its own alternative.
+        - regex: '(?im)(?:^\s*|[;&|(]\s*|\bsudo\s+)crontab(?:\s+-u\s+\S+)?\s+(?:-e\b|-(?:\s|$|[;&|)])|[^-\s#])|["'']crontab["'']\s*,\s*(?:["''](?:-e?["'']|[^-"''])|[^\s"''\]-])'
           confidence: 0.75
-        - regex: '(?i)>>?\s*[^\n]{0,20}(\.bashrc|\.zshrc|\.profile|\.bash_profile)'
+        - regex: '(?i)@reboot|/etc/cron'
           confidence: 0.75
-        - regex: '(?i)(launchctl\s+load|systemctl\s+enable|/Library/LaunchAgents)'
+        # --- shell rc files. The file must be the redirect/tee target as a
+        # path component — the old `>>?\s*[^\n]{0,20}\.profile` read the SQL
+        # `m.importance >= ? AND m.profile` and `<> em.profile_id` as rc writes.
+        - regex: '(?i)(?:>>?|\btee\b(?:\s+-a)?)\s*["'']?(?:[^\s"''<>|;&=]*/)?(?:\.bashrc|\.zshrc|\.profile|\.bash_profile|\.bash_login|\.zprofile|\.zshenv|\.zlogin|config\.fish)\b|(?:>>?|\btee\b(?:\s+-a)?)\s*["'']?/etc/(?:profile|bash\.bashrc|zsh/zshrc|zshenv)\b'
+          confidence: 0.75
+        - regex: '(?i)\b(?:Add-Content|Set-Content|Out-File)\b[^\n]*\$PROFILE\b|>>?\s*\$PROFILE\b'
+          confidence: 0.75
+        # --- systemd (issue #118). A unit written straight into a unit
+        # directory never touches `systemctl enable`: a redirect or tee into
+        # the directory, or a cp/mv/install whose LAST argument is there
+        # (a unit copied *out* for backup is a read). `--user`/`--now` may sit
+        # between `systemctl` and `enable`.
+        - regex: '(?i)(?:>>?|\btee\b(?:\s+-a)?)\s*["'']?[^\s"''|;&]*(?:/etc/systemd/system|/lib/systemd/system|\.config/systemd/user|/Library/Launch(?:Agents|Daemons))/'
+          confidence: 0.75
+        - regex: '(?im)\b(?:cp|mv|install|ln)\b[^\n|;&]*\s["'']?[^\s"''|;&]*(?:/etc/systemd/system|/lib/systemd/system|\.config/systemd/user|/Library/Launch(?:Agents|Daemons))/?[^\s"''|;&]*["'']?\s*(?:$|[|;&])'
+          confidence: 0.75
+        - regex: '(?i)\bsystemctl\s+(?:--[\w-]+(?:=\S+)?\s+)*enable\b'
           confidence: 0.7
-    rationale: Cron/rc/launchd/systemd persistence keeps attacker code running across sessions (AST01).
+        # --- launchd. `bootstrap`/`enable` are the current spellings of `load`.
+        - regex: '(?i)\blaunchctl\s+(?:load|bootstrap|enable|submit)\b|/Library/Launch(?:Agents|Daemons)\b'
+          confidence: 0.7
+        # --- Windows: scheduled tasks, Run keys, the Startup folder.
+        - regex: '(?i)\bschtasks(?:\.exe)?\s+/create\b|\bRegister-ScheduledTask\b'
+          confidence: 0.75
+        - regex: '(?i)\b(?:reg(?:\.exe)?\s+add|New-ItemProperty|Set-ItemProperty)\b[^\n]*\\CurrentVersion\\Run(?:Once)?\b'
+          confidence: 0.75
+        - regex: '(?i)\b(?:Copy-Item|Move-Item|New-Item|Set-Content|Out-File|copy|move|xcopy)\b[^\n]*(?:Start Menu\\Programs\\Startup|shell:startup)'
+          confidence: 0.7
+        # --- macOS login items.
+        - regex: '(?i)\bmake\s+(?:new\s+)?login\s+item\b'
+          confidence: 0.7
+    rationale: Cron/rc/launchd/systemd/Windows-autostart persistence keeps attacker code running across sessions (AST01).
     fix: Remove persistence mechanisms; skills should not install autostart hooks.
 
   - id: SG-CFG-001
