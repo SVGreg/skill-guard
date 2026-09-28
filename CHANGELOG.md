@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.0](https://github.com/SVGreg/surfaceguard/compare/v0.5.5...v0.6.0) (2026-09-28)
+
+
+### Features
+
+* **action:** scan a folder of skills from the default path (M9-09) ([#359](https://github.com/SVGreg/surfaceguard/issues/359)) ([67b3d71](https://github.com/SVGreg/surfaceguard/commit/67b3d7124e99457ef3e151971821602813d4a7c2))
+* **cli:** scan --installed and surfaceguard locations (M9-07) ([#356](https://github.com/SVGreg/surfaceguard/issues/356)) ([124e9d8](https://github.com/SVGreg/surfaceguard/commit/124e9d8a183ad195f973e021c0e1c0e991d62a81))
+* **cli:** scan &lt;path&gt;... — folder discovery and many paths (M9-05) ([#354](https://github.com/SVGreg/surfaceguard/issues/354)) ([a55408c](https://github.com/SVGreg/surfaceguard/commit/a55408c2d8702e16c2787f1bfb9e6fe53d23a856))
+* **cli:** verify many skills — folders, paths and --installed (M9-10) ([#360](https://github.com/SVGreg/surfaceguard/issues/360)) ([d7f452c](https://github.com/SVGreg/surfaceguard/commit/d7f452cda1ddc24d96be9b66fd4daa721a51e5fd))
+* **locations:** embedded registry of agent skill locations (M9-06) ([#355](https://github.com/SVGreg/surfaceguard/issues/355)) ([5d3155b](https://github.com/SVGreg/surfaceguard/commit/5d3155b4a3f96a181144890202d4a794d67527fc))
+* **policy:** waive a whole skill pinned to its Merkle root ([#363](https://github.com/SVGreg/surfaceguard/issues/363)) ([9f7227f](https://github.com/SVGreg/surfaceguard/commit/9f7227fda8808853196e48acdfdac04c5596c9b9))
+* **report:** multi-bundle SARIF — one run, root-relative URIs (M9-04) ([#353](https://github.com/SVGreg/surfaceguard/issues/353)) ([c4ef94a](https://github.com/SVGreg/surfaceguard/commit/c4ef94a633c5ecf0543d47d6750ed840185b6065))
+* **scan:** multi-bundle scan engine and aggregate text/JSON report (M9-03) ([#352](https://github.com/SVGreg/surfaceguard/issues/352)) ([cc52439](https://github.com/SVGreg/surfaceguard/commit/cc52439497fb65adc04bd28094bdb96eb26b2c23))
+* **skill:** Discover() — bounded, symlink-safe, deterministic bundle discovery (M9-02) ([#350](https://github.com/SVGreg/surfaceguard/issues/350)) ([b438ac2](https://github.com/SVGreg/surfaceguard/commit/b438ac292a2c876cd5597e8092e211a0e657cd43))
+
+
+### Bug Fixes
+
+* **guard:** verdict cache served stale decisions after a signature swap, a waiver expiry or an attestation expiry ([#357](https://github.com/SVGreg/surfaceguard/issues/357)) ([9799aa6](https://github.com/SVGreg/surfaceguard/commit/9799aa6a11b670403c63de86ff682d8619c33bec))
+* **rules:** widen and narrow SG-EXE-004 — systemd/Windows/login-item persistence; crontab and rc leaves no longer fire on prose or SQL ([#361](https://github.com/SVGreg/surfaceguard/issues/361)) ([9ac13ea](https://github.com/SVGreg/surfaceguard/commit/9ac13ea46a14c4264c59fe33b7b9c4e666273403))
+* **skill:** classify .mcp.json, per-IDE and one-file-per-tool MCP manifests as configs ([#187](https://github.com/SVGreg/surfaceguard/issues/187)) ([#362](https://github.com/SVGreg/surfaceguard/issues/362)) ([99f9db5](https://github.com/SVGreg/surfaceguard/commit/99f9db557e000670169d72660dac151c82edf27c))
+
+
+### Miscellaneous Chores
+
+* release 0.6.0 ([58066e0](https://github.com/SVGreg/surfaceguard/commit/58066e00f7b7e84bf94796098984801f216f86a5))
+
 ## [0.5.5](https://github.com/SVGreg/surfaceguard/compare/v0.5.4...v0.5.5) (2026-09-27)
 
 
