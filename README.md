@@ -782,6 +782,16 @@ waivers:
     reason: "reviewed: talks to our own analytics host"
     expires: 2026-12-31
 
+  # Waive a whole skill, but only THIS version of it. merkle_root is the bundle's
+  # content hash (`surfaceguard guard <path> --format json` → content_hash). With
+  # no `rule`, every rule is waived. The waiver lapses the moment one byte of the
+  # skill changes, so it cannot silently cover a later update. `reason` is
+  # required. Waived findings are still reported under `waived`, never dropped.
+  - bundle: my-skill            # optional; must match the manifest name
+    merkle_root: sha256:65208b2a26482ee941cee5d796d7f073cc64bb29a534439d4c0e3c6b56a815d9
+    reason: "authoring my own skill; reviewed 2026-09-28"
+    expires: 2026-12-31
+
 # NOTE: `allowlists` is part of the documented schema but is **not implemented** —
 # nothing reads it, so listed hosts and paths are still reported at full severity.
 # A policy that sets either field is rejected at load rather than silently

@@ -6,6 +6,7 @@ package scan
 import (
 	"sort"
 
+	"github.com/SVGreg/surfaceguard/pkg/attest"
 	"github.com/SVGreg/surfaceguard/pkg/model"
 	"github.com/SVGreg/surfaceguard/pkg/policy"
 	"github.com/SVGreg/surfaceguard/pkg/rules"
@@ -106,8 +107,14 @@ func (s *Scanner) Scan(b *skill.Bundle) *Report {
 	// the report will actually show.
 	findings = dedup(findings)
 	rep := &Report{}
+	// The Merkle root is computed only when a waiver could be pinned to it:
+	// it hashes every file, and most policies have no pinned waiver.
+	var id policy.BundleID
+	if s.policy.HasPinnedWaivers() {
+		id = policy.BundleID{Name: b.Manifest.Name, MerkleRoot: attest.MerkleRoot(attest.BundleLeaves(b))}
+	}
 	for i := range findings {
-		if reason := s.policy.WaiverFor(findings[i].RuleID, findings[i].File); reason != "" {
+		if reason := s.policy.WaiverForBundle(findings[i].RuleID, findings[i].File, id); reason != "" {
 			findings[i].Waived = true
 			findings[i].WaiverReason = reason
 			rep.Waived = append(rep.Waived, findings[i])
