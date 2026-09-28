@@ -227,7 +227,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-08 | Identity-based trust policy in `.surfaceguard.yaml` | done | M4-07 | #220 |
 | M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
-| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | blocked | M4-12 | |
+| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | done | M4-12 | #364 |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | done | M4-09 | #224 |
 | M4-11 | SGMT-1 documented as legacy; migration guidance | done | M4-12 | #225 |
 
@@ -810,6 +810,12 @@ Nothing in the repo blocks step 1 any more; it is a five-minute UI task.
 
 Newest last. One line per planning change, written by `/sg-plan`.
 
+- 2026-09-28 — M4-13 unblocked and done after v0.6.0. The row was stale: `pkg/attest/oms` has
+  shipped in every core release since M4-12 landed. The pinned `require … v0.2.2` predates the
+  module rename, and its tagged go.mod still declares `github.com/SVGreg/skill-guard`, so the
+  replace was hiding an **unresolvable** pin, not just an old one. keyless now requires core
+  v0.6.0 from the module proxy. Local work against unreleased core uses `go work` instead of a
+  replace.
 - 2026-09-27 — M9-10 separates **`unsigned`** (no signature) from **`unverified`** (signed by a key
   not in the roster). The card's acceptance named the unsigned bundle's state `unverified`, but they
   are different facts that ask for different actions. The full state set, worst first, is error,

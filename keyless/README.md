@@ -29,15 +29,16 @@ core module's `pkg/verify` and uses only the standard library.
 ## Install
 
 ```sh
-git clone https://github.com/SVGreg/surfaceguard && cd surfaceguard/keyless
-go build -o surfaceguard-keyless ./cmd/surfaceguard-keyless
+go install github.com/SVGreg/surfaceguard/keyless/cmd/surfaceguard-keyless@latest
 ```
 
-`go install …/keyless/cmd/surfaceguard-keyless@latest` does not work yet: this
-module resolves the core module through a `replace` directive so it always
-builds against the adjacent source, and `go install` refuses a module with
-replaces. That goes away once a core release containing `pkg/attest/oms` is
-tagged (plan row **M4-13**).
+This module pins a **released** core version in its `go.mod` (currently
+`v0.6.0`), not the adjacent source. So a core change this module depends on
+must be released before it can be used here: bump the requirement with
+`go get github.com/SVGreg/surfaceguard@<tag>`, then `go mod tidy`. For local
+development against unreleased core code, add a temporary
+`go work init . ..` workspace instead of a `replace`, since `go install`
+refuses modules with replaces.
 
 ## Use
 
