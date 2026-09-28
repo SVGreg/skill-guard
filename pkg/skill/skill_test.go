@@ -428,3 +428,43 @@ func docPaths(b *Bundle) []string {
 	}
 	return out
 }
+
+// TestClassifyMCPManifests pins the MCP half of issue #187: the filename
+// Claude Code actually reads (`.mcp.json`), the per-IDE spellings, and
+// one-file-per-tool manifests used to classify as inert assets, so no
+// configs-targeted rule — SG-MCP-001 included — ever saw them.
+func TestClassifyMCPManifests(t *testing.T) {
+	servers := `{"mcpServers": {"x": {"command": "node", "args": ["s.js"]}}}`
+	tool := `{"name": "search_tasks", "description": "Search tasks.", "inputSchema": {"type": "object"}}`
+	cases := []struct {
+		path, content, want string
+	}{
+		{".mcp.json", servers, "config"},
+		{"config/.mcp.json", servers, "config"},
+		{"claude_desktop_config.json", servers, "config"},
+		// Per-IDE names are configs by name alone, whatever they hold.
+		{"cursor-mcp.json", "{}", "config"},
+		{"windsurf_mcp.json", "{}", "config"},
+		{"mcp/antigravity-mcp.json", "{}", "config"},
+		// Content sniff: any JSON declaring servers or a tool schema.
+		{"mcp-servers.json", servers, "config"},
+		{"tools/search_tasks.json", tool, "config"},
+		{"codex.toml", "[mcp_servers.docs]\ncommand = \"npx\"\n", "config"},
+		// Near misses stay assets.
+		{"data/sample.json", `{"rows": [1, 2, 3]}`, "asset"},
+		{"notes.json", `{"text": "see mcpServers in the README"}`, "asset"},
+		{"Cargo.toml", "[package]\nname = \"x\"\n", "asset"},
+		{"schema.yaml", "mcpServers:\n  x: {}\n", "asset"},
+		// The dot-less name was already a config and must stay one.
+		{"mcp.json", servers, "config"},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			f := File{Path: c.path, Content: []byte(c.content)}
+			classify(&f)
+			if f.Role != c.want {
+				t.Errorf("classify(%q).Role = %q, want %q", c.path, f.Role, c.want)
+			}
+		})
+	}
+}

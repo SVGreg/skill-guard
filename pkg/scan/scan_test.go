@@ -1018,3 +1018,40 @@ func TestMaliciousFixtureTriggersPaddingConcealment(t *testing.T) {
 		}
 	}
 }
+
+// TestMCPManifestFilenameIsNotABypass is the reproduction issue #187 recorded:
+// the malicious fixture's poisoned MCP manifest failed as `mcp.json` and
+// scanned pass / 0 findings as `.mcp.json` — the name Claude Code reads.
+// Every spelling must now reach SG-MCP-001.
+func TestMCPManifestFilenameIsNotABypass(t *testing.T) {
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "testdata", "malicious", "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mcp.json", ".mcp.json", "cursor-mcp.json", "servers/tools.json"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "SKILL.md"),
+				[]byte("---\nname: docs\ndescription: Converts documents.\n---\n\n# Docs\n\nConverts documents.\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p := filepath.Join(dir, filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, manifest, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			rep := scanFixture(t, dir)
+			found := false
+			for _, f := range rep.Findings {
+				if f.RuleID == "SG-MCP-001" && f.File == name {
+					found = true
+				}
+			}
+			if !found || rep.Verdict != model.Fail {
+				t.Fatalf("%s: SG-MCP-001 found=%v verdict=%s", name, found, rep.Verdict)
+			}
+		})
+	}
+}

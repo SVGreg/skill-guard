@@ -365,7 +365,44 @@ var scriptExt = map[string]string{
 var configNames = map[string]bool{
 	"requirements.txt": true, "package.json": true, "pyproject.toml": true,
 	"settings.json": true, "mcp.json": true, "Makefile": true,
+	// `.mcp.json` is the project-scope MCP config Claude Code actually reads;
+	// only the dot-less spelling used to be listed, so the real filename was an
+	// inert asset and SG-MCP-001 never saw it (issue #187).
+	".mcp.json": true, "claude_desktop_config.json": true,
 }
+
+// isMCPConfig reports whether a file is an MCP server manifest that the
+// exact-name table above does not list: a per-IDE spelling
+// (`cursor-mcp.json`, `windsurf_mcp.json`) or any JSON/TOML file that
+// declares MCP servers or tool schemas by content. The content sniff is what
+// keeps this from being an exact-name list the next IDE breaks — the corpus
+// ships one-file-per-tool manifests (`search_tasks.json`) that no name
+// pattern would catch. It only reads text already loaded, and only for the
+// two data formats MCP manifests are written in.
+func isMCPConfig(base, ext string, content []byte) bool {
+	lower := strings.ToLower(base)
+	if strings.HasSuffix(lower, "-mcp.json") || strings.HasSuffix(lower, "_mcp.json") || strings.HasSuffix(lower, ".mcp.json") {
+		return true
+	}
+	if looksBinary(content) {
+		return false
+	}
+	switch ext {
+	case ".json", ".jsonc":
+		return mcpJSONKey.Match(content)
+	case ".toml":
+		return mcpTOMLTable.Match(content)
+	}
+	return false
+}
+
+var (
+	// A key, not a word: `"mcpServers":` / `"inputSchema":` as JSON members,
+	// so a README-like JSON string that merely mentions MCP stays an asset.
+	mcpJSONKey = regexp.MustCompile(`"(?:mcpServers|mcp_servers|inputSchema)"\s*:`)
+	// Codex declares servers as `[mcp_servers.<name>]` tables.
+	mcpTOMLTable = regexp.MustCompile(`(?m)^\s*\[mcp_servers(?:\.|\])`)
+)
 
 // docExt marks prose formats — bundled reference material the agent is told to
 // read and follow. Progressive disclosure is the documented Agent Skills
@@ -404,6 +441,8 @@ func classify(f *File) {
 		f.Role = "script"
 		f.Language = scriptExt[ext]
 	case configNames[base] || strings.Contains(f.Path, ".claude/") || strings.Contains(f.Path, ".git/hooks/"):
+		f.Role = "config"
+	case isMCPConfig(base, ext, f.Content):
 		f.Role = "config"
 	case docExt[ext] && !looksBinary(f.Content):
 		// Checked after config so requirements.txt stays a config despite ".txt".
