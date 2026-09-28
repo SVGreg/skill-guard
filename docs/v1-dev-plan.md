@@ -227,7 +227,7 @@ if effort must be cut, cut M6/M7, never this.**
 | M4-08 | Identity-based trust policy in `.surfaceguard.yaml` | done | M4-07 | #220 |
 | M4-09 | Keyless **verification**: pinned roots, cert identity, log-anchored time | done | M4-07, M4-08 | #221 |
 | M4-12 | Keyless **signing** in a separate `keyless/` module | done | M4-09 | #222 |
-| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | in-progress | M4-12 | |
+| M4-13 | Drop `keyless/`'s replace directive once a core release ships `pkg/attest/oms` | done | M4-12 | #364 |
 | M4-10 | Rekor inclusion-proof checking (pinned log keys, offline) | done | M4-09 | #224 |
 | M4-11 | SGMT-1 documented as legacy; migration guidance | done | M4-12 | #225 |
 
