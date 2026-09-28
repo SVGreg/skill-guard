@@ -13,7 +13,7 @@ module github.com/SVGreg/surfaceguard/keyless
 
 go 1.26.2
 
-require github.com/SVGreg/surfaceguard v0.2.2
+require github.com/SVGreg/surfaceguard v0.6.0
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -101,5 +101,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 )
-
-replace github.com/SVGreg/surfaceguard => ../
