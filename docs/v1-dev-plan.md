@@ -78,7 +78,7 @@ Roadmap §6.6 says: where the roadmap and the repo disagree, trust the repo and 
 | Milestone | Theme | Tasks | Status |
 |---|---|---|---|
 | **M3** | SARIF output + CI surface | M3-01 … M3-09 | M3-01…M3-07 done; M3-08/09 need the owner |
-| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** except M4-13 (needs a release) |
+| **M4** | OMS + Sigstore keyless interop | M4-01 … M4-13 | **complete** |
 | **M5** | Load-time / install-time gate + skill cards | M5-01 … M5-09 | **complete** |
 | **M6** | Taint analysis engine | titles only | **next — needs `/sg-plan`** |
 | **M7** | LLM / semantic engine (opt-in) | titles only | needs `/sg-plan` |
