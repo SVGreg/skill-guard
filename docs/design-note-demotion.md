@@ -182,6 +182,10 @@ That is one bounded change to the leaf, not a catalog entry.
 
 ## 5. Policy layer: bundle-scoped waivers
 
+> **Status (2026-09-28): implemented** as `waivers[].merkle_root` (+ optional `bundle`), pinned to
+> the SGMT-1 content hash, with `reason` required. See the README's policy example and
+> `docs/planned-rules.md` (`pkg/policy` row). The text below is the design as argued.
+
 Demotion is a *pack-author* judgment about text. There is a second, distinct need: a
 *consumer* judgment about a whole skill.
 

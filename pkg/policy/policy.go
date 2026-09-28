@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -55,11 +56,42 @@ type AttestationRule struct {
 // `*` covers `SKILL.md` and NOT `scripts/setup.sh`. Leave Path empty to waive
 // the rule bundle-wide — that, not `*`, is the "everywhere" form. `**` is not
 // supported (it behaves as a single `*`).
+//
+// MerkleRoot pins a waiver to one exact version of one bundle: its SGMT-1 root,
+// the `content_hash` a skill card and `guard` report. A pinned waiver may omit
+// Rule, which waives **every** rule for that bundle — the "I authored this
+// version" form a skill's own author needs when scanning their own work. It
+// lives only in the consumer's policy, never in a bundle, and stops matching the
+// moment one byte of the bundle changes, so it cannot silently cover a later
+// rug-pull. Reason is mandatory for it. Bundle, when set, must also equal the
+// manifest's name — a readability check, since the name is self-asserted and
+// the root is what binds.
 type Waiver struct {
-	Rule    string `yaml:"rule"`
-	Path    string `yaml:"path"`
-	Reason  string `yaml:"reason"`
-	Expires string `yaml:"expires"` // YYYY-MM-DD
+	Rule       string `yaml:"rule"`
+	Path       string `yaml:"path"`
+	Reason     string `yaml:"reason"`
+	Expires    string `yaml:"expires"` // YYYY-MM-DD
+	Bundle     string `yaml:"bundle"`
+	MerkleRoot string `yaml:"merkle_root"` // sha256:<64 hex>
+}
+
+// BundleID identifies the bundle a finding came from, for pinned waivers.
+type BundleID struct {
+	Name       string
+	MerkleRoot string
+}
+
+var merkleRootRe = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+// HasPinnedWaivers reports whether any waiver is pinned to a Merkle root, so a
+// caller can skip computing the root when none could match.
+func (p Policy) HasPinnedWaivers() bool {
+	for _, w := range p.Waivers {
+		if w.MerkleRoot != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // Allowlists holds domains/paths exempt from certain rules. Like
@@ -280,8 +312,18 @@ func (p Policy) validate() error {
 		return fmt.Errorf("warn_on %q is not a severity (valid: critical, high, medium, low, info)", p.WarnOn)
 	}
 	for i, w := range p.Waivers {
-		if w.Rule == "" {
-			return fmt.Errorf("waivers[%d]: rule is required (a waiver with no rule matches nothing)", i)
+		if w.MerkleRoot != "" {
+			if !merkleRootRe.MatchString(w.MerkleRoot) {
+				return fmt.Errorf("waivers[%d]: merkle_root %q is not sha256:<64 lowercase hex> (copy it from `surfaceguard guard --format json` content_hash)", i, w.MerkleRoot)
+			}
+			if strings.TrimSpace(w.Reason) == "" {
+				return fmt.Errorf("waivers[%d]: a waiver pinned to merkle_root must give a reason", i)
+			}
+		} else if w.Bundle != "" {
+			return fmt.Errorf("waivers[%d]: bundle is only meaningful with merkle_root, which is what pins the waiver to content", i)
+		}
+		if w.Rule == "" && w.MerkleRoot == "" {
+			return fmt.Errorf("waivers[%d]: rule is required (a waiver with no rule matches nothing); only a waiver pinned to merkle_root may omit it", i)
 		}
 		if w.Path != "" {
 			// filepath.Match only reports a bad pattern once it is used, and
@@ -418,9 +460,26 @@ func (p Policy) WarnOnSeverity() model.Severity {
 }
 
 // WaiverFor returns a non-empty reason if an unexpired waiver covers rule+file.
+// Waivers pinned to a Merkle root never match here: without the bundle's
+// identity there is nothing to pin against. Use WaiverForBundle.
 func (p Policy) WaiverFor(ruleID, file string) string {
+	return p.WaiverForBundle(ruleID, file, BundleID{})
+}
+
+// WaiverForBundle is WaiverFor with the bundle's identity, which a waiver
+// pinned to merkle_root must match exactly. A pinned waiver with no rule
+// covers every rule in that bundle.
+func (p Policy) WaiverForBundle(ruleID, file string, id BundleID) string {
 	for _, w := range p.Waivers {
-		if w.Rule != ruleID {
+		if w.MerkleRoot != "" {
+			if id.MerkleRoot == "" || w.MerkleRoot != id.MerkleRoot {
+				continue
+			}
+			if w.Bundle != "" && w.Bundle != id.Name {
+				continue
+			}
+		}
+		if w.Rule != "" && w.Rule != ruleID {
 			continue
 		}
 		if w.Expires != "" {

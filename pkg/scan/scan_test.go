@@ -1055,3 +1055,54 @@ func TestMCPManifestFilenameIsNotABypass(t *testing.T) {
 		})
 	}
 }
+
+// TestPinnedBundleWaiver: a consumer waiving their own skill by its Merkle
+// root sees every finding moved to Waived (never dropped), and the waiver
+// stops applying the moment the bundle's content changes.
+func TestPinnedBundleWaiver(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join("..", "..", "testdata", "malicious")
+	for _, name := range []string{"SKILL.md", "setup.sh", "package.json", "mcp.json"} {
+		data, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scanWith := func(pol policy.Policy) *Report {
+		b, err := skill.LoadBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		packs, _ := rules.Builtin()
+		return New(rules.AllRules(packs), pol).WithContexts(rules.AllContexts(packs)).Scan(b)
+	}
+
+	plain := scanWith(policy.Default())
+	if plain.Verdict != model.Fail || len(plain.Findings) == 0 {
+		t.Fatalf("fixture copy should fail unwaived: %s", plain.Verdict)
+	}
+	pol := policy.Default()
+	pol.Waivers = []policy.Waiver{{MerkleRoot: plain.Card.ContentHash, Reason: "my own skill, reviewed"}}
+
+	waived := scanWith(pol)
+	if waived.Verdict != model.Pass || len(waived.Findings) != 0 {
+		t.Fatalf("pinned waiver: verdict %s, %d findings left", waived.Verdict, len(waived.Findings))
+	}
+	if len(waived.Waived) != len(plain.Findings) || waived.Waived[0].WaiverReason != "my own skill, reviewed" {
+		t.Fatalf("waived findings must be kept with their reason: %d kept of %d", len(waived.Waived), len(plain.Findings))
+	}
+
+	// One appended byte is a different bundle.
+	f, err := os.OpenFile(filepath.Join(dir, "setup.sh"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("\n")
+	f.Close()
+	if after := scanWith(pol); after.Verdict != model.Fail || len(after.Waived) != 0 {
+		t.Fatalf("after a change the pinned waiver must lapse: verdict %s, %d waived", after.Verdict, len(after.Waived))
+	}
+}
