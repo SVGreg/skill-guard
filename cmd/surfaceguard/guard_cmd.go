@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ EXIT CODES: 0 allow or warn · 1 deny · 3 usage error · 4 internal error.`,
 					return fail(4, "%v", err)
 				}
 			} else {
-				printDecision(d, noColor || report.ColorDisabled(os.Stdout))
+				printDecision(cmd.OutOrStdout(), d, noColor || report.ColorDisabled(os.Stdout))
 			}
 
 			// Deny is exit 1, the same code a failing scan already uses — a
@@ -123,7 +124,7 @@ EXIT CODES: 0 allow or warn · 1 deny · 3 usage error · 4 internal error.`,
 
 // printDecision renders a decision for a human. The outcome and the reason come
 // first because they are what a reader acts on; everything else is evidence.
-func printDecision(d *guard.Decision, noColor bool) {
+func printDecision(w io.Writer, d *guard.Decision, noColor bool) {
 	c := func(s string) string {
 		if noColor {
 			return ""
@@ -149,26 +150,26 @@ func printDecision(d *guard.Decision, noColor bool) {
 	// printed plainly. Everything below that originates in a scanned bundle
 	// goes through report.Sanitize, which escapes terminal control characters
 	// without wrapping readable text in quotes.
-	fmt.Printf("%s%s%s  %s\n", c(col), d.Outcome, c(reset), d.Reason)
+	fmt.Fprintf(w, "%s%s%s  %s\n", c(col), d.Outcome, c(reset), d.Reason)
 
 	if d.Scanned {
-		fmt.Printf("  scan: %s  risk %d/100 (%s)  %s\n",
+		fmt.Fprintf(w, "  scan: %s  risk %d/100 (%s)  %s\n",
 			d.Verdict, d.RiskScore, d.RiskTier, countsSummary(d))
 	} else {
-		fmt.Printf("  scan: %sskipped%s\n", c(gray), c(reset))
+		fmt.Fprintf(w, "  scan: %sskipped%s\n", c(gray), c(reset))
 	}
 
 	switch {
 	case !d.Signature.Present:
-		fmt.Printf("  signature: %snone%s\n", c(gray), c(reset))
+		fmt.Fprintf(w, "  signature: %snone%s\n", c(gray), c(reset))
 	case d.Signature.Trusted:
-		fmt.Printf("  signature: %s, valid, %strusted%s%s\n",
+		fmt.Fprintf(w, "  signature: %s, valid, %strusted%s%s\n",
 			d.Signature.Format, c(green), c(reset), publisherSuffix(d))
 	case d.Signature.Valid:
-		fmt.Printf("  signature: %s, valid, %snot trusted%s%s\n",
+		fmt.Fprintf(w, "  signature: %s, valid, %snot trusted%s%s\n",
 			d.Signature.Format, c(yellow), c(reset), publisherSuffix(d))
 	default:
-		fmt.Printf("  signature: %s, %sdoes not verify%s\n", d.Signature.Format, c(red), c(reset))
+		fmt.Fprintf(w, "  signature: %s, %sdoes not verify%s\n", d.Signature.Format, c(red), c(reset))
 	}
 
 	// A decision is not a report. The malicious fixture produces 65 gating
@@ -177,11 +178,11 @@ func printDecision(d *guard.Decision, noColor bool) {
 	const maxShown = 5
 	for i, f := range d.Findings {
 		if i == maxShown {
-			fmt.Printf("  %s… and %d more — run `surfaceguard scan` for the full report%s\n",
+			fmt.Fprintf(w, "  %s… and %d more — run `surfaceguard scan` for the full report%s\n",
 				c(gray), len(d.Findings)-maxShown, c(reset))
 			break
 		}
-		fmt.Printf("  %s  %s  %s\n", f.RuleID, f.Severity, report.Sanitize(f.Title))
+		fmt.Fprintf(w, "  %s  %s  %s\n", f.RuleID, f.Severity, report.Sanitize(f.Title))
 	}
 	// Install mode discloses the surface being admitted. Printed here and not
 	// at load because a load-time gate runs unattended — nobody is reading it —
@@ -191,18 +192,18 @@ func printDecision(d *guard.Decision, noColor bool) {
 		if len(d.Capabilities.AllowedTools) > 0 {
 			tools = report.Sanitize(strings.Join(d.Capabilities.AllowedTools, ", "))
 		}
-		fmt.Printf("  admits: tools [%s]\n", tools)
+		fmt.Fprintf(w, "  admits: tools [%s]\n", tools)
 		if n := len(d.Capabilities.ExternalRefs); n > 0 {
 			shown := d.Capabilities.ExternalRefs
 			suffix := ""
 			if n > 3 {
 				shown, suffix = shown[:3], fmt.Sprintf(" (+%d more)", n-3)
 			}
-			fmt.Printf("          reaches %s%s\n", report.Sanitize(strings.Join(shown, ", ")), suffix)
+			fmt.Fprintf(w, "          reaches %s%s\n", report.Sanitize(strings.Join(shown, ", ")), suffix)
 		}
 	}
 	if d.CacheHit {
-		fmt.Printf("  %s(from cache)%s\n", c(gray), c(reset))
+		fmt.Fprintf(w, "  %s(from cache)%s\n", c(gray), c(reset))
 	}
 }
 

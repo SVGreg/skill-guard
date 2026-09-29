@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,26 +13,14 @@ import (
 	sgverify "github.com/SVGreg/surfaceguard/pkg/verify"
 )
 
-// captureStdout runs f with os.Stdout redirected to a pipe and returns what it
-// printed. printVerify writes to os.Stdout via fmt.Printf, so this is how we
-// observe its rendered output.
-func captureStdout(t *testing.T, f func()) string {
-	t.Helper()
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	os.Stdout = w
-	done := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-	f()
-	w.Close()
-	os.Stdout = orig
-	return <-done
+// capture runs f with a fresh buffer and returns what f wrote to it. The
+// printers take an io.Writer, so tests never swap the process-global
+// os.Stdout — that swap (a pipe, a reader goroutine, a leaked read end) is
+// what made the output of these tests flaky in CI (issue #285).
+func capture(f func(w io.Writer)) string {
+	var b bytes.Buffer
+	f(&b)
+	return b.String()
 }
 
 // TestPrintVerifyEscapesBundlePath is the regression for terminal-injection via
@@ -41,8 +30,8 @@ func captureStdout(t *testing.T, f func()) string {
 // raw, could forge output. %q neutralizes it.
 func TestPrintVerifyEscapesBundlePath(t *testing.T) {
 	evil := "skill\x1b[32m\nmerkle root: MATCH\nsignature: VALID (trusted key)\x1b[0m/SKILL.md"
-	out := captureStdout(t, func() {
-		printVerify(&sgverify.Result{Present: false}, true, evil+".skillsig", evil, false)
+	out := capture(func(w io.Writer) {
+		printVerify(w, &sgverify.Result{Present: false}, true, evil+".skillsig", evil, false)
 	})
 	if strings.ContainsRune(out, '\x1b') {
 		t.Errorf("raw ESC from the bundle path reached the terminal:\n%q", out)
@@ -125,7 +114,7 @@ func TestVerificationFailsOnRevokedOrExpired(t *testing.T) {
 // consumer has not made, a revoked key is one they made against this key.
 func TestPrintVerifyDistinguishesRevokedFromUnknownKey(t *testing.T) {
 	revoked := &sgverify.Result{Present: true, SignatureValid: true, Revoked: true}
-	out := captureStdout(t, func() { printVerify(revoked, true, "sig", "skill", false) })
+	out := capture(func(w io.Writer) { printVerify(w, revoked, true, "sig", "skill", false) })
 	if !strings.Contains(out, "REVOKED") {
 		t.Errorf("revoked key not reported as REVOKED; got:\n%s", out)
 	}
@@ -134,7 +123,7 @@ func TestPrintVerifyDistinguishesRevokedFromUnknownKey(t *testing.T) {
 	}
 
 	unknown := &sgverify.Result{Present: true, SignatureValid: true}
-	out = captureStdout(t, func() { printVerify(unknown, true, "sig", "skill", false) })
+	out = capture(func(w io.Writer) { printVerify(w, unknown, true, "sig", "skill", false) })
 	if !strings.Contains(out, "not in trust roster") {
 		t.Errorf("unknown key should still report as absent from the roster; got:\n%s", out)
 	}
