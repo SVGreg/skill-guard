@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-network
-version: 1.2.0
+version: 1.3.0
 description: Data exfiltration, egress, SSRF (rule-verification.md §3).
 rules:
   - id: SG-NET-002
@@ -60,8 +60,35 @@ rules:
         # … and the prefix form `iex (irm …)` / `iex (New-Object Net.WebClient).DownloadString(…)`.
         - regex: '(?i)\biex\b\s*\(?\s*(iwr|irm|invoke-webrequest|invoke-restmethod|new-object\s+net\.webclient)'
           confidence: 0.9
-    rationale: Downloading and piping content directly into an interpreter executes unreviewed remote code (AST01).
-    fix: Never pipe network downloads into a shell/interpreter. Fetch, verify a checksum, review, then run.
+        # Decoded-blob execution (#118). The same fetch-exec shapes as above,
+        # with the fetch hidden inside an encoded literal: Snyk's ToxicSkills
+        # payload `eval $(echo "Y3VybC…" | base64 -d)` decodes to a curl that
+        # exfiltrates ~/.aws/credentials, and the clawdhub campaign shipped
+        # `echo '…' | base64 -D | bash` in SKILL.md. The eval-$( leaf above only
+        # fires on a LITERAL curl/wget, which is exactly what the encoding
+        # removes. These live here rather than in SG-EXE-001 because that rule
+        # never reads SKILL.md, where both real payloads sat.
+        #
+        # Gate on the DECODER, never on the sink: bare `eval "$(…)"` is the
+        # shell-init idiom (`eval "$(fnm env)"`, `eval $(ssh-agent)`), measured
+        # at 7 benign corpus hits. A decoder feeding a shell measured 1 over
+        # 11,335 files, a skill-vetter quoting this exact attack as a REJECT
+        # example (see rule-verification §SG-NET-002). `-D` is macOS base64.
+        # The decoder-to-pipe window excludes `\` so a detector's own regex
+        # source ('base64 -d \| bash') is not read as the pipe it describes.
+        - regex: '(base64\s+(-d|-D|--decode)\b|xxd\s+-r|openssl\s+(base64|enc)\b[^\n|]{0,40}\s-d\b|uudecode\b)[^\n|`\\]{0,80}\|\s*(sudo(\s+-[a-z]+)*\s+)?(/(usr/)?(local/)?bin/)?(env\s+)?(ba|z|k|d)?sh\b'
+          confidence: 0.9
+        - regex: '(?m)(base64\s+(-d|-D|--decode)\b|xxd\s+-r|openssl\s+(base64|enc)\b[^\n|]{0,40}\s-d\b|uudecode\b)[^\n|`\\]{0,80}\|\s*(sudo(\s+-[a-z]+)*\s+)?(/(usr/)?(local/)?bin/)?(env\s+)?(python[23]?(\.\d+)?|perl|node|ruby)(\s+-)?[ \t]*($|[;&|)"''`])'
+          confidence: 0.9
+        # eval / sh -c / source around a $( … ) that decodes. The window runs to
+        # the closing paren (300 chars): the base64 literal alone is ~44+ chars,
+        # and a 60-char window measured the real payload as a miss.
+        - regex: '(?i)(\beval\b|\b(ba|z|k|d)?sh\s+-c|\bsource\b|(^|\s)\.\s)[^\n$]{0,20}\$\([^\n)]{0,300}(base64\s+(-d|-D|--decode)\b|xxd\s+-r|openssl\s+(base64|enc)\b[^\n|]{0,40}\s-d\b|uudecode\b)'
+          confidence: 0.9
+        - regex: '(?i)(\b(ba|z|k|d)?sh\b\s*|\bsource\s+|(^|\s)\.\s+)<\([^\n)]{0,300}(base64\s+(-d|-D|--decode)\b|xxd\s+-r|openssl\s+(base64|enc)\b[^\n|]{0,40}\s-d\b|uudecode\b)'
+          confidence: 0.9
+    rationale: Downloading and piping content directly into an interpreter executes unreviewed remote code; decoding an encoded blob straight into a shell does the same while hiding the command from review (AST01, AST08).
+    fix: Never pipe network downloads or decoded blobs into a shell/interpreter. Ship the script in plain text, or fetch it, verify a checksum, review, then run.
 
   - id: SG-NET-007
     title: Rendered-image/link data exfiltration
