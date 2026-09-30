@@ -182,6 +182,83 @@ func TestSaveKeyRefusesSymlink(t *testing.T) {
 	}
 }
 
+// TestPublicWritesRefuseSymlinks is the #140 regression: every file this
+// package writes at a bundle-derived path refuses a planted link, and the link
+// target is left untouched. `sign <bundle>/SKILL.md` never walks the directory,
+// so a sibling SKILL.md.skillsig linking outside the bundle reached
+// WriteEnvelope and was overwritten with the envelope JSON.
+func TestPublicWritesRefuseSymlinks(t *testing.T) {
+	signer, err := GenerateKey("symlink-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writers := map[string]func(path string) error{
+		"WriteEnvelope": func(p string) error { return WriteEnvelope(p, &Envelope{PayloadType: PayloadType}) },
+		"SavePub":       func(p string) error { return SavePub(signer, p) },
+		"WriteUSFFields": func(p string) error {
+			return WriteUSFFields(p, "sha256:00", "ed25519:AA==")
+		},
+	}
+	for name, write := range writers {
+		dir := t.TempDir()
+		victim := filepath.Join(dir, "victim.txt")
+		const orig = "---\nname: victim\n---\nuntouched\n"
+		if err := os.WriteFile(victim, []byte(orig), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "out")
+		if err := os.Symlink(victim, link); err != nil {
+			t.Skipf("cannot create symlink: %v", err)
+		}
+		if err := write(link); err == nil {
+			t.Errorf("%s wrote through a symlink instead of refusing", name)
+		}
+		if got, _ := os.ReadFile(victim); string(got) != orig {
+			t.Errorf("%s modified the symlink target:\n%s", name, got)
+		}
+	}
+}
+
+// TestWriteUSFFieldsIsAtomicAndKeepsMode pins the other half of #140: the
+// rewrite goes through a same-directory temp file and a rename, so it keeps
+// the original's mode (not the temp file's 0600) and leaves no temp behind.
+func TestWriteUSFFieldsIsAtomicAndKeepsMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(path, []byte("---\nname: t\ndescription: d\n---\nBody.\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil { // defeat the umask
+		t.Fatal(err)
+	}
+	if err := WriteUSFFields(path, "sha256:ab", "ed25519:Q0Q="); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "---\ncontent_hash: \"sha256:ab\"\nsignature: \"ed25519:Q0Q=\"\nname: t\ndescription: d\n---\nBody.\n"
+	if string(got) != want {
+		t.Errorf("rewritten SKILL.md:\n%s\nwant:\n%s", got, want)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v, want 0640 preserved", fi.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("temp file left behind: %v", names)
+	}
+}
+
 // TestLoadKeyEnforcesAlgorithm covers what the declared algorithm can take:
 // absent (pre-field keys, accepted as Ed25519), "ed25519" (accepted), an
 // unsupported scheme (rejected), and — since ecdsa-p256 became supported — a

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/SVGreg/surfaceguard/pkg/skill"
 )
@@ -32,7 +33,20 @@ func USFFields(ctx context.Context, b *skill.Bundle, signer Signer) (contentHash
 
 // WriteUSFFields inserts content_hash and signature into the SKILL.md
 // front-matter at skillMDPath, replacing any existing reserved lines.
+//
+// SKILL.md is the skill's source of truth and nothing surfaceguard holds can
+// regenerate it, so it is rewritten atomically: the new bytes go to a temp file
+// in the same directory, which is renamed over the original only once fully
+// written. The old in-place os.WriteFile truncated first, so a crash, a full
+// disk or a signal mid-write left the skill truncated (issue #140). The rename
+// also keeps the file's mode — os.WriteFile's perm applied only on creation, so
+// an existing SKILL.md always kept its own mode, and a rename must not silently
+// normalize it to the temp file's 0600. A symlinked SKILL.md is refused, as for
+// every other write in this package.
 func WriteUSFFields(skillMDPath, contentHash, signature string) error {
+	if err := refuseSymlink(skillMDPath); err != nil {
+		return err
+	}
 	content, err := os.ReadFile(skillMDPath)
 	if err != nil {
 		return err
@@ -53,5 +67,38 @@ func WriteUSFFields(skillMDPath, contentHash, signature string) error {
 	out = append(out, body...)
 	out = append(out, closeD...)
 	out = append(out, rest...)
-	return os.WriteFile(skillMDPath, out, 0o644)
+	return replaceFile(skillMDPath, out)
+}
+
+// replaceFile atomically replaces the regular file at path with data, keeping
+// its permission bits. The temp file is created beside path so the rename never
+// crosses a filesystem, and it is removed on any failure.
+func replaceFile(path string, data []byte) (err error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+		}
+	}()
+	if err = tmp.Chmod(fi.Mode().Perm()); err != nil {
+		return err
+	}
+	if _, err = tmp.Write(data); err != nil {
+		return err
+	}
+	if err = tmp.Sync(); err != nil {
+		return err
+	}
+	if err = tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

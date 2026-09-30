@@ -184,8 +184,8 @@ func SaveKey(s *LocalSigner, path string) error {
 // seed at 0644 while keygen reports "mode 0600". Symlinks are refused rather
 // than followed, matching the bundle walk's Lstat guard in pkg/skill.
 func writeSecret(path string, data []byte) error {
-	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to write a private key through symlink %q", path)
+	if err := refuseSymlink(path); err != nil {
+		return fmt.Errorf("private key: %w", err)
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -228,7 +228,7 @@ func SavePub(s *LocalSigner, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return WriteFileNoFollow(path, data, 0o644)
 }
 
 // LoadKey reads a signer from a key file (size-capped, see maxAttestFileSize —
