@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -16,11 +17,14 @@ func verifyBundle(b *skill.Bundle, env *attest.Envelope, pol policy.Policy) *sgv
 	return sgverify.Verify(b, env, pol.Trust)
 }
 
-// printVerify renders one verification result. otherSignature says whether the
+// printVerify renders one verification result to w. The printers here take a
+// writer rather than calling fmt.Printf, as report.Text does, so tests read a
+// buffer instead of swapping the process-global os.Stdout (issue #285).
+// otherSignature says whether the
 // bundle carries a signature in the *other* format, so an absent .skillsig on a
 // bundle that does carry an OMS signature is not reported as "unsigned" — it is
 // signed, just not in this format.
-func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, otherSignature bool) {
+func printVerify(w io.Writer, res *sgverify.Result, noColor bool, sigPath, skillPath string, otherSignature bool) {
 	c := func(s string) string {
 		if noColor {
 			return ""
@@ -59,46 +63,46 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 
 	switch {
 	case !res.Present:
-		fmt.Printf("%s: absent (no %q)\n", label, sigPath)
+		fmt.Fprintf(w, "%s: absent (no %q)\n", label, sigPath)
 		switch {
 		case otherSignature:
-			fmt.Printf("  the skill carries the other signature format; add this one with:\n    surfaceguard sign %q --key <key>%s\n",
+			fmt.Fprintf(w, "  the skill carries the other signature format; add this one with:\n    surfaceguard sign %q --key <key>%s\n",
 				skillPath, omsFlagIf(res.Format == sgverify.FormatOMS))
 		case res.Format != sgverify.FormatOMS:
-			fmt.Printf("  this skill is unsigned. create an attestation with:\n    surfaceguard sign %q --key <key>\n", skillPath)
+			fmt.Fprintf(w, "  this skill is unsigned. create an attestation with:\n    surfaceguard sign %q --key <key>\n", skillPath)
 		}
 	case res.SignatureValid && res.Trusted:
-		fmt.Printf("%s: present, signature %sVALID%s (trusted key)\n", label, c(green), c(reset))
+		fmt.Fprintf(w, "%s: present, signature %sVALID%s (trusted key)\n", label, c(green), c(reset))
 	case res.SignatureValid && res.Revoked:
 		// Distinct from the arm below: the key *is* in the roster, listed under
 		// `revoked`. Saying "not in trust roster" here contradicted the
 		// SG-PRV-004 line printed directly underneath, and understated the
 		// state — an unknown key is a decision the consumer has not made, a
 		// revoked one is a decision they made against this key.
-		fmt.Printf("%s: present, signature VALID but key %sREVOKED%s\n", label, c(red), c(reset))
+		fmt.Fprintf(w, "%s: present, signature VALID but key %sREVOKED%s\n", label, c(red), c(reset))
 	case res.SignatureValid && res.IdentityRejected:
 		// Distinct from the arm below: the key *is* in the roster. What the
 		// policy declined is its identity, which is a narrower and more
 		// actionable statement than "unknown key".
-		fmt.Printf("%s: present, signature VALID but identity %sNOT PERMITTED%s by trust.identities\n",
+		fmt.Fprintf(w, "%s: present, signature VALID but identity %sNOT PERMITTED%s by trust.identities\n",
 			label, c(red), c(reset))
 	case res.SignatureValid:
-		fmt.Printf("%s: present, signature VALID (key not in trust roster — identity unverified)\n", label)
+		fmt.Fprintf(w, "%s: present, signature VALID (key not in trust roster — identity unverified)\n", label)
 	case hasFinding("SG-PRV-002"):
-		fmt.Printf("%s: present, signature %sINVALID%s (does not verify)\n", label, c(red), c(reset))
+		fmt.Fprintf(w, "%s: present, signature %sINVALID%s (does not verify)\n", label, c(red), c(reset))
 	default:
 		// Present but unverifiable: no trust roster to check the signature bytes against.
-		fmt.Printf("%s: present, signature UNVERIFIED (no trust roster — identity unverified)\n", label)
+		fmt.Fprintf(w, "%s: present, signature UNVERIFIED (no trust roster — identity unverified)\n", label)
 	}
 	if res.Present && res.CertIdentity != "" {
 		// Keyless: the identity is the certificate's, and it is worth showing
 		// even when trust was withheld — it is the thing a policy scopes on.
-		fmt.Printf("certificate identity: %s\n", safeText(res.CertIdentity))
+		fmt.Fprintf(w, "certificate identity: %s\n", safeText(res.CertIdentity))
 		if res.CertIssuer != "" {
-			fmt.Printf("certificate issuer: %s\n", safeText(res.CertIssuer))
+			fmt.Fprintf(w, "certificate issuer: %s\n", safeText(res.CertIssuer))
 		}
 		if !res.SignedAt.IsZero() {
-			fmt.Printf("signed at: %s (transparency log)\n", res.SignedAt.UTC().Format(time.RFC3339))
+			fmt.Fprintf(w, "signed at: %s (transparency log)\n", res.SignedAt.UTC().Format(time.RFC3339))
 		}
 	}
 	if res.Present && res.LogInclusionVerified {
@@ -106,10 +110,10 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 		if res.LogCheckpointVerified {
 			note += ", checkpoint signed by a pinned log key"
 		}
-		fmt.Printf("transparency log: %s\n", note)
+		fmt.Fprintf(w, "transparency log: %s\n", note)
 	}
 	if res.Present && res.CertError != "" {
-		fmt.Printf("keyless: %s\n", safeText(res.CertError))
+		fmt.Fprintf(w, "keyless: %s\n", safeText(res.CertError))
 	}
 	if res.Present {
 		mm := "MISMATCH"
@@ -117,21 +121,21 @@ func printVerify(res *sgverify.Result, noColor bool, sigPath, skillPath string, 
 		if res.MerkleMatch {
 			mm, col = "MATCH", green
 		}
-		fmt.Printf("%s: %s%s%s\n", integrity, c(col), mm, c(reset))
+		fmt.Fprintf(w, "%s: %s%s%s\n", integrity, c(col), mm, c(reset))
 		if res.Statement != nil {
 			if res.Publisher != "" {
-				fmt.Printf("publisher: %s\n", safeText(res.Publisher))
+				fmt.Fprintf(w, "publisher: %s\n", safeText(res.Publisher))
 			}
 			if res.Statement.Scan != nil {
-				fmt.Printf("scan-at-signing: %s (risk %d/100)\n",
+				fmt.Fprintf(w, "scan-at-signing: %s (risk %d/100)\n",
 					safeText(res.Statement.Scan.Verdict), res.Statement.Scan.RiskScore)
 			} else {
-				fmt.Println("scan-at-signing: UNSCANNED (integrity-only)")
+				fmt.Fprintln(w, "scan-at-signing: UNSCANNED (integrity-only)")
 			}
 		}
 	}
 	for _, f := range res.Findings {
-		fmt.Fprintf(os.Stdout, "  %s  %s  %s\n", f.RuleID, f.Severity.String(), f.Title)
+		fmt.Fprintf(w, "  %s  %s  %s\n", f.RuleID, f.Severity.String(), f.Title)
 	}
 }
 
@@ -192,7 +196,7 @@ func omsFlagIf(oms bool) string {
 // wrong about — while a card that *is* well-formed and names a different
 // bundle is a verification failure (exit 2), the same class as a Merkle
 // mismatch.
-func verifyCardFile(b *skill.Bundle, cardPath, skillPath string, noColor bool) error {
+func verifyCardFile(w io.Writer, b *skill.Bundle, cardPath, skillPath string, noColor bool) error {
 	data, err := os.ReadFile(cardPath)
 	if err != nil {
 		return fail(3, "cannot read card %q: %v\n"+
@@ -204,7 +208,7 @@ func verifyCardFile(b *skill.Bundle, cardPath, skillPath string, noColor bool) e
 			"  expected a skill card written by 'scan --format skill-card'.", cardPath, err)
 	}
 	res := sgverify.VerifyCard(b, card)
-	printCardVerify(res, cardPath, skillPath, noColor)
+	printCardVerify(w, res, cardPath, skillPath, noColor)
 	if sgverify.CardVerificationFailed(res) {
 		return exitErr{code: 2, msg: "card does not describe this bundle"}
 	}
@@ -215,7 +219,7 @@ func verifyCardFile(b *skill.Bundle, cardPath, skillPath string, noColor bool) e
 // is printed through safeText: a card is an unsigned JSON document anyone can
 // write, so its name/description are attacker-controlled in exactly the way an
 // unverified attestation's identity is.
-func printCardVerify(res *sgverify.CardResult, cardPath, skillPath string, noColor bool) {
+func printCardVerify(w io.Writer, res *sgverify.CardResult, cardPath, skillPath string, noColor bool) {
 	c := func(s string) string {
 		if noColor {
 			return ""
@@ -227,25 +231,25 @@ func printCardVerify(res *sgverify.CardResult, cardPath, skillPath string, noCol
 		green = "\033[32m"
 		reset = "\033[0m"
 	)
-	fmt.Printf("card: %q\n", cardPath)
-	fmt.Printf("subject: %q\n", skillPath)
-	fmt.Printf("schema: %s\n", res.Card.Type)
+	fmt.Fprintf(w, "card: %q\n", cardPath)
+	fmt.Fprintf(w, "subject: %q\n", skillPath)
+	fmt.Fprintf(w, "schema: %s\n", res.Card.Type)
 	state, col := "MISMATCH", red
 	if res.Match {
 		state, col = "MATCH", green
 	}
-	fmt.Printf("content hash: %s%s%s\n", c(col), state, c(reset))
-	fmt.Printf("  card:   %s\n", res.CardHash)
-	fmt.Printf("  bundle: %s\n", res.BundleHash)
+	fmt.Fprintf(w, "content hash: %s%s%s\n", c(col), state, c(reset))
+	fmt.Fprintf(w, "  card:   %s\n", res.CardHash)
+	fmt.Fprintf(w, "  bundle: %s\n", res.BundleHash)
 	// The card's own claims, shown after the check so nobody reads them as
 	// verified facts: what a card check establishes is the subject, not the
 	// verdict, which was produced under the emitter's policy (pkg/verify.VerifyCard).
-	fmt.Printf("card claims: %s — verdict %s, risk %d/100 (%s)\n",
+	fmt.Fprintf(w, "card claims: %s — verdict %s, risk %d/100 (%s)\n",
 		safeText(res.Card.Name), safeText(string(res.Card.Verdict)), res.Card.RiskScore, safeText(res.Card.RiskTier))
 	if n := len(res.Card.PublisherCards); n > 0 {
-		fmt.Printf("publisher card(s) in bundle: %d (not parsed)\n", n)
+		fmt.Fprintf(w, "publisher card(s) in bundle: %d (not parsed)\n", n)
 	}
 	for _, f := range res.Findings {
-		fmt.Printf("  %s  %s  %s\n", f.RuleID, f.Severity.String(), f.Title)
+		fmt.Fprintf(w, "  %s  %s  %s\n", f.RuleID, f.Severity.String(), f.Title)
 	}
 }

@@ -464,7 +464,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 			// it?" — and needs no attestation to be present, so it returns here
 			// instead of falling through to the signature paths.
 			if cardPath != "" {
-				return verifyCardFile(b, cardPath, args[0], noColor || report.ColorDisabled(os.Stdout))
+				return verifyCardFile(cmd.OutOrStdout(), b, cardPath, args[0], noColor || report.ColorDisabled(os.Stdout))
 			}
 			pol, err := policy.Load(policyPath)
 			if err != nil {
@@ -488,16 +488,17 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 			}
 
 			noColorOut := noColor || report.ColorDisabled(os.Stdout)
+			out := cmd.OutOrStdout()
 			failed := false
 			if err == nil {
 				res := verifyBundle(b, env, pol)
-				printVerify(res, noColorOut, sigPath, args[0], hasOMS)
+				printVerify(out, res, noColorOut, sigPath, args[0], hasOMS)
 				failed = failed || verificationFailed(res, pol)
 			} else {
-				fmt.Printf("attestation: absent (no %q)\n", sigPath)
+				fmt.Fprintf(out, "attestation: absent (no %q)\n", sigPath)
 			}
 			if hasOMS {
-				fmt.Println()
+				fmt.Fprintln(out)
 				// Relative trust.roots paths resolve against the policy file's
 				// own directory, so a policy means the same thing wherever the
 				// command is run from.
@@ -506,7 +507,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 					policyDir = filepath.Dir(policyPath)
 				}
 				omsRes := sgverify.VerifyOMSAt(b, omsData, pol.Trust, policyDir)
-				printVerify(omsRes, noColorOut, omsPath, args[0], env != nil)
+				printVerify(out, omsRes, noColorOut, omsPath, args[0], env != nil)
 				failed = failed || verificationFailed(omsRes, pol)
 			}
 

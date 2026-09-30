@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -43,7 +44,7 @@ func TestPrintDecisionTruncatesFindings(t *testing.T) {
 		})
 	}
 
-	out := captureStdout(t, func() { printDecision(d, true) })
+	out := capture(func(w io.Writer) { printDecision(w, d, true) })
 	if strings.Count(out, "SG-TEST-001") > 5 {
 		t.Errorf("printed more than five findings:\n%s", out)
 	}
@@ -74,7 +75,7 @@ func TestPrintDecisionEscapesBundleText(t *testing.T) {
 			Publisher: "pub\x1b[31mlisher",
 		},
 	}
-	out := captureStdout(t, func() { printDecision(d, true) })
+	out := capture(func(w io.Writer) { printDecision(w, d, true) })
 	if strings.Contains(out, "\x1b[") {
 		t.Errorf("raw escape sequence reached the terminal:\n%q", out)
 	}

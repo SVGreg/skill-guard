@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,8 +49,8 @@ func TestVerifyCardCmdRoundTrip(t *testing.T) {
 	}
 	cardPath := emitCard(t, dir)
 
-	out := captureStdout(t, func() {
-		if err := runVerifyCard(t, dir, cardPath); err != nil {
+	out := capture(func(w io.Writer) {
+		if err := runVerifyCard(t, w, dir, cardPath); err != nil {
 			t.Fatalf("card did not verify against its own bundle: %v", err)
 		}
 	})
@@ -61,8 +62,8 @@ func TestVerifyCardCmdRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ee exitErr
-	out = captureStdout(t, func() {
-		err := runVerifyCard(t, dir, cardPath)
+	out = capture(func(w io.Writer) {
+		err := runVerifyCard(t, w, dir, cardPath)
 		if err == nil {
 			t.Fatal("card still verified after the bundle changed")
 		}
@@ -89,7 +90,7 @@ func TestVerifyCardCmdRejectsNonCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{notACard, filepath.Join(dir, "does-not-exist.json")} {
-		err := runVerifyCard(t, dir, path)
+		err := runVerifyCard(t, io.Discard, dir, path)
 		var ee exitErr
 		if !errors.As(err, &ee) || ee.code != 3 {
 			t.Errorf("verify --card %q: error = %v, want exitErr code 3", path, err)
@@ -97,11 +98,11 @@ func TestVerifyCardCmdRejectsNonCards(t *testing.T) {
 	}
 }
 
-func runVerifyCard(t *testing.T, bundlePath, cardPath string) error {
+func runVerifyCard(t *testing.T, out io.Writer, bundlePath, cardPath string) error {
 	t.Helper()
 	cmd := verifyCmd()
 	cmd.SetArgs([]string{"--card", cardPath, "--no-color", bundlePath})
-	cmd.SetOut(os.Stderr)
+	cmd.SetOut(out)
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	return cmd.Execute()
