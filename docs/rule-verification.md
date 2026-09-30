@@ -1551,7 +1551,13 @@ payload. One hit is not worth a broad, bypassable mechanism.
   env to pass to a child process and appear in legitimate skills (incl. Anthropic's own `docx` /
   `skill-creator`). Also excluded: single-var reads (`process.env.API_KEY`, `os.environ['X']`,
   `os.environ.get('X')`), setting a var for a command (`env VAR=val cmd`), and a single-var
-  `printenv PATH` (a previously-shipped FP this polish removes).
+  `printenv PATH` (a previously-shipped FP this polish removes). **A closure or block parameter
+  named `env`** (core-secret 1.3.1, #187): Rust `.and_then(|env| env.get(…))` and Ruby `{ |env| … }`
+  read `env|` as a pipe, because `\b` let the preceding `|` through. The leaf is now anchored on
+  `(^|[^|\w])`. Found when `.rs` files became scripts (two hits in one bundle, both FPs). Over the
+  corpus the narrowing removed three more hits, all regex alternations in detectors
+  (`(환경\s*변수|env|ENV)` ×2 in prompt-guard, `(?:secret|token|…|env|credential)` in a minified
+  hubFetch.js), and no verdict changed.
 - **Confidence:** printenv/env/os.environ/Object.entries 0.7; json/pickle/JSON.stringify serialize
   0.75; `/proc/*/environ` 0.8. (In `scripts`/`configs`, no instruction bonus applies; an incidental
   documentary keyword on the line still drops the hit below threshold — e.g. an `example.com` URL.)

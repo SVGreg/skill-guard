@@ -360,6 +360,14 @@ var scriptExt = map[string]string{
 	".rb": "ruby", ".pl": "perl",
 	".ps1": "powershell", ".psm1": "powershell", ".php": "php",
 	".bat": "batch", ".cmd": "batch",
+	// Source languages that were assets, so a payload moved into a component
+	// or a crate was invisible to every rule (issue #187). A .tsx/.jsx file
+	// is JavaScript with markup and runs child_process/fetch like any .js;
+	// .rs/.go reach Command::new / exec.Command. .lua, .fish and .vbs are
+	// directly executable by their interpreters (.vbs by wscript on Windows).
+	".tsx": "typescript", ".jsx": "javascript",
+	".rs": "rust", ".go": "go", ".lua": "lua",
+	".fish": "fish", ".vbs": "vbscript",
 }
 
 var configNames = map[string]bool{
