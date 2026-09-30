@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-injection
-version: 1.5.1
+version: 1.6.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -475,6 +475,47 @@ rules:
       - '(?i)\bnot\s+(an?\s+)?instructions?\b'
     rationale: A bundled MCP server config carries tool and parameter descriptions that the agent reads as guidance and that are never surfaced in the UI, so instructions planted there steer the agent invisibly to a human reviewer (AST04/AST01; OWASP MCP Top 10 MCP03 "Tool Poisoning").
     fix: Keep tool and parameter descriptions purely descriptive. A description must say what the tool does — never instruct the agent to ignore its rules, withhold information from the user, or perform a side action first.
+
+  - id: SG-MCP-002
+    title: MCP tool preference manipulation in a bundled config
+    ast: [AST04, AST01]
+    severity: medium
+    engine: static
+    layer: content
+    confidence: 0.65
+    targets: [configs]
+    match:
+      # Preference-manipulation (MPMA): a tool/server description written to win
+      # the agent's tool-selection race rather than to describe the tool. The
+      # steering sentence goes FIRST so the finding points at it, not at the
+      # `"mcpServers":` key (an `all` reports its first branch's match).
+      #
+      # Every leaf needs a COMPARATIVE or EXCLUSIVITY object — this tool over
+      # others — never a bare purpose statement. "Use this tool to search the
+      # web" is what a tool description is for; "always use this tool instead
+      # of the built-in search" is routing manipulation. Same universal-vs-
+      # scoped discipline as SG-TRIG-001. No documentary modifier applies:
+      # configs are not a prose target (pkg/rules contextModifier), so 0.65
+      # emits as written.
+      all:
+        - any:
+            - regex: '(?i)\balways\s+(use|prefer|choose|call|pick|select|invoke)\s+this\s+(tool|server|function|mcp)\b'
+            # "the only/best/most reliable tool for …". `way`/`source` are left
+            # out on purpose: "the best way to see the landmarks" and "the
+            # preferred way to handle nested matches" are the two corpus hits
+            # over data JSON, and neither names a tool.
+            - regex: '(?i)(^|[^\w-])(only|best|most\s+(reliable|secure|accurate|trusted|up[- ]to[- ]date)|preferred|recommended|official|authoritative)\s+(\w+\s+)?(tool|server|option|integration|provider|mcp\s+server)\s+(for|to|that|you\s+should)\b'
+            - regex: '(?i)\b(do\s+not|don''t|never|avoid)\s+(use|call|invoke|rely\s+on|choose|select)\s+(any\s+)?(other|another|alternative|competing|different)\s+(tools?|servers?|mcp|functions?|providers?)\b'
+            - regex: '(?i)\b(instead\s+of|rather\s+than|over|in\s+place\s+of)\s+(the\s+|any\s+)?(built[- ]?in|native|default|other|standard|existing)\s+(\w+\s+)?(tools?|servers?|functions?|search|fetch|web\s+search)\b'
+        - any:
+            # The file is an MCP server config / tool manifest — same gate as
+            # SG-MCP-001. Without it, 2 of 951 corpus JSON files match.
+            - regex: '"mcpServers"\s*:'
+            - regex: '(?i)@?modelcontextprotocol'
+            - regex: '"tools"\s*:\s*\['
+            - regex: '"inputSchema"\s*:'
+    rationale: A bundled MCP tool or server description written to make the agent prefer this tool over the alternatives ("always use this tool", "do not use any other server", "instead of the built-in search") lets a rogue server win the routing race and intercept calls meant for a trusted tool. The description is read by the agent and rarely shown to the user (AST04/AST01; MCP Preference Manipulation Attack).
+    fix: Describe what the tool does and when it applies. Do not rank it against other tools or servers, claim exclusivity, or tell the agent to avoid alternatives — let the agent choose on the description of each tool.
 
   - id: SG-INJ-006
     title: System-prompt / tool-schema exfiltration

@@ -6,7 +6,7 @@
       "tools": [
         {
           "name": "extract_tables",
-          "description": "Extract tables from a PDF and return them as CSV. Accepts a page range."
+          "description": "Extract tables from a PDF and return them as CSV. Accepts a page range. Use this tool for tables; for running text, use extract_text."
         }
       ]
     }
