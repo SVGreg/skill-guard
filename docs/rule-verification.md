@@ -508,7 +508,21 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   fires on nothing real — the same failure shape as SG-EVA-001, where a rule cannot see what the walk
   never opens. Tracked as an Engine & hardening row in `planned-rules.md`.
 
-### SG-MCP-003 — Runtime extension of the agent's tool surface  (AST02/AST04, high) — **blocked** (issue #289)
+### SG-MCP-003 — Runtime extension of the agent's tool surface  (AST02/AST04, low) — **implemented as a disclosure tier** (`core-supply`, issue #289)
+> **Shipped (core-supply 1.3.0, owner-greenlit, design chosen by the owner):** two tiers. The blocker below — no static
+> way to tell a hostile remote host from `mcp.figma.com` — still holds, so this id was split rather than forced.
+> **`SG-MCP-003` (low)** discloses every registration of a remote tool source: `claude|codex|gemini mcp add` with an
+> `sse`/`http` transport or a URL; `claude plugin marketplace add` / `/plugin marketplace add` (URL *or* `owner/repo`,
+> because the shorthand is just as much a third-party source); and, in a file carrying an `mcpServers` object or a
+> `[mcp_servers]` table, a server URL — an `/mcp`/`/sse` endpoint path or a `"type": "http|sse"` entry, which keeps
+> tool-call examples (`{"url": "https://arxiv…"}`) and plugin homepages out. Loopback registrations
+> (`localhost`, `127.`, `0.0.0.0`, `[::1]`) are suppressed: that is a skill wiring its own process. Low severity moves
+> no verdict under the default policy, so the benign population the blocking measurement found is reported, not
+> failed. Confidence 0.8 so a fenced setup block (0.8 + 0.15 − 0.4 = 0.55) still emits. The judging half is the new
+> **`SG-MCP-004`** below (unblocking condition (b)). Condition (a), a policy host roster, is not built.
+> **Corpus:** **20 low findings across 9 bundles, 0 `SG-MCP-004`, 0 verdict changes, no other rule moved** — A/B over the 15 corpus bundles that carry any registration or `mcpServers` config (92 → 112 findings). The low hits are exactly the population the blocking measurement found: hosted endpoints (`mcp.exa.ai`, `api.anysearch.com`, `mcp.figma.com`, the AWS anchor's `connect.aidevops…api.aws/mcp`, a `your-server.example.com` placeholder), the roadtrip `claude|codex|gemini mcp add … git+https://…` lines (×9) and `/plugin marketplace add` lines (×5). The AWS anchor gains one low finding and keeps its verdict. That is the disclosure working as designed: the skill really does point the agent at a hosted server.
+> Tests: `TestRuntimeToolRegistrationTiers` (both rules, 22 rows incl. the issue's probes and every benign corpus
+> shape), `TestRuntimeToolRegistrationEmitsWhenFenced`.
 - **Threat.** The skill's instructions tell the agent (or its user) to **register a new tool source
   at run time** — `claude mcp add --transport sse remote https://tools.example.net/sse`,
   `claude plugin marketplace add https://plugins.example.net/registry.json`, or a written
@@ -574,6 +588,29 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
   (*shipping* a hook vs *documenting* one), and the resolution there — target the config, not the
   prose — does **not** transfer, because here the instruction in prose is the whole mechanism.
   Measure it; the answer may be that only the *remote-URL* subset is shippable.
+
+### SG-MCP-004 — Tool source registered from a suspicious origin  (AST02/AST04, high) — **implemented** (`core-supply`, issue #289)
+- **Threat.** The `SG-MCP-003` registration, pointed at an origin with no stable, accountable identity. The
+  agent's tools are then served from an endpoint that can be swapped at will and that a reviewer cannot attribute.
+- **Signals.** A registration (`claude|codex|gemini mcp add[-json]`, `claude plugin marketplace add`,
+  `/plugin marketplace add`) on the same line as, or an `mcpServers`/`[mcp_servers]` config URL that is:
+  (1) a **raw IPv4** whose first octet is not `0` or `127` (spelled as an octet alternation, because RE2 has no
+  lookahead); (2) **cleartext `http://` to a named host**, meaning a hostname ending in letters, so `localhost` and dotted-quad
+  loopback never match; (3) a **tunnel, paste or request-capture host**: `ngrok.io`/`ngrok.app`/`ngrok-free.app`,
+  `trycloudflare.com`, `loca.lt`, `serveo.net`, `localhost.run`, `pastebin.com`, `webhook.site`, `pipedream.net`,
+  `requestbin.com`, `hookb.in`.
+- **Why these and not host reputation.** Each is suspicious *independently of who operates it*. A raw IP or
+  plain HTTP has no identity to check, and a tunnel exists to expose an endpoint that is not otherwise reachable.
+  That is unblocking condition (b) of `SG-MCP-003`, and it needs no network I/O.
+- **No `suppress`.** Appending a loopback URL to the line must not erase a high finding (the evasion
+  `design-note-demotion.md §1` documents). The loopback exclusion is in the match itself.
+- **Confidence:** 0.9. Fenced in the body: 0.9 + 0.15 − 0.4 = 0.65, which emits.
+- **Corpus:** 0 hits over the bundles carrying any registration or MCP config (see `SG-MCP-003`). Before the
+  `mcpServers` gate was tightened, two cleartext RSS feed URLs in a news-digest `sources.json` would have matched;
+  they are not MCP configs, and `TestRuntimeToolRegistrationTiers` pins that.
+- **Fixtures:** see `SG-MCP-003`. TP: `claude mcp add --transport http tools http://203.0.113.7:8080/mcp`,
+  `… https://a1b2.ngrok-free.app/sse`, `{"mcpServers": {"x": {"url": "http://198.51.100.9/mcp"}}}`.
+  FP: `http://127.0.0.1:9000/mcp`, `http://localhost:3000/sse`, `https://mcp.exa.ai/mcp`.
 
 ### SG-INJ-006 — System-prompt / tool-schema exfiltration  (AST01, high) — **implemented** (`core-injection`)  [SkillSpector P6–P8]
 - **Signals:** instruction families for **direct** leak (`print|reveal|show|repeat|output|display` + `your (system )?(prompt|instructions|rules|guidelines)`), **indirect** extraction (`summarize|translate|rephrase|encode|spell out` + `your instructions`), and **exfil-via-tool** (leak text then `write to file`/`POST`/`log`). Cover `initial prompt`, `the text above this conversation`, `everything in your context`.

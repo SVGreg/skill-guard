@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-supply
-version: 1.2.0
+version: 1.3.0
 description: Supply chain — unpinned/remote dependencies pulled and executed at use time (rule-verification.md §4, AST02).
 rules:
   - id: SG-DEP-007
@@ -567,3 +567,85 @@ rules:
       Remove any text that addresses reviewers, scanners or registry moderators, or asserts that the skill
       is safe, benign or already reviewed. Describe what the skill does and let the review reach its own
       verdict.
+
+  - id: SG-MCP-003
+    title: Agent tool surface extended at run time from a remote source
+    ast: [AST02, AST04]
+    severity: low
+    engine: static
+    layer: code
+    confidence: 0.8
+    targets: [body, scripts, configs]
+    match:
+      # DISCLOSURE tier (issue #289). The skill registers a tool source the
+      # scan cannot see: a remote MCP server (`claude|codex|gemini mcp add`
+      # with an http/sse transport or a URL), a plugin marketplace, or a
+      # remote `url` in a bundled/documented `mcpServers` config. The tools
+      # the agent gains are served by a third party after the scan and can
+      # change without the bundle changing (OWASP ASI04).
+      #
+      # LOW on purpose. The measurement that blocked this rule (1,036
+      # bundles) found every remote registration in the corpus legitimate —
+      # mcp.exa.ai, mcp.figma.com, mcp.asana.com, the AWS anchor's
+      # api.aws endpoint, trailofbits marketplaces — and a host's reputation
+      # is not knowable without network I/O, which surfaceguard never does.
+      # So this tier says "this is here" without moving a verdict;
+      # SG-MCP-004 is the tier that judges, on independently suspicious
+      # origins. 0.8, not 0.7: registrations live in fenced setup blocks,
+      # and 0.7 + 0.15 − 0.4 falls under the emit threshold.
+      any:
+        - regex: '(?im)\b(claude|codex|gemini)\s+mcp\s+add(-json)?\b[^\n]{0,200}(--transport[ =]+(sse|http)\b|https?://)'
+        - regex: '(?im)(\bclaude\s+plugin|(^|[ \t`])/plugin)\s+marketplace\s+add\s+\S'
+        # Config form: a server URL, not any URL. An MCP endpoint path
+        # (`/mcp`, `/sse`) or a `"type": "http|sse"` on the line separates a
+        # server entry from a tool-call example (`{"url": "https://arxiv…"}`)
+        # or a plugin homepage, both measured in the corpus.
+        - all:
+            - any:
+                - regex: '(?i)"(url|serverUrl)"\s*:\s*"https?://[^"\s]*/(mcp|sse)\b'
+                - regex: '(?i)"type"\s*:\s*"(sse|http|streamable-http)"[^\n]{0,80}"url"\s*:\s*"https?://'
+                - regex: '(?im)^\s*url\s*=\s*"https?://'
+            - any:
+                # The file is an MCP client config: a JSON `mcpServers` object or
+                # a Codex `[mcp_servers.*]` table. Tool schemas (`inputSchema`)
+                # carry no server URL, so they are not context here.
+                - regex: '"mcpServers"\s*:'
+                - regex: '(?m)^\s*\[mcp_servers'
+    suppress:
+      # A bundle-local server registered over loopback is the skill wiring its
+      # own process, not a third-party tool source.
+      - '(?i)https?://(localhost|127\.|0\.0\.0\.0|\[::1\])'
+    rationale: The skill registers a remote MCP server or plugin marketplace with the agent. The tools it adds are served by a third party after this scan, can change without the bundle changing, and arrive with descriptions the agent reads as instructions — a clean scan of the bundle says nothing about them (AST02/AST04; OWASP ASI04).
+    fix: Ship the MCP server inside the bundle and register it by local path, or pin the remote server to a provider you have reviewed and document why it is trusted.
+
+  - id: SG-MCP-004
+    title: Tool source registered from a suspicious origin
+    ast: [AST02, AST04]
+    severity: high
+    engine: static
+    layer: code
+    confidence: 0.9
+    targets: [body, scripts, configs]
+    match:
+      # JUDGMENT tier (issue #289, unblocking condition b): a registration
+      # whose origin is independently suspicious, so no host reputation is
+      # needed — a raw non-loopback IPv4 (first octet excludes 0 and 127),
+      # cleartext http:// to a named remote host (a hostname ending in
+      # letters, so 127.0.0.1 and localhost never match), or a tunnel /
+      # paste / request-capture host that exists to expose or relay an
+      # endpoint. 0 corpus hits; the SG-MCP-003 population is untouched.
+      # No suppress: a loopback URL appended to the line must not erase this.
+      any:
+        - regex: '(?im)(\b(claude|codex|gemini)\s+mcp\s+add(-json)?\b|(\bclaude\s+plugin|(^|[ \t`])/plugin)\s+marketplace\s+add\b)[^\n]{0,200}(https?://(1[01]\d|12[0-6]|12[89]|1[3-9]\d|2[0-4]\d|25[0-5]|[1-9]\d|[1-9])\.\d{1,3}\.\d{1,3}\.\d{1,3}|http://([a-z0-9-]+\.)+[a-z]{2,}([:/\s"''`]|$)|https?://([\w-]+\.)*(ngrok\.io|ngrok\.app|ngrok-free\.app|trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|pastebin\.com|webhook\.site|pipedream\.net|requestbin\.com|hookb\.in)\b)'
+        - all:
+            - any:
+                - regex: '(?i)"(url|serverUrl)"\s*:\s*"(https?://(1[01]\d|12[0-6]|12[89]|1[3-9]\d|2[0-4]\d|25[0-5]|[1-9]\d|[1-9])\.\d{1,3}\.\d{1,3}\.\d{1,3}|http://([a-z0-9-]+\.)+[a-z]{2,}([:/\s"''`]|$)|https?://([\w-]+\.)*(ngrok\.io|ngrok\.app|ngrok-free\.app|trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|pastebin\.com|webhook\.site|pipedream\.net|requestbin\.com|hookb\.in)\b)'
+                - regex: '(?im)^\s*url\s*=\s*"(https?://(1[01]\d|12[0-6]|12[89]|1[3-9]\d|2[0-4]\d|25[0-5]|[1-9]\d|[1-9])\.\d{1,3}\.\d{1,3}\.\d{1,3}|http://([a-z0-9-]+\.)+[a-z]{2,}([:/\s"''`]|$)|https?://([\w-]+\.)*(ngrok\.io|ngrok\.app|ngrok-free\.app|trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|pastebin\.com|webhook\.site|pipedream\.net|requestbin\.com|hookb\.in)\b)'
+            - any:
+                # The file is an MCP client config: a JSON `mcpServers` object or
+                # a Codex `[mcp_servers.*]` table. Tool schemas (`inputSchema`)
+                # carry no server URL, so they are not context here.
+                - regex: '"mcpServers"\s*:'
+                - regex: '(?m)^\s*\[mcp_servers'
+    rationale: The skill registers a tool source at a raw IP address, over cleartext HTTP, or through a tunnel/paste/request-capture host. Each is a way to serve the agent's tools from an endpoint with no stable, accountable identity, and the tools arrive after the scan (AST02/AST04; OWASP ASI04).
+    fix: Register MCP servers by local path or from a named HTTPS endpoint operated by a provider you have reviewed. Never point an agent at a tunnel, a bare IP, or plain HTTP.
