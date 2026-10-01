@@ -1,6 +1,9 @@
 package rules
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/SVGreg/surfaceguard/pkg/model"
 )
 
@@ -33,10 +36,16 @@ import (
 type ContextRule struct {
 	ID          string
 	Title       string
-	Scope       string // "line" (default) | "file"
+	Scope       string // "line" (default) | "file" | "section"
 	MaxSeverity model.Severity
-	Targets     []string
-	Rationale   string
+	// Layers restricts the cap to findings of these layers (model.Finding.Layer);
+	// empty caps every layer. A prohibition heading is evidence about the
+	// *prose* under it, so CTX-PROHIBITION-SECTION caps only `content` findings:
+	// a real `curl … | sh` placed under a decoy "Don'ts" heading keeps its
+	// severity (issue #280).
+	Layers    []string
+	Targets   []string
+	Rationale string
 
 	// matcher reuses the ordinary match-tree walker. A context rule never emits,
 	// so the confidence modifiers, the emit threshold and the suppress list are
@@ -58,8 +67,14 @@ func (c *ContextRule) AppliesTo(target, language string) bool {
 // For scope "line" the returned set holds every target-local line a match
 // starts on. For scope "file" a single match anywhere marks the whole target,
 // signalled by wholeFile — the caller then caps every finding in that file
-// regardless of line.
+// regardless of line. For scope "section" a match on a markdown heading marks
+// that heading's section: every line from it to the next heading of the same
+// or a higher level (see sectionLines).
 func (c *ContextRule) Spans(target, text string) (lines map[int]bool, wholeFile bool) {
+	if c.Scope == "section" && !isProseTarget(target) {
+		// A heading is a markdown concept; in a script `# Don'ts` is a comment.
+		return nil, false
+	}
 	ms := c.matcher.eval(c.matcher.Match, text)
 	if len(ms) == 0 {
 		return nil, false
@@ -67,11 +82,66 @@ func (c *ContextRule) Spans(target, text string) (lines map[int]bool, wholeFile 
 	if c.Scope == "file" {
 		return nil, true
 	}
+	if c.Scope == "section" {
+		return sectionLines(text, ms), false
+	}
 	lines = make(map[int]bool, len(ms))
 	for _, m := range ms {
 		lines[m.line] = true
 	}
 	return lines, false
+}
+
+// CapsLayer reports whether this rule's cap applies to a finding of layer.
+func (c *ContextRule) CapsLayer(layer string) bool {
+	if len(c.Layers) == 0 {
+		return true
+	}
+	for _, l := range c.Layers {
+		if l == layer {
+			return true
+		}
+	}
+	return false
+}
+
+// atxHeading is a CommonMark ATX heading: up to three spaces, 1–6 '#', then a
+// space or end of line. The '#' run is the level.
+var atxHeading = regexp.MustCompile(`^ {0,3}(#{1,6})(?:[ \t]|$)`)
+
+// sectionLines expands heading matches to their sections. A match counts only
+// when its line is itself a heading outside a code fence — `# never do this`
+// inside a fenced shell block is a comment, not structure — and its section
+// runs to the line before the next fence-free heading whose level is the same
+// or higher (fewer '#'), or to the end of the text. Nested subsections stay
+// inside their parent's span, which is the reading a human gives the page.
+func sectionLines(text string, ms []match) map[int]bool {
+	fences := fenceStarts(text)
+	lines := strings.Split(text, "\n")
+	level := make([]int, len(lines)+1) // 1-based; 0 = not a heading
+	off := 0
+	for i, ln := range lines {
+		if !inFence(fences, off) {
+			if m := atxHeading.FindStringSubmatch(ln); m != nil {
+				level[i+1] = len(m[1])
+			}
+		}
+		off += len(ln) + 1
+	}
+	out := map[int]bool{}
+	for _, m := range ms {
+		l := level[m.line]
+		if l == 0 || out[m.line] {
+			continue
+		}
+		for n := m.line; n <= len(lines); n++ {
+			if n > m.line && level[n] != 0 && level[n] <= l {
+				break
+			}
+			out[n] = true
+		}
+	}
+	return out
 }
 
 // AllContexts flattens packs into a single ordered context-rule slice, the

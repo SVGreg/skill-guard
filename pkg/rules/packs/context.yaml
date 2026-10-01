@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: context
-version: 1.0.1
+version: 1.0.2
 description: >
   Context rules — they emit no finding of their own and instead cap the severity
   of findings anchored in their span (docs/design-note-demotion.md §4).
@@ -46,3 +46,41 @@ rules:
       words in a fixed, well-known document fragment, so it is kept and weighted
       down rather than deleted — appending this text to a payload line must not
       make the payload invisible.
+
+  - id: CTX-PROHIBITION-SECTION
+    kind: context
+    title: Section headed as a list of things not to do
+    scope: section
+    effect:
+      max_severity: low
+      # Instruction-layer findings only. The heading is evidence about how to
+      # read the PROSE beneath it; it says nothing about a command. A real
+      # `curl … | sh` or credential read placed under a decoy "Don'ts" heading
+      # keeps its severity, so the heading cannot be used to launder a payload.
+      layers: [content]
+    targets: [body]
+    match:
+      any:
+      # A heading that announces prohibitions — "## Anti-Patterns (NEVER do
+      # these)", "# What NOT to do", "### Don'ts", "## Common Mistakes to
+      # Avoid". The bullets under it are what the skill must NOT do, and they
+      # are written in the imperative, so the instruction-layer rules read each
+      # one as a directive: the motivating case is an SG-INJ-010 at conf 1.00
+      # on a bullet five lines below "### Anti-Patterns (never do these)"
+      # (issue #280). The line-scoped documentary modifier cannot see that far,
+      # and the distance from heading to bullet is unbounded.
+      #
+      # Canonical-form test from the pack header: these are fixed section
+      # names of the "dos and don'ts" document form, not "common and benign"
+      # text. Measured over the corpus: 208 docs in 117 bundles use one, almost
+      # all "Anti-Patterns", "Common Mistakes" or "What NOT to do".
+      #
+      # The section runs to the next heading of the same or higher level, and
+      # `#` lines inside code fences are not headings (pkg/rules sectionLines).
+        - regex: '(?im)^ {0,3}#{1,6}[ \t]+[^\n]*\b(anti-?patterns?|what\s+not\s+to\s+do|don[''’]?ts|do\s+not\s+do|never\s+do|mistakes\s+to\s+avoid|common\s+mistakes|bad\s+(examples?|practices?)|things\s+to\s+avoid)\b'
+    rationale: >
+      A section whose heading says its contents are anti-patterns, mistakes or
+      things never to do. Instruction-layer findings inside it matched real
+      imperative wording that the document frames as prohibited, so they are
+      kept and weighted down rather than deleted. Code-layer findings are not
+      capped.

@@ -256,11 +256,33 @@ max severity, risk and verdict. Every downstream consumer sees the severity the 
 actually show; a cap applied later would leave a `high` in the counts and a `fail` verdict
 behind a report line that reads `low`.
 
-**Scope granularity (§7 resolved):** `line` and `file` are implemented, `span` is not. `line`
+**Scope granularity (§7 resolved):** `line` and `file` are implemented, and `section` was added
+later (below); a general `span` is not. `line`
 is what the license case needs and `file` costs nothing once the plumbing exists; `span`
 needs a definition of a block boundary that no current entry would use.
 
-**Multiple caps on one line:** the lowest ceiling wins.
+**Section scope (issue #280).** A third scope, `section`, added once a real entry needed it:
+`CTX-PROHIBITION-SECTION` matches a markdown heading that announces prohibitions ("## Anti-Patterns
+(NEVER do these)", "# What NOT to do", "### Don'ts", "## Common Mistakes to Avoid") and caps every
+line from that heading to the next fence-free heading of the same or a higher level. Nested
+subsections stay inside, and a `#` line inside a code fence is a comment rather than a heading. The
+documentary modifier could not do this, because the heading-to-bullet distance is unbounded. The
+scope is **markdown-only**: the loader rejects it on `scripts`/`configs`, and `Spans` returns nothing
+for a non-prose target.
+
+**Layer-restricted caps (`effect.layers`).** A section heading is evidence about how to read the
+*prose* under it, not about a command. So the entry caps only `content`-layer findings, and a real
+`curl … | sh` placed under a decoy "Don'ts" heading keeps its critical severity
+(`TestProhibitionSectionCapsContentOnly`). That closes the evasion a section-wide cap would
+otherwise open. Unknown layer names are a load error.
+
+**Corpus (116 bundles with such a heading):** 197 → 197 findings, none lost, and 15 demoted to `low`.
+That is the 15 the #280 triage counted: `SG-ANTI-001` ×6, `SG-INJ-001` ×4, `SG-INJ-010` ×4 and
+`SG-SEC-005` ×1, every one a bullet or table row under a prohibition heading. Three bundles move
+`fail → pass`, because that demoted finding was their only one.
+
+**Multiple caps on one line:** the lowest *applicable* ceiling wins. Every ceiling is stored, so a
+layer-restricted ceiling that does not apply to a finding falls through to the next one.
 
 **A no-op cap is not recorded.** If the ceiling is at or above the finding's own severity,
 nothing changes and `demoted_by` stays empty — claiming a demotion that did not happen would
