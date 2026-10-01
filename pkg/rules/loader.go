@@ -49,7 +49,8 @@ type ruleDTO struct {
 
 // effectDTO is what a context rule does instead of emitting: cap severity.
 type effectDTO struct {
-	MaxSeverity string `yaml:"max_severity"`
+	MaxSeverity string   `yaml:"max_severity"`
+	Layers      []string `yaml:"layers"`
 }
 
 type condDTO struct {
@@ -144,8 +145,24 @@ func compileContext(rd ruleDTO) (*ContextRule, error) {
 		return nil, err
 	}
 	scope := orDefault(rd.Scope, "line")
-	if scope != "line" && scope != "file" {
-		return nil, fmt.Errorf("unknown scope %q (want line or file)", scope)
+	if scope != "line" && scope != "file" && scope != "section" {
+		return nil, fmt.Errorf("unknown scope %q (want line, file or section)", scope)
+	}
+	if scope == "section" {
+		// Headings exist only in markdown. Accepting scripts/configs here would
+		// load fine and never fire — an inert field that looks meaningful.
+		for _, t := range rd.Targets {
+			if t != "body" && t != "refs" && t != "manifest" {
+				return nil, fmt.Errorf("scope section applies to markdown targets only (body, refs, manifest), not %q", t)
+			}
+		}
+	}
+	for _, l := range rd.Effect.Layers {
+		switch l {
+		case "content", "code", "provenance", "drift":
+		default:
+			return nil, fmt.Errorf("unknown effect.layers value %q (want content, code, provenance or drift)", l)
+		}
 	}
 	if rd.Severity != "" || rd.Confidence != 0 || len(rd.Suppress) > 0 {
 		return nil, fmt.Errorf("severity/confidence/suppress are meaningless on a context rule")
@@ -159,6 +176,7 @@ func compileContext(rd ruleDTO) (*ContextRule, error) {
 		Title:       rd.Title,
 		Scope:       scope,
 		MaxSeverity: max,
+		Layers:      rd.Effect.Layers,
 		Targets:     rd.Targets,
 		Rationale:   rd.Rationale,
 		matcher: &Rule{

@@ -148,10 +148,12 @@ type scanTarget struct {
 
 // severityCaps holds the ceilings the active context rules impose, resolved to
 // true file lines. A finding is capped by the *strongest* applicable ceiling
-// when several context rules cover it.
+// when several context rules cover it. Every ceiling is kept, not only the
+// strongest per key: a ceiling restricted to some layers may not apply to a
+// given finding, and the next-strongest one then must.
 type severityCaps struct {
-	byLine map[fileLine]capBy
-	byFile map[string]capBy
+	byLine map[fileLine][]capBy
+	byFile map[string][]capBy
 }
 
 type fileLine struct {
@@ -162,7 +164,10 @@ type fileLine struct {
 type capBy struct {
 	rule string
 	max  model.Severity
+	ctx  *rules.ContextRule
 }
+
+func (c capBy) appliesTo(f *model.Finding) bool { return c.ctx == nil || c.ctx.CapsLayer(f.Layer) }
 
 // contextCaps evaluates every context rule against every target it applies to.
 func (s *Scanner) contextCaps(targets []scanTarget) severityCaps {
@@ -174,11 +179,11 @@ func (s *Scanner) contextCaps(targets []scanTarget) severityCaps {
 			}
 			lines, wholeFile := c.Spans(t.name, t.text)
 			if wholeFile {
-				caps.addFile(t.file, capBy{c.ID, c.MaxSeverity})
+				caps.addFile(t.file, capBy{c.ID, c.MaxSeverity, c})
 				continue
 			}
 			for ln := range lines {
-				caps.addLine(fileLine{t.file, ln + t.lineOffset}, capBy{c.ID, c.MaxSeverity})
+				caps.addLine(fileLine{t.file, ln + t.lineOffset}, capBy{c.ID, c.MaxSeverity, c})
 			}
 		}
 	}
@@ -190,20 +195,16 @@ func stronger(a, b capBy) bool { return a.max < b.max }
 
 func (s *severityCaps) addLine(k fileLine, v capBy) {
 	if s.byLine == nil {
-		s.byLine = map[fileLine]capBy{}
+		s.byLine = map[fileLine][]capBy{}
 	}
-	if ex, ok := s.byLine[k]; !ok || stronger(v, ex) {
-		s.byLine[k] = v
-	}
+	s.byLine[k] = append(s.byLine[k], v)
 }
 
 func (s *severityCaps) addFile(file string, v capBy) {
 	if s.byFile == nil {
-		s.byFile = map[string]capBy{}
+		s.byFile = map[string][]capBy{}
 	}
-	if ex, ok := s.byFile[file]; !ok || stronger(v, ex) {
-		s.byFile[file] = v
-	}
+	s.byFile[file] = append(s.byFile[file], v)
 }
 
 // apply caps one finding in place. A ceiling at or above the finding's own
@@ -211,11 +212,12 @@ func (s *severityCaps) addFile(file string, v capBy) {
 // whose severity did not change would be a lie in the JSON.
 func (s severityCaps) apply(f *model.Finding) {
 	best, found := capBy{}, false
-	if v, ok := s.byFile[f.File]; ok {
-		best, found = v, true
-	}
-	if v, ok := s.byLine[fileLine{f.File, f.StartLine}]; ok && (!found || stronger(v, best)) {
-		best, found = v, true
+	for _, set := range [][]capBy{s.byFile[f.File], s.byLine[fileLine{f.File, f.StartLine}]} {
+		for _, v := range set {
+			if v.appliesTo(f) && (!found || stronger(v, best)) {
+				best, found = v, true
+			}
+		}
 	}
 	if !found || f.Severity <= best.max {
 		return
