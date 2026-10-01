@@ -435,6 +435,20 @@ func TestMaliciousFixtureTriggersBehavioralSteering(t *testing.T) {
 	t.Error("expected malicious fixture to trigger SG-STEER-001")
 }
 
+// TestMaliciousFixtureTriggersDependencySteering asserts the SG-STEER-002
+// fixture (the paper's direct-injection sentence, appended to
+// testdata/malicious/SKILL.md) end-to-end. Own test, not a TestMaliciousFails
+// row, for the same merge-conflict reason as the test above.
+func TestMaliciousFixtureTriggersDependencySteering(t *testing.T) {
+	rep := scanFixture(t, "../../testdata/malicious")
+	for _, f := range rep.Findings {
+		if f.RuleID == "SG-STEER-002" {
+			return
+		}
+	}
+	t.Error("expected malicious fixture to trigger SG-STEER-002")
+}
+
 // TestReferenceDocsAreScanned is the end-to-end reproduction from issue #13: a
 // bundle whose SKILL.md is clean but whose reference file carries the payload
 // used to scan `pass` with zero findings, because assets never became targets.

@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-injection
-version: 1.6.0
+version: 1.7.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -1307,3 +1307,34 @@ rules:
       Keep the agent's guidance neutral and disclosed. Do not instruct it to covertly influence the
       user, inject marketing into responses, or hide competing options — surface recommendations
       transparently and let the user decide.
+
+  - id: SG-STEER-002
+    title: Dependency steering — generated code biased toward a named package
+    ast: [AST02, AST01]
+    severity: medium
+    engine: static
+    layer: content
+    confidence: 0.75
+    targets: [body, manifest]
+    match:
+      # Dependency steering (Liu et al., arXiv:2605.09594; issue #366). The skill
+      # biases the agent's code for the user's OTHER tasks toward a package the
+      # attacker registers once the steering works — slopsquatting on demand.
+      # Nothing in the bundle installs anything; the payload is the user's code.
+      #
+      # This is the static TRIPWIRE only. The paper's optimized variant vetoes the
+      # plaintext package name and is T3 territory (SG-LLM notes). Two seeds, both
+      # requiring more than a preference — the bare "prefer X" is the FP minefield
+      # SG-STEER-001 deliberately left unshipped:
+      #   (a) cross-task scope ("when implementing / whenever you write …") AND the
+      #       package/library/module noun AND a name, in either order;
+      #   (b) social-proof substitution away from "older/legacy" alternatives.
+      # Corpus: 0 hits for both over 1,036 bundles. The looser "when writing X,
+      # prefer …" (no package noun) matched twice, both ordinary style advice —
+      # which is why the noun is mandatory.
+      any:
+        - regex: '(?i)\b(when(ever)?|any\s+time|each\s+time|every\s+time)\s+(you\s+)?(implement|writ|generat|creat|build|add)\w*\b[^.\n]{0,80}\b(prefer|always\s+use|always\s+import|always\s+install|use|import|install)\s+(the\s+)?(package|library|module|dependency|crate|gem)\s+`?[A-Za-z@][\w./@-]{1,60}`?'
+        - regex: '(?i)\b(when(ever)?|any\s+time|each\s+time|every\s+time)\s+(you\s+)?(implement|writ|generat|creat|build|add)\w*\b[^.\n]{0,80}\b(prefer|always\s+use|always\s+import|always\s+install)\s+(the\s+)?`?[A-Za-z@][\w./@-]{1,60}`?\s+(package|library|module|dependency|crate|gem)\b'
+        - regex: '(?i)\b(developers|engineers|teams|most\s+projects|the\s+community)\s+(now\s+)?(commonly|typically|now|increasingly|generally|usually)\s+(rely\s+on|use|prefer|choose|adopt)\s+`?[A-Za-z@][\w./@-]{1,60}`?\s+(rather\s+than|instead\s+of|over)\s+[^.\n]{0,40}\b(older|legacy|outdated|deprecated|traditional|previous)\b'
+    rationale: The skill tells the agent to reach for a specific named package in code it writes for the user's unrelated tasks. An attacker who controls (or later registers) that name turns the agent's suggestions into a supply-chain compromise of the user's project (AST02/AST01; Dependency Steering).
+    fix: Do not direct the agent's choice of third-party dependencies outside the skill's own scope. If the skill needs a package, install and pin it in the bundle; leave library choices for the user's code to the user.
