@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.1](https://github.com/SVGreg/surfaceguard/compare/v0.6.0...v0.6.1) (2026-10-01)
+
+
+### Features
+
+* **rules:** add SG-MCP-002 — MCP tool preference manipulation (AST04) (closes [#89](https://github.com/SVGreg/surfaceguard/issues/89)) ([#370](https://github.com/SVGreg/surfaceguard/issues/370)) ([f858b3c](https://github.com/SVGreg/surfaceguard/commit/f858b3cc00cac5b8455108ca3663d9b2bf25983e))
+* **rules:** section-scoped context rules cap prose under a prohibition heading (closes [#280](https://github.com/SVGreg/surfaceguard/issues/280)) ([#375](https://github.com/SVGreg/surfaceguard/issues/375)) ([d140035](https://github.com/SVGreg/surfaceguard/commit/d140035becae119ebf3e685b988529c1f0b91208))
+* **rules:** SG-MCP-003/004 — remote tool-source registration, disclosed and judged (AST02) (closes [#289](https://github.com/SVGreg/surfaceguard/issues/289)) ([#376](https://github.com/SVGreg/surfaceguard/issues/376)) ([3c1b7fe](https://github.com/SVGreg/surfaceguard/commit/3c1b7fe8af4ac2d473b8afe3d4369040c94a5ba8))
+* **rules:** SG-NET-002 catches a decoded blob piped or eval'd into a shell (closes [#118](https://github.com/SVGreg/surfaceguard/issues/118)) ([#371](https://github.com/SVGreg/surfaceguard/issues/371)) ([47a16a3](https://github.com/SVGreg/surfaceguard/commit/47a16a3ec3c73d4174a1ba6629e107670ff65fde))
+* **skill:** scan .tsx/.jsx/.rs/.go/.lua/.fish/.vbs as scripts (closes [#187](https://github.com/SVGreg/surfaceguard/issues/187)) ([#374](https://github.com/SVGreg/surfaceguard/issues/374)) ([2bdbc52](https://github.com/SVGreg/surfaceguard/commit/2bdbc52fc1d9d5b570c3353eb35567c79e0e82f0))
+
+
+### Bug Fixes
+
+* **attest:** refuse symlinks on every write and rewrite SKILL.md atomically (closes [#140](https://github.com/SVGreg/surfaceguard/issues/140)) ([#373](https://github.com/SVGreg/surfaceguard/issues/373)) ([9287b50](https://github.com/SVGreg/surfaceguard/commit/9287b5003acaaf9e2d845ed17eebd7d085fcaf48))
+
 ## [0.6.0](https://github.com/SVGreg/surfaceguard/compare/v0.5.5...v0.6.0) (2026-09-28)
 
 
