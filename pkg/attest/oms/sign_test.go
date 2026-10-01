@@ -184,6 +184,26 @@ func TestWriteAndSigPath(t *testing.T) {
 	}
 }
 
+// TestWriteRefusesSymlink: skill.oms.sig sits at a bundle-derived path, so a
+// planted link there must not redirect the write (issue #140).
+func TestWriteRefusesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim.txt")
+	if err := os.WriteFile(victim, []byte("untouched"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := SigPath(dir)
+	if err := os.Symlink(victim, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	if err := Write(link, &Bundle{}); err == nil {
+		t.Fatal("Write followed a symlink instead of refusing")
+	}
+	if got, _ := os.ReadFile(victim); string(got) != "untouched" {
+		t.Errorf("symlink target modified: %q", got)
+	}
+}
+
 // TestSignBundleIsDeterministic: signing the same tree twice must produce the
 // same payload. (Signatures differ — ECDSA is randomized — but the signed
 // content must not.)

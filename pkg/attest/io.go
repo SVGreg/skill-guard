@@ -65,7 +65,32 @@ func WriteEnvelope(path string, env *Envelope) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return WriteFileNoFollow(path, data, 0o644)
+}
+
+// WriteFileNoFollow is os.WriteFile that refuses to write through a symlink.
+// Every file this package writes sits at a path derived from a bundle
+// (<bundle>/SKILL.md.skillsig, skill.oms.sig, SKILL.md itself) or next to a
+// key, and os.WriteFile follows links: signing a single SKILL.md unpacked from
+// a hostile archive, whose sibling SKILL.md.skillsig links elsewhere, used to
+// overwrite that elsewhere with the envelope (issue #140). writeSecret has
+// refused links since the key-file review; this is the same guard for the
+// public outputs. Like writeSecret it checks with Lstat and then writes, so it
+// closes the planted-link case, not a race against a concurrent local writer.
+func WriteFileNoFollow(path string, data []byte, perm os.FileMode) error {
+	if err := refuseSymlink(path); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, perm)
+}
+
+// refuseSymlink errors when path exists and is a symbolic link. A missing path
+// is fine: the write will create a regular file.
+func refuseSymlink(path string) error {
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to write through symlink %q", path)
+	}
+	return nil
 }
 
 // ReadEnvelope reads a DSSE envelope from path. Returns (nil, nil) if absent.

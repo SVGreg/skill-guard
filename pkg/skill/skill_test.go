@@ -43,6 +43,23 @@ func TestLoadBundleRejectsSymlinkedFile(t *testing.T) {
 	}
 }
 
+// TestLoadBundleRejectsSymlinkedSkillsig pins what keeps `sign <dir>` safe from
+// a planted SKILL.md.skillsig link (issue #140): the walk's symlink reject runs
+// before its .skillsig skip, so the bundle fails to load and nothing is signed.
+// That is an ordering between two lines of loadDir; this test makes it a
+// contract. attest.WriteFileNoFollow is the second line of defence.
+func TestLoadBundleRejectsSymlinkedSkillsig(t *testing.T) {
+	dir := writeBundle(t)
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(victim, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mkSymlink(t, victim, filepath.Join(dir, "SKILL.md.skillsig"))
+	if _, err := LoadBundle(dir); err == nil {
+		t.Fatal("bundle with a symlinked SKILL.md.skillsig loaded; want rejection")
+	}
+}
+
 // TestLoadBundleRejectsSymlinkedDir is the directory-mode half of the same
 // invariant.
 func TestLoadBundleRejectsSymlinkedDir(t *testing.T) {

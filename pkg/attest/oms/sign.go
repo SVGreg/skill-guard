@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/SVGreg/surfaceguard/pkg/attest"
@@ -110,11 +109,12 @@ func SigPath(bundleRoot string) string {
 }
 
 // Write writes the bundle as indented JSON at mode 0644 — it is a signature,
-// not a secret.
+// not a secret. Like the SGMT-1 envelope it sits at a bundle-derived path, so
+// it refuses to write through a symlink (issue #140).
 func Write(path string, b *Bundle) error {
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return attest.WriteFileNoFollow(path, append(data, '\n'), 0o644)
 }
