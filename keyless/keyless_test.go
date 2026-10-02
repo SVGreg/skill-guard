@@ -114,6 +114,28 @@ func TestSignBundleNeedsAnIdentity(t *testing.T) {
 	}
 }
 
+// TestIDTokenWhitespaceIsNoIdentity: `--token " "` is no identity. It used to
+// return "" with a nil error, which SignBundle then rejected as an internal
+// failure instead of the CLI's usage guidance.
+func TestIDTokenWhitespaceIsNoIdentity(t *testing.T) {
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+	if _, err := IDToken(context.Background(), "  \n", "", ""); !errors.Is(err, ErrNoIDToken) {
+		t.Errorf("error = %v, want ErrNoIDToken", err)
+	}
+}
+
+// TestSignBundleRefusesSingleFile: the library must refuse what the CLI
+// refuses, before any network call.
+func TestSignBundleRefusesSingleFile(t *testing.T) {
+	b := &skill.Bundle{Root: "/tmp/demo", SingleFile: true, Files: []skill.File{
+		{Path: "SKILL.md", Content: []byte("---\nname: demo\n---\nbody\n")},
+	}}
+	if _, err := SignBundle(context.Background(), b, Options{IDToken: "x"}); !errors.Is(err, ErrSingleFile) {
+		t.Errorf("error = %v, want ErrSingleFile", err)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
