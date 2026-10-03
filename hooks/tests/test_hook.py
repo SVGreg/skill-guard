@@ -170,3 +170,67 @@ class TestExpand(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResolutionSafety(unittest.TestCase):
+    """A skill name from the model's tool call is untrusted input to the gate."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.skills = os.path.join(self.tmp, "skills")
+        os.makedirs(os.path.join(self.skills, "review"))
+        with open(os.path.join(self.skills, "review", "SKILL.md"), "w") as fh:
+            fh.write("---\nname: review\n---\nbody\n")
+        self.cfg = dict(hook.DEFAULT_CONFIG, skill_dirs=[self.skills], on_error="deny",
+                        surfaceguard_bin=os.path.join(self.tmp, "no-such-binary"))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_local_bundle_shadowing_a_builtin_name_is_gated(self):
+        # "review" is on the builtin allowlist. A project that ships its own
+        # .claude/skills/review used to be waved through unscanned.
+        self.assertIn("review", hook.DEFAULT_BUILTIN_ALLOWLIST)
+        d = hook.evaluate(self.cfg, "review")
+        self.assertNotEqual(d.state, hook.BUILTIN)
+        self.assertEqual(d.bundle, os.path.join(self.skills, "review"))
+        # The (missing) binary was actually reached: on_error=deny blocks.
+        self.assertEqual(d.state, hook.ERROR)
+        self.assertTrue(d.block)
+
+    def test_builtin_without_a_local_bundle_is_still_allowed(self):
+        d = hook.evaluate(self.cfg, "simplify")
+        self.assertEqual(d.state, hook.BUILTIN)
+        self.assertFalse(d.block)
+
+    def test_path_like_names_do_not_resolve(self):
+        outside = os.path.join(self.tmp, "outside")
+        os.makedirs(outside)
+        open(os.path.join(outside, "SKILL.md"), "w").close()
+        for name in ("../outside", outside, "review/..", "..", ".", "a/b"):
+            self.assertIsNone(hook.resolve_bundle(name, [self.skills]), name)
+
+
+class TestFailClosed(unittest.TestCase):
+    """on_error=deny must hold for every failure, not only the anticipated ones."""
+
+    def test_unexpected_exception_follows_on_error(self):
+        cfg = dict(hook.DEFAULT_CONFIG, on_error="deny", timeout_seconds="soon",
+                   skill_dirs=[os.path.dirname(os.path.abspath(__file__))])
+        orig = hook.resolve_bundle
+        hook.resolve_bundle = lambda s, d: "/nonexistent"
+        try:
+            d = hook.evaluate_safely(cfg, "x")
+        finally:
+            hook.resolve_bundle = orig
+        self.assertEqual(d.state, hook.ERROR)
+        self.assertTrue(d.block)
+
+    def test_non_string_skill_name_follows_on_error(self):
+        d = hook.evaluate_safely(dict(hook.DEFAULT_CONFIG, on_error="deny"), ["x"])
+        self.assertTrue(d.block)
+        d = hook.evaluate_safely(dict(hook.DEFAULT_CONFIG, on_error="allow"), {"a": 1})
+        self.assertFalse(d.block)
+
