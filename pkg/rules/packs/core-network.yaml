@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-network
-version: 1.3.0
+version: 1.4.0
 description: Data exfiltration, egress, SSRF (rule-verification.md §3).
 rules:
   - id: SG-NET-002
@@ -141,9 +141,22 @@ rules:
     targets: [body, scripts, configs, refs]
     match:
       any:
-        - url_host: [pastebin.com, hastebin.com, ghostbin.com, dpaste.com, ix.io, 0x0.st, termbin.com]
+        # Paste services. rentry.co/.org is where the ClawHub "openclaw-core"
+        # campaign staged its stager (Snyk, 2026-02): the page is editable, so
+        # the payload changes while the skill's URL does not ("pastebin
+        # piping", #367). Every addition measured at 0 corpus files.
+        - url_host: [pastebin.com, hastebin.com, ghostbin.com, dpaste.com, ix.io, 0x0.st, termbin.com,
+            rentry.co, rentry.org, paste.ee, paste.rs, controlc.com, justpaste.it, pastes.io, privatebin.net]
           confidence: 0.8
         - url_host: [webhook.site, requestbin.com, pipedream.net, hookb.in]
+          confidence: 0.85
+        # Out-of-band interaction (OAST) hosts: interactsh's public servers and
+        # Burp Collaborator. They exist only to receive and log callbacks, so a
+        # skill naming one is pointing data at an attacker-controlled listener.
+        # 0 corpus files. requestcatcher.com is deliberately absent: scrapling
+        # uses it as its own echo test endpoint (~25 corpus lines).
+        - url_host: [oast.fun, oast.pro, oast.live, oast.site, oast.online, oast.me, oastify.com,
+            burpcollaborator.net, interact.sh]
           confidence: 0.85
         - url_host: [bit.ly, tinyurl.com, is.gd, t.co]
           confidence: 0.6
