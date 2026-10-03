@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.2](https://github.com/SVGreg/surfaceguard/compare/v0.6.1...v0.6.2) (2026-10-03)
+
+
+### Features
+
+* **rules:** add SG-STEER-002 — dependency steering tripwire (AST02) (closes [#366](https://github.com/SVGreg/surfaceguard/issues/366)) ([#377](https://github.com/SVGreg/surfaceguard/issues/377)) ([32f2122](https://github.com/SVGreg/surfaceguard/commit/32f212210d87b49adf54b3ecffff4799458c7d15))
+
+
+### Bug Fixes
+
+* **keyless:** refuse single-file bundles in SignBundle and fix identity exit codes ([#378](https://github.com/SVGreg/surfaceguard/issues/378)) ([4b05e01](https://github.com/SVGreg/surfaceguard/commit/4b05e01225104cd0fd929f7963b61c0ee5a967d7))
+* **rules:** widen SG-NET-001 with paste and OOB hosts; cap tweet-embed t.co ([#381](https://github.com/SVGreg/surfaceguard/issues/381)) ([ddc2123](https://github.com/SVGreg/surfaceguard/commit/ddc212332943150b3c1a3ccb982db7402e1019d5))
+
 ## [0.6.1](https://github.com/SVGreg/surfaceguard/compare/v0.6.0...v0.6.1) (2026-10-01)
 
 
