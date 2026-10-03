@@ -3,6 +3,7 @@ package keyless
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,6 +22,10 @@ const (
 	DefaultFulcioURL = "https://fulcio.sigstore.dev"
 	DefaultRekorURL  = "https://rekor.sigstore.dev"
 )
+
+// ErrSingleFile is returned for a bundle loaded from a single SKILL.md: an OMS
+// signature covers a directory tree, so point the signer at the skill folder.
+var ErrSingleFile = errors.New("keyless: an OMS signature describes a directory tree; load the skill folder, not a single file")
 
 // Options configures a keyless signing run.
 type Options struct {
@@ -44,6 +49,13 @@ func SignBundle(ctx context.Context, b *skill.Bundle, opt Options) ([]byte, erro
 	// unambiguous.
 	if opt.IDToken == "" {
 		return nil, ErrNoIDToken
+	}
+	// An OMS signature describes a directory tree. A single SKILL.md enumerated
+	// as if it were the tree yields a statement naming the directory while
+	// covering one file, which verify then reports as a mismatch against the
+	// real tree. The CLI refused this; the library did not.
+	if b.SingleFile {
+		return nil, ErrSingleFile
 	}
 
 	files, ser, err := oms.Enumerate(b, oms.EnumOptions{})

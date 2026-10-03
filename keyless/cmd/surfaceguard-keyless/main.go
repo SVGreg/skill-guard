@@ -106,7 +106,15 @@ FLAGS:
 			return exitUsage
 		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitUsage
+		// A token the user supplied (flag or file) that cannot be used is a
+		// usage error. Anything else came from the CI OIDC endpoint — a
+		// refused request, an HTTP error, a malformed response — which is an
+		// environment failure, exit 4, so a workflow does not read a flaky
+		// runner as a mistake in its own invocation.
+		if *token != "" || *tokenFile != "" {
+			return exitUsage
+		}
+		return exitInternal
 	}
 
 	data, err := keyless.SignBundle(ctx, b, keyless.Options{

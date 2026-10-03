@@ -37,7 +37,13 @@ var ErrNoIDToken = errors.New("keyless: no OIDC token available")
 // human did not intend.
 func IDToken(ctx context.Context, token, tokenFile, audience string) (string, error) {
 	if token != "" {
-		return strings.TrimSpace(token), nil
+		// A whitespace-only --token is no identity, not an empty one to hand to
+		// Fulcio: it used to pass through as "" and surface as an internal
+		// error from SignBundle instead of the usage guidance below.
+		if t := strings.TrimSpace(token); t != "" {
+			return t, nil
+		}
+		return "", ErrNoIDToken
 	}
 	if tokenFile != "" {
 		data, err := os.ReadFile(tokenFile)
