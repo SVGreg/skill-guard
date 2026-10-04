@@ -1622,6 +1622,16 @@ payload. One hit is not worth a broad, bypassable mechanism.
   fail against the pre-fix pack; every true-positive row passes both before and after.
 
 
+- **"Local Storage" needs path form (core-secret 1.3.2, #390).** The ungated artifact leaf listed `Local Storage`
+  as a bare phrase, but those two words are also the Web Storage API's name. A Playwright `## Local Storage` docs
+  heading (Microsoft's `playwright-cli`, 2026-10-04 skills.sh sweep) failed its bundle at **critical**. Chrome's
+  credential-bearing profile directory is always reached through a path, so the leaf now requires a `/` or `\`
+  touching the phrase (`…/Default/Local Storage/leveldb`, `├── Local Storage/`). **Corpus (every file containing
+  the phrase, 3 of 1,036 bundles):** `crypto-market-data` (`**Local Storage**: This token is stored…`) and
+  `playwright-browser-automation` (`// Method 3: Local Storage`) were FPs and the bundles' only findings, so both go
+  **fail → pass**. `notebooklm-skill`'s stored-profile tree listing (`├── Local Storage/`) **still fires
+  critical**. `Login Data`, `cookies.sqlite`, `find-generic-password` and `secret-tool` are unchanged.
+  `TestLocalStorageNeedsPathForm`.
 ### SG-SEC-002 — Embedded secret  (AST08, high) — **implemented** (`core-secret`)
 - **Signals:** provider-specific regexes (AWS `AKIA[0-9A-Z]{16}`, GitHub `ghp_/gho_/ghs_`, Slack `xox[baprs]-`, Google API `AIza…`, Stripe `sk_live_`, private-key PEM headers, JWT shape) **plus** generic high-entropy strings (Shannon entropy > 4.0 over length ≥ 20 assigned to a `key|token|secret|password|api` identifier).
 - **FP carve-outs (critical for this rule):** example/placeholder values (`AKIAIOSFODNN7EXAMPLE` — AWS's own doc key, `xxxx`, `<your-key>`, `sk_test_`), lockfile integrity hashes, UUIDs, git SHAs, base64 of known non-secret data, entropy hits inside `testdata`/fixtures. Maintain an explicit example-key denylist.
