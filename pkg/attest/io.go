@@ -31,6 +31,15 @@ const maxAttestFileSize = 16 << 20
 // size check so the allocation is capped by construction — a file that grows (or
 // is swapped) between the check and the read cannot widen it.
 func readCapped(path string) ([]byte, error) {
+	// A named pipe at a signature path blocks os.Open/ReadAll indefinitely, and
+	// the path is bundle-derived (<bundle>/SKILL.md.skillsig, skill.oms.sig).
+	// Stat follows a link, so a user's symlinked key file still reads; what is
+	// refused is anything that is not, in the end, a regular file.
+	if fi, err := os.Stat(path); err != nil {
+		return nil, err
+	} else if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file (%s)", path, fi.Mode().Type())
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -45,6 +54,12 @@ func readCapped(path string) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// ReadSignatureFile reads a detached signature that sits beside a bundle: only
+// a regular file, at most maxAttestFileSize bytes. Callers that read
+// skill.oms.sig used plain os.ReadFile, which blocks forever on a named pipe and
+// has no size bound.
+func ReadSignatureFile(path string) ([]byte, error) { return readCapped(path) }
 
 // SigPath returns the conventional .skillsig path for a bundle root or file.
 func SigPath(bundlePath string) string {

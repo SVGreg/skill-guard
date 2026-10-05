@@ -472,7 +472,7 @@ EXIT CODES: 0 ok · 2 verification failed (bad signature / tampered) · 3 usage.
 			}
 			sigPath := attest.SigPath(args[0])
 			omsPath := oms.SigPath(b.Root)
-			omsData, omsErr := os.ReadFile(omsPath)
+			omsData, omsErr := attest.ReadSignatureFile(omsPath)
 			// Presence is the file existing, not its being non-empty: a
 			// truncated signature must be reported as malformed, never as an
 			// unsigned skill.

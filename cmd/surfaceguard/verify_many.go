@@ -85,7 +85,7 @@ func verifyOne(c skill.Candidate, pol policy.Policy, policyDir string) verifyRow
 		row.state, row.failed, row.formats, row.signer = "invalid", true, sgverify.FormatSGMT1, "unreadable attestation"
 		return row
 	}
-	if data, err := os.ReadFile(oms.SigPath(b.Root)); err == nil {
+	if data, err := attest.ReadSignatureFile(oms.SigPath(b.Root)); err == nil {
 		results = append(results, sgverify.VerifyOMSAt(b, data, pol.Trust, policyDir))
 		formats = append(formats, sgverify.FormatOMS)
 	}
