@@ -198,6 +198,13 @@ func (r *Rule) eval(c Condition, text string) []match {
 		return all
 	}
 	if len(c.All) > 0 {
+		// An AND reports the first branch's matches — ALL of them. It used to
+		// keep only ms[:1], and Evaluate applies the rule's line-scoped
+		// suppress list to whatever it is handed: a decoy first match on a
+		// suppressed line (`/path/to/`, a defensive phrase) then erased the
+		// finding even though an unsuppressed match of the same branch sat a
+		// few lines below. Returning every match lets Evaluate's per-line
+		// suppress and per-line dedup decide each one, as they do for leaves.
 		var first []match
 		for i, sub := range c.All {
 			ms := r.eval(sub, text)
@@ -205,7 +212,7 @@ func (r *Rule) eval(c Condition, text string) []match {
 				return nil // one branch missing ⇒ whole AND fails
 			}
 			if i == 0 {
-				first = ms[:1]
+				first = ms
 			}
 		}
 		return first
