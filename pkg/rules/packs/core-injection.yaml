@@ -1,6 +1,6 @@
 apiVersion: surfaceguard.svgreg.net/rulepack.v1
 name: core-injection
-version: 1.7.0
+version: 1.8.0
 description: Prompt injection, jailbreak, and instruction-layer attacks (rule-verification.md §2).
 rules:
   - id: SG-INJ-001
@@ -1204,8 +1204,21 @@ rules:
         - regex: '(?i)\bopen\b[^\n]{0,20}\b(?:a|the|their|your)?\s*(?:terminal|shell|console|command prompt)\b[^\n]{0,60}\b(?:paste|copy)\b'
           confidence: 0.8
         # (a3) "copy the command below" — the relay pointing at its own payload.
-        - regex: '(?i)\b(?:copy|paste)\b[^\n]{0,20}\b(?:the\s+)?(?:command|snippet|script|line|code)\b[^\n]{0,20}\b(?:below|above|following|shown)\b'
+        # Only a determiner and a closed set of command-describing words may sit
+        # between the verb and the noun. The old free 20-char window read "copy
+        # the verification code shown" — an OAuth device-code login, where a
+        # one-time code is typed into a browser page — as this relay (#399: six
+        # popular ClawHub skills, and plain gh/az device-flow docs, failed high).
+        - regex: '(?i)\b(?:copy|paste)\s+(?:(?:the|this|that)\s+)?(?:(?:following|full|exact|entire|bash|shell|terminal|powershell|install(?:ation)?|setup|one-line|one-liner)\s+)?(?:command|snippet|script|line|code)\b[^\n]{0,20}\b(?:below|above|following|shown)\b'
           confidence: 0.75
+        # (a4) Paste into the Run dialog — the fake-CAPTCHA ClickFix destination.
+        # What separates ClickFix from a device-code login is WHERE the copied
+        # text goes: into something that executes. (a1) knows terminals and
+        # shells; the Windows Run box (Win+R) and macOS Spotlight→Terminal
+        # (Cmd+Space) are the lure's actual target and were known only through
+        # (a3)'s loose window, which #399 narrows. Either order.
+        - regex: '(?i)(?:\b(?:win(?:dows)?(?:\s+key)?\s*\+\s*r|run\s+dialog|(?:⌘|cmd)\s*\+\s*space)\b[^\n]{0,80}\b(?:paste|ctrl\s*\+\s*v|cmd\s*\+\s*v)\b|\b(?:paste|ctrl\s*\+\s*v)\b[^\n]{0,80}\b(?:win(?:dows)?(?:\s+key)?\s*\+\s*r|run\s+dialog)\b)'
+          confidence: 0.8
         # (b1) Relay + user + run, co-located with scrutiny-suppression framing.
         # Neither half is a signal alone; the pair is.
         #
