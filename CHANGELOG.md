@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.3](https://github.com/SVGreg/surfaceguard/compare/v0.6.2...v0.6.3) (2026-10-07)
+
+
+### Bug Fixes
+
+* **hooks:** gate builtin-named local skills, reject path-like names, fail closed on errors ([#387](https://github.com/SVGreg/surfaceguard/issues/387)) ([891db50](https://github.com/SVGreg/surfaceguard/commit/891db505e4a6daefa9e6b7f1c49c166532208ed9))
+* **rules:** an all-composite reports every first-branch match, so suppress is per line ([#403](https://github.com/SVGreg/surfaceguard/issues/403)) ([e5ef4fd](https://github.com/SVGreg/surfaceguard/commit/e5ef4fd217b6c5431701566809b81b4210c20b79))
+* **rules:** narrow SG-SEC-001 — "Local Storage" counts only in path form ([#393](https://github.com/SVGreg/surfaceguard/issues/393)) ([567e04b](https://github.com/SVGreg/surfaceguard/commit/567e04be37e8bc5649bdd9695a3c5ac311904a77))
+* **rules:** SG-INJ-011 tells a device-code login from ClickFix by where the text goes ([#402](https://github.com/SVGreg/surfaceguard/issues/402)) ([89977f4](https://github.com/SVGreg/surfaceguard/commit/89977f454cb739da4ceede66000e0d052c8a7c67))
+* **skill:** reject named pipes and other non-regular files instead of blocking on them ([#397](https://github.com/SVGreg/surfaceguard/issues/397)) ([2dbc63e](https://github.com/SVGreg/surfaceguard/commit/2dbc63e5cb4baec8ad9f494e43b6fa82b180b71c))
+
 ## [0.6.2](https://github.com/SVGreg/surfaceguard/compare/v0.6.1...v0.6.2) (2026-10-03)
 
 
