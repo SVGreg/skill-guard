@@ -16,7 +16,6 @@ package guard
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -252,7 +251,7 @@ func verifyProvenance(b *skill.Bundle, path string, pol policy.Policy, policyDir
 		}
 	}
 
-	if data, err := os.ReadFile(oms.SigPath(b.Root)); err == nil {
+	if data, err := attest.ReadSignatureFile(oms.SigPath(b.Root)); err == nil {
 		res := verify.VerifyOMSAt(b, data, pol.Trust, policyDir)
 		applySignature(&st, res, verify.FormatOMS)
 		findings = append(findings, gatingProvenance(res)...)

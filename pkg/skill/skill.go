@@ -143,6 +143,11 @@ func LoadBundle(src string) (*Bundle, error) {
 		return nil, fmt.Errorf("load bundle: %s is a symlink (rejected)", src)
 	}
 	if !info.IsDir() {
+		// Only a regular file can be read to completion: a named pipe blocks
+		// os.ReadFile forever and a device never ends (see loadDir).
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("load bundle: %s is not a regular file (%s, rejected)", src, info.Mode().Type())
+		}
 		// The directory walk caps every file it reads; single-file mode must
 		// apply the same DoS guard rather than reading an arbitrary blob.
 		if info.Size() > maxFileSize {
@@ -186,6 +191,16 @@ func loadDir(root string) (*Bundle, error) {
 		// Reject symlinks rather than follow them (design §7.1).
 		if d.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("bundle contains symlink %s (rejected)", p)
+		}
+		// Reject every other non-regular entry too. A named pipe (mkfifo needs
+		// no privilege, and tar preserves one on extract) made os.ReadFile block
+		// forever, so `scan` and `guard` hung on the bundle, and the load-gate
+		// hook timed out into on_error, which defaults to allow: an unscanned
+		// skill. A device file reads without end. This runs before the
+		// signature skip on purpose: a FIFO named skill.oms.sig would otherwise
+		// pass the walk and hang the verifier that opens it later.
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("bundle contains non-regular file %s (%s, rejected)", p, d.Type())
 		}
 		// Detached signatures are excluded from the bundle model, and so from
 		// every hash computed over it. A signature that covered another
