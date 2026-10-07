@@ -242,12 +242,26 @@ def decide(state: str, mode: str, unresolved_action: str) -> Tuple[bool, str]:
 # --------------------------------------------------------------------------- #
 
 def resolve_bundle(skill: str, skill_dirs: List[str]) -> Optional[str]:
-    """Find the bundle dir for a skill name (a dir containing SKILL.md)."""
+    """Find the bundle dir for a skill name (a dir containing SKILL.md).
+
+    The name arrives in the model's tool call, so it is untrusted: it must be a
+    single path component. `os.path.join(base, "/tmp/x")` discards `base`
+    entirely and `../x` walks out of it, either of which made the hook gate a
+    directory that is not the skill the agent is about to load.
+    """
+    if not _is_plain_name(skill):
+        return None
     for base in skill_dirs:
         cand = os.path.join(expand(base), skill)
         if os.path.isfile(os.path.join(cand, "SKILL.md")):
             return cand
     return None
+
+
+def _is_plain_name(skill: str) -> bool:
+    """A skill name usable as one directory entry: no separator, not . or .."""
+    return (bool(skill) and skill not in (".", "..")
+            and "/" not in skill and "\\" not in skill and "\x00" not in skill)
 
 
 def _timeout(cfg: Dict[str, Any]) -> int:
@@ -301,12 +315,18 @@ def run_guard(cfg: Dict[str, Any], bundle: str) -> Tuple[int, str, str]:
 
 
 def evaluate(cfg: Dict[str, Any], skill: str) -> Decision:
-    """Full pipeline: allowlist → resolve → guard → decide."""
-    if skill in set(cfg.get("builtin_allowlist", [])):
-        return Decision(block=False, state=BUILTIN, skill=skill)
+    """Full pipeline: resolve → (allowlist) → guard → decide.
 
+    Resolution comes first. The allowlist names skills the harness provides,
+    which have no local bundle; checking it first let a project ship
+    `.claude/skills/review/SKILL.md` (or any allowlisted name) and have it
+    waved through as "builtin" without ever being scanned. A name that resolves
+    to a local bundle is that bundle, whatever it is called.
+    """
     skill_dirs = cfg.get("skill_dirs", [])
     bundle = resolve_bundle(skill, skill_dirs)
+    if bundle is None and skill in set(cfg.get("builtin_allowlist", [])):
+        return Decision(block=False, state=BUILTIN, skill=skill)
     if bundle is None:
         block, reason = decide(UNRESOLVED, cfg["mode"], cfg["unresolved_action"])
         return Decision(block=block, state=UNRESOLVED, skill=skill, reason=reason)
@@ -349,6 +369,23 @@ def evaluate(cfg: Dict[str, Any], skill: str) -> Decision:
     )
 
 
+def evaluate_safely(cfg: Dict[str, Any], skill: Any) -> Decision:
+    """evaluate(), with every failure routed through on_error.
+
+    An uncaught exception used to escape main(); Claude Code treats a crashed
+    hook as a non-blocking error, so `on_error: deny` silently became allow for
+    any input the code did not expect — a non-string skill name, a non-integer
+    timeout in the config, a decision document of the wrong shape.
+    """
+    name = skill if isinstance(skill, str) else repr(skill)
+    if not isinstance(skill, str):
+        return _error_decision(cfg, name, None, "skill name is not a string")
+    try:
+        return evaluate(cfg, skill)
+    except Exception as exc:  # noqa: BLE001 - the gate must not crash open
+        return _error_decision(cfg, name, None, f"hook error: {type(exc).__name__}: {exc}")
+
+
 def _rule_ids(gd: Dict[str, Any], limit: int = 5) -> List[str]:
     """The rule ids that drove the decision, for the audit log. Truncated: the
     log is a trail, not a report — `surfaceguard scan` is where the full list is.
@@ -361,7 +398,7 @@ def _rule_ids(gd: Dict[str, Any], limit: int = 5) -> List[str]:
     return ids
 
 
-def _error_decision(cfg: Dict[str, Any], skill: str, bundle: str, why: str) -> Decision:
+def _error_decision(cfg: Dict[str, Any], skill: str, bundle: Optional[str], why: str) -> Decision:
     """Apply the on_error fail-open/closed policy."""
     block = cfg.get("on_error", "allow") == "deny"
     reason = f"{why} (on_error={cfg.get('on_error')})" if block else ""
@@ -430,16 +467,22 @@ def main() -> None:
         sys.exit(0)  # not our concern; let the call proceed
 
     cfg = load_config()
+    if not isinstance(event, dict):
+        sys.exit(0)
     tool_name = event.get("tool_name", "")
     if tool_name not in set(cfg.get("trigger_tools", ["Skill"])):
         sys.exit(0)
 
+    if not isinstance(event, dict):
+        sys.exit(0)
     tool_input = event.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        tool_input = {}
     skill = tool_input.get("skill") or tool_input.get("name") or ""
     if not skill:
         sys.exit(0)
 
-    decision = evaluate(cfg, skill)
+    decision = evaluate_safely(cfg, skill)
     audit_log(cfg, {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "session": event.get("session_id"),
