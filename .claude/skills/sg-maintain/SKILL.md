@@ -45,7 +45,7 @@ enforces them.
      and `sg-issue-triage` backlog PRs, so planned-rule research and triage land without waiting.
    - Triage comments and issue filings are not PRs and post directly, as before.
    - **Close the issue a PR implements.** When the work resolves a GitHub issue — a rule filed by
-     `sg-threat-research`, an owner-`Implement` request, a `sg-code-review`/triage finding — put
+     `sg-threat-research`, a ready or fast-tracked issue, a `sg-code-review`/triage finding — put
      `Closes #<n>` in the **PR body** so the merge (including `gh pr merge --squash`) auto-closes it.
      A planned-rule *tracking* issue stays open only until its rule ships; `sg-rule-implement` /
      `sg-issue-implement` must close it. If an issue can't be auto-closed that way, close it
@@ -157,13 +157,16 @@ the skipped GitHub check in the log.
 
 **Reactive (preempts the rotation):**
 
-1. **Owner "Implement" command.** Look for open issues where the repo owner (`SVGreg`) left a
-   comment whose body is the `Implement` command and that have no linked PR yet:
+1. **A ready issue.** An issue is ready on **status and time** (full table in `sg-issue-implement`
+   §1): authored by the owner, triaged, graded `must-have` (after 24 h) or `useful` (after 72 h), not
+   on `hold`, not blocked, no PR yet — or fast-tracked at any time by an owner `Implement` comment
+   (the only path for an issue someone else filed). Respect that skill's WIP cap (3 open
+   auto-implement PRs).
    ```sh
-   gh issue list --state open --json number,title
-   # then inspect comments per candidate for an owner "Implement" command with no linked PR
+   gh issue list --state open --limit 200 --json number,title,author,labels
+   # then check each candidate's triage-comment age, hold state and linked PRs (sg-issue-implement §1)
    ```
-   If any exist → run **`sg-issue-implement`**. Stop selection.
+   If one is ready → run **`sg-issue-implement`**. Stop selection.
 2. **Untriaged issues.** List open issues lacking the triage marker `<!-- sg-maintain:triage -->`
    in their comments. If any exist → run **`sg-issue-triage`**. Stop selection.
 

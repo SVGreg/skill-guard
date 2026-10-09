@@ -103,6 +103,10 @@ gh issue comment <n> --body "$(cat <<'EOF'
 
 **Possible approach:** <a concrete direction, or the specific question if needs-info>
 
+<one line, only for must-have / useful issues authored by SVGreg:>
+**Auto-start:** eligible for implementation after <triage time + 24 h (must-have) or 72 h (useful)>
+unless labelled `hold`. <If the approach needs an owner decision, say so and grade `needs-info` instead.>
+
 _Automated triage by sg-maintain. Data-only assessment; a maintainer makes the call._
 EOF
 )"
@@ -127,6 +131,12 @@ gh issue edit <n> --add-label <grade>
 | `nice-to-have` | `c5def5` | Valid but low priority |
 | `out-of-scope` | `cfd3d7` | Outside static SKILL.md scanning + provenance |
 | `needs-info` | `fbca04` | Underspecified — awaiting a concrete answer |
+
+**Grade drives auto-start.** `must-have` and `useful` issues authored by the owner become ready for
+`sg-issue-implement` after a cooling-off window (24 h / 72 h from this triage comment); the other
+grades never auto-start. So grade an issue whose fix needs an owner design decision `needs-info`, not
+`must-have` — otherwise the loop will build it without that decision. The owner pauses any issue with
+the `hold` label (create it once: `gh label create hold -c 5319e7 -d "Do not auto-implement" --force`).
 
 If the issue already carries a *different* grade label (a human graded it, or the scale changed),
 drop the stale one — `gh issue edit <n> --remove-label <old>` — so exactly one remains. Grade labels
