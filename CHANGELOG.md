@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/SVGreg/surfaceguard/compare/v0.6.3...v0.6.4) (2026-10-09)
+
+
+### Features
+
+* **maintain:** start ready issues on status and time instead of an owner Implement command ([#405](https://github.com/SVGreg/surfaceguard/issues/405)) ([4942875](https://github.com/SVGreg/surfaceguard/commit/49428757594665fa4207c924313ee42330ca7a36))
+
 ## [0.6.3](https://github.com/SVGreg/surfaceguard/compare/v0.6.2...v0.6.3) (2026-10-07)
 
 
